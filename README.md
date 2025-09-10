@@ -53,8 +53,8 @@ This MCP Toolkit uses Entra ID (Azure AD) and Managed Identities to connect secu
 
 ### Data Access and Exposure
 - **Any data accessible to this MCP server can potentially be exposed to connected AI agents or applications**
-- The MCP server can read any document in the databases and containers it has access to
-- Connected agents may request and receive sensitive data through the available tools
+- The MCP server can execute tools that may read/edit/add any document in the databases and containers it has access to
+- Connected agents may request and receive data through the available tools
 
 ### Access Control Requirements
 - **Grant RBAC permissions ONLY to specific databases and containers** that you want AI agents to access
@@ -62,29 +62,10 @@ This MCP Toolkit uses Entra ID (Azure AD) and Managed Identities to connect secu
 - Regularly review and audit the permissions granted to the MCP server's identity
 - Consider creating dedicated databases/containers for AI agent access rather than sharing production data
 
-### Network and Infrastructure Security
-- **Isolate the MCP server** within your network infrastructure
-- Use private endpoints for Cosmos DB when possible
-- Implement proper network security groups and firewall rules
-- Monitor and log all access to the MCP server endpoint
-
 ### Authentication and Authorization
 - The MCP server uses `DefaultAzureCredential` which supports Managed Identity in Azure environments
-- Ensure the hosting environment (Azure Container Apps, Azure Functions, etc.) has Managed Identity enabled
+- Ensure the hosting environment (Azure Container Apps, etc.) has Managed Identity enabled
 - Regularly rotate any service principal credentials if used
-- Implement additional authentication layers for accessing the MCP server itself
-
-### Data Classification
-- **Only expose non-sensitive or properly classified data** through this toolkit
-- Consider data masking or anonymization for sensitive fields
-- Implement data loss prevention (DLP) policies where appropriate
-- Review data retention and deletion policies for accessed data
-
-### Monitoring and Auditing
-- Enable logging and monitoring for all MCP server operations
-- Set up alerts for unusual access patterns or high-volume data requests
-- Regularly audit which agents and applications are connected to the MCP server
-- Monitor Azure Cosmos DB access logs and metrics
 
 **Recommendation**: Start with a dedicated, isolated Cosmos DB account containing only non-sensitive test data when first deploying this toolkit.
 
