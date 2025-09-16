@@ -7,6 +7,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/Dotnet.gitignore
 
+# Old project folder (to be removed when VS is closed)
+AzureCosmosDBMCPToolKit/
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
