@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>AzureCosmosDB.MCP.Toolkit</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Azure Cosmos DB Team</Authors>
+    <Company>Microsoft</Company>
+    <Product>Azure Cosmos DB MCP Toolkit</Product>
+    <Description>A Model Context Protocol (MCP) toolkit that provides seamless integration with Azure Cosmos DB and Azure OpenAI for document querying, vector search, and schema inspection through AI agents.</Description>
+    <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
+    <PackageProjectUrl>https://github.com/AzureCosmosDB/azure-cosmosdb-mcp-toolkit</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/AzureCosmosDB/azure-cosmosdb-mcp-toolkit</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>azure;cosmosdb;mcp;ai;openai;vector-search</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RootNamespace>AzureCosmosDB.MCP.Toolkit</RootNamespace>
+    <AssemblyName>AzureCosmosDB.MCP.Toolkit</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.3.0-preview.4" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.53.0" />
+    <PackageReference Include="Azure.Identity" Version="1.12.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Azure.AI.OpenAI" Version="2.0.0" />
+  </ItemGroup>
+
+</Project>
