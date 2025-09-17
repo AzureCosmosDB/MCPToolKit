@@ -1,0 +1,34 @@
+# Docker Compose override for local development
+# This file extends docker-compose.yml for development scenarios
+
+version: '3.8'
+
+services:
+  mcp-toolkit:
+    build:
+      target: base  # Use the base stage for faster development builds
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_LOGGING__LOGLEVEL__DEFAULT=Debug
+      - ASPNETCORE_LOGGING__LOGLEVEL__MICROSOFT=Information
+      - ASPNETCORE_LOGGING__LOGLEVEL__SYSTEM=Information
+    volumes:
+      # Mount source code for hot reload (if needed)
+      - ./src:/app/src:ro
+      # Mount appsettings for development
+      - ./src/AzureCosmosDB.MCP.Toolkit/appsettings.Development.json:/app/appsettings.Development.json:ro
+    ports:
+      - "8080:8080"
+
+  cosmos-emulator:
+    environment:
+      - AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE=true
+      - AZURE_COSMOS_EMULATOR_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
+      - AZURE_COSMOS_EMULATOR_PARTITION_COUNT=10
+    ports:
+      - "8081:8081"   # Cosmos DB Explorer
+      - "10250:10250" # Cosmos DB Gateway
+      - "10251:10251" # Direct mode port 1
+      - "10252:10252" # Direct mode port 2
+      - "10253:10253" # Direct mode port 3
+      - "10254:10254" # Direct mode port 4

@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  mcp-toolkit:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - COSMOS_ENDPOINT=https://cosmos-emulator:8081/
+      - OPENAI_ENDPOINT=${OPENAI_ENDPOINT:-}
+      - OPENAI_EMBEDDING_DEPLOYMENT=${OPENAI_EMBEDDING_DEPLOYMENT:-}
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      # Trust the Cosmos emulator's self-signed certificate
+      - COSMOS_EMULATOR_SSL_VERIFY=false
+    depends_on:
+      cosmos-emulator:
+        condition: service_healthy
+    networks:
+      - mcp-network
+    volumes:
+      # Mount user secrets for local development (cross-platform)
+      - ${HOME:-${USERPROFILE}}/.microsoft/usersecrets:/root/.microsoft/usersecrets:ro
+    restart: unless-stopped
+
+  cosmos-emulator:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    ports:
+      - "8081:8081"
+      - "10250:10250"
+      - "10251:10251"
+      - "10252:10252"
+      - "10253:10253"
+      - "10254:10254"
+    environment:
+      - AZURE_COSMOS_EMULATOR_PARTITION_COUNT=10
+      - AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE=true
+      - AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE=cosmos-emulator
+      - AZURE_COSMOS_EMULATOR_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
+    networks:
+      - mcp-network
+    volumes:
+      - cosmos-data:/data/db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-k", "https://cosmos-emulator:8081/_explorer/emulator.pem"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+
+networks:
+  mcp-network:
+    driver: bridge
+    name: mcp-toolkit-network
+
+volumes:
+  cosmos-data:
+    name: mcp-toolkit-cosmos-data

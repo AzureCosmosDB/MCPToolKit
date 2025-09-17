@@ -108,6 +108,21 @@ local.settings.json
 .env.test.local
 .env.production.local
 
+# Azure deployment parameters (use template files instead)
+*.parameters.json
+!*.parameters.template.json
+
+# Generated ARM templates from Bicep (can be regenerated)
+# Comment out if you want to commit the generated JSON files
+# infrastructure/*.json
+# !infrastructure/*.template.json
+
+# Docker
+.docker/
+
+# Azure CLI
+.azure/
+
 # IDEs and editors
 .vscode/
 *.swp
