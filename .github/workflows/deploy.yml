@@ -1,0 +1,200 @@
+name: Deploy MCP Toolkit to Azure Container Apps
+
+on:
+  push:
+    branches: [ main, dev/sajee/updates ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - staging
+        - prod
+
+env:
+  CONTAINER_APP_NAME: mcp-toolkit-${{ github.event.inputs.environment || 'dev' }}
+  RESOURCE_GROUP: rg-mcp-toolkit-${{ github.event.inputs.environment || 'dev' }}
+  AZURE_CONTAINER_REGISTRY: mcptoolkit${{ github.run_number }}acr
+  LOCATION: eastus
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+
+    - name: Test
+      run: dotnet test --no-build --verbosity normal --configuration Release
+
+    - name: Publish
+      run: dotnet publish src/AzureCosmosDB.MCP.Toolkit/AzureCosmosDB.MCP.Toolkit.csproj --no-build --configuration Release --output ./publish
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev/sajee/updates' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Set Azure subscription
+      run: |
+        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Create Resource Group
+      run: |
+        az group create \
+          --name ${{ env.RESOURCE_GROUP }} \
+          --location ${{ env.LOCATION }} \
+          --tags Environment=${{ github.event.inputs.environment || 'dev' }} Application=MCP-Toolkit
+
+    - name: Create Azure Container Registry
+      run: |
+        az acr create \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --name ${{ env.AZURE_CONTAINER_REGISTRY }} \
+          --sku Basic \
+          --admin-enabled true \
+          --location ${{ env.LOCATION }}
+
+    - name: Build and push Docker image
+      run: |
+        # Get ACR login server
+        ACR_LOGIN_SERVER=$(az acr show \
+          --name ${{ env.AZURE_CONTAINER_REGISTRY }} \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --query loginServer \
+          --output tsv)
+        
+        echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
+        echo "CONTAINER_IMAGE=$ACR_LOGIN_SERVER/mcp-toolkit:${{ github.sha }}" >> $GITHUB_ENV
+        
+        # Login to ACR
+        az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+        
+        # Build and push
+        docker build -t $ACR_LOGIN_SERVER/mcp-toolkit:${{ github.sha }} .
+        docker push $ACR_LOGIN_SERVER/mcp-toolkit:${{ github.sha }}
+
+    - name: Deploy to Azure Container Apps
+      run: |
+        az deployment group create \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --template-file infrastructure/main.bicep \
+          --parameters \
+            containerAppName=${{ env.CONTAINER_APP_NAME }} \
+            containerImage=${{ env.CONTAINER_IMAGE }} \
+            cosmosEndpoint="${{ secrets.COSMOS_ENDPOINT }}" \
+            openaiEndpoint="${{ secrets.OPENAI_ENDPOINT }}" \
+            openaiEmbeddingDeployment="${{ secrets.OPENAI_EMBEDDING_DEPLOYMENT }}" \
+            location=${{ env.LOCATION }}
+
+    - name: Get deployment outputs
+      id: deployment-outputs
+      run: |
+        DEPLOYMENT_NAME=$(az deployment group list \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --query "[0].name" \
+          --output tsv)
+        
+        CONTAINER_APP_URL=$(az deployment group show \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --name $DEPLOYMENT_NAME \
+          --query "properties.outputs.containerAppUrl.value" \
+          --output tsv)
+        
+        MANAGED_IDENTITY_ID=$(az deployment group show \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --name $DEPLOYMENT_NAME \
+          --query "properties.outputs.managedIdentityPrincipalId.value" \
+          --output tsv)
+        
+        echo "container-app-url=$CONTAINER_APP_URL" >> $GITHUB_OUTPUT
+        echo "managed-identity-id=$MANAGED_IDENTITY_ID" >> $GITHUB_OUTPUT
+
+    - name: Configure RBAC permissions
+      run: |
+        # Note: These commands will fail if the resources don't exist or if the service principal
+        # doesn't have permission to assign roles. This is expected in many scenarios.
+        
+        echo "Setting up Cosmos DB permissions..."
+        if [ -n "${{ secrets.COSMOS_ACCOUNT_NAME }}" ] && [ -n "${{ secrets.COSMOS_RESOURCE_GROUP }}" ]; then
+          az cosmosdb sql role assignment create \
+            --account-name ${{ secrets.COSMOS_ACCOUNT_NAME }} \
+            --resource-group ${{ secrets.COSMOS_RESOURCE_GROUP }} \
+            --scope "/" \
+            --principal-id ${{ steps.deployment-outputs.outputs.managed-identity-id }} \
+            --role-definition-id 00000000-0000-0000-0000-000000000002 || echo "Failed to assign Cosmos DB role - may need manual setup"
+        else
+          echo "Cosmos DB account details not provided - skipping automatic role assignment"
+        fi
+        
+        echo "Setting up OpenAI permissions..."
+        if [ -n "${{ secrets.OPENAI_RESOURCE_ID }}" ]; then
+          az role assignment create \
+            --assignee ${{ steps.deployment-outputs.outputs.managed-identity-id }} \
+            --role "Cognitive Services OpenAI User" \
+            --scope ${{ secrets.OPENAI_RESOURCE_ID }} || echo "Failed to assign OpenAI role - may need manual setup"
+        else
+          echo "OpenAI resource ID not provided - skipping automatic role assignment"
+        fi
+
+    - name: Test deployment
+      run: |
+        echo "Testing health endpoint..."
+        HEALTH_URL="${{ steps.deployment-outputs.outputs.container-app-url }}/health"
+        
+        # Wait a bit for the container to start
+        sleep 30
+        
+        # Test health endpoint with retry
+        for i in {1..5}; do
+          if curl -f -s "$HEALTH_URL"; then
+            echo "✅ Health check passed"
+            break
+          else
+            echo "⏳ Health check attempt $i failed, retrying..."
+            sleep 10
+          fi
+        done
+
+    - name: Create deployment summary
+      run: |
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Environment | ${{ github.event.inputs.environment || 'dev' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Container App URL | ${{ steps.deployment-outputs.outputs.container-app-url }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Resource Group | ${{ env.RESOURCE_GROUP }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Container Registry | ${{ env.AZURE_CONTAINER_REGISTRY }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Image | ${{ env.CONTAINER_IMAGE }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🔗 Quick Links" >> $GITHUB_STEP_SUMMARY
+        echo "- [Health Check](${{ steps.deployment-outputs.outputs.container-app-url }}/health)" >> $GITHUB_STEP_SUMMARY
+        echo "- [Azure Portal](https://portal.azure.com/#@/resource/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.RESOURCE_GROUP }}/overview)" >> $GITHUB_STEP_SUMMARY

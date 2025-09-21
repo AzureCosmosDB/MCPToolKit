@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "resourcePrefix": {
+      "value": "mcp-toolkit"
+    },
+    "location": {
+      "value": "[resourceGroup().location]"
+    },
+    "principalId": {
+      "value": ""
+    },
+    "principalType": {
+      "value": "User"
+    }
+  }
+}

@@ -1,0 +1,218 @@
+name: Deploy Complete Infrastructure to Azure
+
+on:
+  workflow_dispatch:
+    inputs:
+      resourceGroupName:
+        description: 'Resource Group Name'
+        required: true
+        default: 'rg-mcp-toolkit'
+      location:
+        description: 'Azure Region'
+        required: true
+        default: 'East US'
+        type: choice
+        options:
+        - 'East US'
+        - 'East US 2'
+        - 'West US 2'
+        - 'West US 3'
+        - 'Central US'
+        - 'West Europe'
+        - 'North Europe'
+        - 'UK South'
+        - 'France Central'
+        - 'Germany West Central'
+        - 'Norway East'
+        - 'Switzerland North'
+        - 'Sweden Central'
+        - 'Australia East'
+        - 'Southeast Asia'
+        - 'East Asia'
+        - 'Japan East'
+        - 'Korea Central'
+        - 'South India'
+        - 'Canada Central'
+        - 'Brazil South'
+      principalId:
+        description: 'User/Service Principal Object ID for RBAC (leave empty to use current user)'
+        required: false
+      principalType:
+        description: 'Principal Type'
+        required: true
+        default: 'User'
+        type: choice
+        options:
+        - 'User'
+        - 'ServicePrincipal'
+      resourcePrefix:
+        description: 'Resource Name Prefix'
+        required: false
+        default: 'mcp-toolkit'
+
+env:
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  deploy-infrastructure:
+    runs-on: ubuntu-latest
+    outputs:
+      containerRegistryName: ${{ steps.deploy.outputs.containerRegistryName }}
+      containerRegistryLoginServer: ${{ steps.deploy.outputs.containerRegistryLoginServer }}
+      containerAppName: ${{ steps.deploy.outputs.containerAppName }}
+      containerAppUrl: ${{ steps.deploy.outputs.containerAppUrl }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Get current user object ID
+      id: get-user-id
+      run: |
+        if [ -z "${{ github.event.inputs.principalId }}" ]; then
+          # Get the object ID of the service principal used for authentication
+          PRINCIPAL_ID=$(az ad sp show --id $(az account show --query user.name -o tsv) --query id -o tsv 2>/dev/null || echo "")
+          if [ -z "$PRINCIPAL_ID" ]; then
+            # Fallback: try to get from the credential
+            PRINCIPAL_ID=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r .clientId)
+            PRINCIPAL_TYPE="ServicePrincipal"
+          else
+            PRINCIPAL_TYPE="${{ github.event.inputs.principalType }}"
+          fi
+        else
+          PRINCIPAL_ID="${{ github.event.inputs.principalId }}"
+          PRINCIPAL_TYPE="${{ github.event.inputs.principalType }}"
+        fi
+        
+        echo "principalId=$PRINCIPAL_ID" >> $GITHUB_OUTPUT
+        echo "principalType=$PRINCIPAL_TYPE" >> $GITHUB_OUTPUT
+        echo "Using Principal ID: $PRINCIPAL_ID ($PRINCIPAL_TYPE)"
+
+    - name: Create Resource Group
+      run: |
+        az group create \
+          --name "${{ github.event.inputs.resourceGroupName }}" \
+          --location "${{ github.event.inputs.location }}" \
+          --tags Environment=Production Application=MCP-Toolkit CreatedBy=GitHubActions
+
+    - name: Deploy Complete Infrastructure
+      id: deploy
+      run: |
+        DEPLOYMENT_NAME="mcp-toolkit-complete-$(date +%Y%m%d-%H%M%S)"
+        
+        # Deploy the complete infrastructure
+        DEPLOYMENT_OUTPUT=$(az deployment group create \
+          --resource-group "${{ github.event.inputs.resourceGroupName }}" \
+          --template-file infrastructure/deploy-all-resources.bicep \
+          --name "$DEPLOYMENT_NAME" \
+          --parameters \
+            resourcePrefix="${{ github.event.inputs.resourcePrefix }}" \
+            location="${{ github.event.inputs.location }}" \
+            principalId="${{ steps.get-user-id.outputs.principalId }}" \
+            principalType="${{ steps.get-user-id.outputs.principalType }}" \
+          --query "properties.outputs" \
+          --output json)
+        
+        # Extract outputs
+        CONTAINER_REGISTRY_NAME=$(echo $DEPLOYMENT_OUTPUT | jq -r .containerRegistryName.value)
+        CONTAINER_REGISTRY_LOGIN_SERVER=$(echo $DEPLOYMENT_OUTPUT | jq -r .containerRegistryLoginServer.value)
+        CONTAINER_APP_NAME=$(echo $DEPLOYMENT_OUTPUT | jq -r .postDeploymentInfo.value.containerApp)
+        CONTAINER_APP_URL=$(echo $DEPLOYMENT_OUTPUT | jq -r .containerAppUrl.value)
+        
+        # Set outputs
+        echo "containerRegistryName=$CONTAINER_REGISTRY_NAME" >> $GITHUB_OUTPUT
+        echo "containerRegistryLoginServer=$CONTAINER_REGISTRY_LOGIN_SERVER" >> $GITHUB_OUTPUT
+        echo "containerAppName=$CONTAINER_APP_NAME" >> $GITHUB_OUTPUT
+        echo "containerAppUrl=$CONTAINER_APP_URL" >> $GITHUB_OUTPUT
+        
+        echo "✅ Infrastructure deployed successfully!"
+        echo "Container Registry: $CONTAINER_REGISTRY_NAME"
+        echo "Container App: $CONTAINER_APP_NAME"
+        echo "Container App URL: $CONTAINER_APP_URL"
+
+  build-and-deploy-container:
+    needs: deploy-infrastructure
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Build and push container image
+      run: |
+        # Login to ACR
+        az acr login --name ${{ needs.deploy-infrastructure.outputs.containerRegistryName }}
+        
+        # Build and tag image
+        IMAGE_NAME="${{ needs.deploy-infrastructure.outputs.containerRegistryLoginServer }}/mcp-toolkit:latest"
+        docker build -t "$IMAGE_NAME" .
+        
+        # Push image
+        docker push "$IMAGE_NAME"
+        
+        echo "✅ Container image pushed: $IMAGE_NAME"
+
+    - name: Update Container App
+      run: |
+        # Update container app with new image
+        az containerapp update \
+          --name "${{ needs.deploy-infrastructure.outputs.containerAppName }}" \
+          --resource-group "${{ github.event.inputs.resourceGroupName }}" \
+          --image "${{ needs.deploy-infrastructure.outputs.containerRegistryLoginServer }}/mcp-toolkit:latest"
+        
+        echo "✅ Container app updated successfully!"
+
+    - name: Verify Deployment
+      run: |
+        echo "🔍 Waiting for container app to be ready..."
+        sleep 30
+        
+        HEALTH_URL="${{ needs.deploy-infrastructure.outputs.containerAppUrl }}/health"
+        
+        # Test health endpoint
+        if curl -f -s "$HEALTH_URL" > /dev/null; then
+          echo "✅ Health check passed!"
+          echo "🚀 MCP Toolkit is now running at: ${{ needs.deploy-infrastructure.outputs.containerAppUrl }}"
+        else
+          echo "⚠️ Health check failed (container may still be starting)"
+          echo "Try again in a few minutes: $HEALTH_URL"
+        fi
+
+    - name: Deployment Summary
+      run: |
+        echo "## 🎉 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 Deployed Resources" >> $GITHUB_STEP_SUMMARY
+        echo "- **Resource Group**: ${{ github.event.inputs.resourceGroupName }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Location**: ${{ github.event.inputs.location }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Container App URL**: [${{ needs.deploy-infrastructure.outputs.containerAppUrl }}](${{ needs.deploy-infrastructure.outputs.containerAppUrl }})" >> $GITHUB_STEP_SUMMARY
+        echo "- **Health Check**: [${{ needs.deploy-infrastructure.outputs.containerAppUrl }}/health](${{ needs.deploy-infrastructure.outputs.containerAppUrl }}/health)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🧪 VS Code MCP Configuration" >> $GITHUB_STEP_SUMMARY
+        echo '```json' >> $GITHUB_STEP_SUMMARY
+        echo '{' >> $GITHUB_STEP_SUMMARY
+        echo '  "servers": {' >> $GITHUB_STEP_SUMMARY
+        echo '    "azure-cosmos-db-mcp": {' >> $GITHUB_STEP_SUMMARY
+        echo '      "type": "http",' >> $GITHUB_STEP_SUMMARY
+        echo '      "url": "${{ needs.deploy-infrastructure.outputs.containerAppUrl }}"' >> $GITHUB_STEP_SUMMARY
+        echo '    }' >> $GITHUB_STEP_SUMMARY
+        echo '  }' >> $GITHUB_STEP_SUMMARY
+        echo '}' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🧪 Test Commands" >> $GITHUB_STEP_SUMMARY
+        echo "Try these commands in GitHub Copilot Chat:" >> $GITHUB_STEP_SUMMARY
+        echo "- 'List all databases in my Cosmos DB account'" >> $GITHUB_STEP_SUMMARY
+        echo "- 'Show containers in SampleDB database'" >> $GITHUB_STEP_SUMMARY
+        echo "- 'Get recent documents from SampleContainer'" >> $GITHUB_STEP_SUMMARY
+        echo "- 'Search for documents similar to your query'" >> $GITHUB_STEP_SUMMARY

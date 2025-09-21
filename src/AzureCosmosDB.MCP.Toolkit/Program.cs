@@ -8,14 +8,31 @@ using System.Text.RegularExpressions;
 using Azure.AI.OpenAI;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure for container environment
+builder.WebHost.ConfigureKestrel(options =>
+{
+    // Container Apps expects port 8080
+    options.ListenAnyIP(8080);
+});
+
+// Add services
 builder.Services.AddMcpServer()
     .WithHttpTransport()
     .WithToolsFromAssembly();
+
+// Add health checks for Azure Container Apps
+builder.Services.AddHealthChecks();
+
 var app = builder.Build();
 
+// Add health check endpoint for container orchestrators
+app.MapHealthChecks("/health");
+
+// Map MCP endpoints
 app.MapMcp();
 
-app.Run("http://localhost:3001");
+app.Run();
 
 [McpServerToolType]
 public static class CosmosDbTools

@@ -1,0 +1,74 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+CHANGELOG.md
+LICENSE
+*.md
+
+# Visual Studio
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build artifacts
+**/bin/
+**/obj/
+**/out/
+**/publish/
+
+# Test results
+TestResults/
+coverage/
+test-results/
+*.trx
+*.coverage
+*.coveragexml
+
+# NuGet packages
+*.nupkg
+*.snupkg
+
+# Environment files
+.env
+.env.*
+appsettings.Development.json
+local.settings.json
+
+# IDE files
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+ehthumbs.db
+
+# Node modules (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+
+# Azure Functions
+local.settings.json
+
+# Docker files (avoid recursive copies)
+Dockerfile*
+docker-compose*
+.dockerignore
