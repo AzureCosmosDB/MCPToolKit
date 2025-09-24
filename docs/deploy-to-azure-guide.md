@@ -36,7 +36,7 @@ Before clicking "Deploy to Azure":
 ## 🎯 Deployment Steps
 
 ### Step 1: Click Deploy to Azure
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fsajeetharan%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
 
 ### Step 2: Fill in Parameters
 - **Subscription**: Select your Azure subscription
@@ -62,7 +62,7 @@ After successful deployment, complete these steps:
 
 ```powershell
 # Clone the repository (if not already done)
-git clone https://github.com/sajeetharan/MCPToolKit.git
+git clone https://github.com/AzureCosmosDB/MCPToolKit.git
 cd MCPToolKit
 
 # Login to Azure
