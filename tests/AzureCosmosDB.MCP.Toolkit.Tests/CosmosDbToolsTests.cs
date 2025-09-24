@@ -1,5 +1,6 @@
 using Xunit;
 using FluentAssertions;
+using System.Text.Json;
 
 namespace AzureCosmosDB.MCP.Toolkit.Tests;
 
@@ -29,7 +30,9 @@ public class CosmosDbToolsTests
         var result = await CosmosDbTools.ListDatabases();
         
         // Assert
-        result.Should().Contain("Missing required environment variable COSMOS_ENDPOINT");
+        var jsonDoc = JsonDocument.Parse(result);
+        jsonDoc.RootElement.TryGetProperty("error", out var errorElement).Should().BeTrue();
+        errorElement.GetString().Should().Be("Missing required environment variable COSMOS_ENDPOINT.");
         
         // Cleanup
         Environment.SetEnvironmentVariable("COSMOS_ENDPOINT", null);
@@ -46,7 +49,9 @@ public class CosmosDbToolsTests
         var result = await CosmosDbTools.TextSearch("testDb", "testContainer", invalidProperty, "search", 1);
         
         // Assert
-        result.Should().Contain("Invalid property name");
+        var jsonDoc = JsonDocument.Parse(result);
+        jsonDoc.RootElement.TryGetProperty("error", out var errorElement).Should().BeTrue();
+        errorElement.GetString().Should().Contain("Invalid property name");
         
         // Cleanup
         Environment.SetEnvironmentVariable("COSMOS_ENDPOINT", null);
@@ -65,7 +70,9 @@ public class CosmosDbToolsTests
         var result = await CosmosDbTools.GetRecentDocuments("testDb", "testContainer", n);
         
         // Assert
-        result.Should().Contain("Parameter 'n' must be a whole number between 1 and 20");
+        var jsonDoc = JsonDocument.Parse(result);
+        jsonDoc.RootElement.TryGetProperty("error", out var errorElement).Should().BeTrue();
+        errorElement.GetString().Should().Be("Parameter 'n' must be a whole number between 1 and 20.");
         
         // Cleanup
         Environment.SetEnvironmentVariable("COSMOS_ENDPOINT", null);

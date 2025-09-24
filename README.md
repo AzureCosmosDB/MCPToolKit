@@ -21,9 +21,9 @@ This Azure Cosmos DB MCP Toolkit is a production-ready MCP Server that enables A
 
 Get started instantly with a complete Azure infrastructure deployment that includes all necessary resources and RBAC configuration:
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fsajeetharan%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
 
-[![Deploy with GitHub Actions](https://github.com/sajeetharan/MCPToolKit/actions/workflows/deploy-complete.yml/badge.svg)](https://github.com/sajeetharan/MCPToolKit/actions/workflows/deploy-complete.yml)
+[![Deploy with GitHub Actions](https://github.com/AzureCosmosDB/MCPToolKit/actions/workflows/deploy-complete.yml/badge.svg)](https://github.com/AzureCosmosDB/MCPToolKit/actions/workflows/deploy-complete.yml)
 
 **What gets deployed:**
 - ✅ **Azure Cosmos DB** (serverless) with sample database and container
@@ -38,7 +38,7 @@ Get started instantly with a complete Azure infrastructure deployment that inclu
 #### PowerShell Quick Deploy (Recommended for Advanced Users)
 ```powershell
 # Download and run the complete deployment script
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/sajeetharan/MCPToolKit/main/scripts/Deploy-Complete.ps1" -OutFile "Deploy-Complete.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/AzureCosmosDB/MCPToolKit/main/scripts/Deploy-Complete.ps1" -OutFile "Deploy-Complete.ps1"
 
 # Run with your configuration
 .\Deploy-Complete.ps1 `
@@ -51,7 +51,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/sajeetharan/MCPToolKit
 #### Linux/Mac Quick Deploy
 ```bash
 # Download and run the complete deployment script
-curl -O https://raw.githubusercontent.com/sajeetharan/MCPToolKit/main/scripts/deploy-complete.sh
+curl -O https://raw.githubusercontent.com/AzureCosmosDB/MCPToolKit/main/scripts/deploy-complete.sh
 chmod +x deploy-complete.sh
 
 # Set environment variables and run
@@ -827,7 +827,7 @@ MCPToolKit/
 
 ## 🚀 Quick Start Summary
 
-1. **One-Click Azure Deployment**: [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fsajeetharan%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
+1. **One-Click Azure Deployment**: [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
 2. **Local Development**: `docker-compose up -d`
 3. **VS Code Integration**: Configure `.vscode/mcp.json` with server URL
 4. **Test with AI Agent**: "@copilot List databases in my Cosmos DB account"
