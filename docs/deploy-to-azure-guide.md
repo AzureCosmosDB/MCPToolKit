@@ -130,6 +130,17 @@ After configuration, test with GitHub Copilot Chat:
 - **Region capacity**: Try a different Azure region if resources are unavailable
 - **Naming conflicts**: Use a unique resource prefix
 
+#### Policy Error: "Resource was disallowed by policy" (Owner Tag Required)
+If you see an error about a policy requiring an "owner" tag:
+
+1. **Your subscription has a policy** that requires all resources to have an "owner" tag
+2. **Solution**: You'll need to provide an **Owner Tag** parameter during deployment
+3. **Workaround**: 
+   - Download the Bicep template from the repository
+   - Add the parameter: `param ownerTag string = 'your-email@company.com'`
+   - Deploy using Azure CLI: `az deployment group create --template-file deploy-all-resources.bicep --parameters ownerTag='your-email@company.com'`
+4. **Contact your Azure admin** to understand your organization's tagging policies
+
 #### Container App Not Starting
 - **Check image**: Verify the container image was pushed successfully
 - **View logs**: Use Azure portal to check container app logs

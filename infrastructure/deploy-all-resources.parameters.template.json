@@ -13,6 +13,9 @@
     },
     "principalType": {
       "value": "User"
+    },
+    "ownerTag": {
+      "value": ""
     }
   }
 }

@@ -5,7 +5,10 @@ param resourcePrefix string = 'mcp-toolkit'
 param location string = resourceGroup().location
 
 @description('The Azure AD Object ID of the user/service principal that will have access to the resources')
-param principalId string
+param principal      ]
+    }
+  }
+  tags: commonTagsng
 
 @description('The type of principal (User, ServicePrincipal, or Group)')
 @allowed([
@@ -14,6 +17,9 @@ param principalId string
   'Group'
 ])
 param principalType string = 'User'
+
+@description('Owner tag value required by Azure Policy')
+param ownerTag string
 
 @description('Cosmos DB account name')
 param cosmosAccountName string = '${resourcePrefix}-cosmos-${uniqueString(resourceGroup().id)}'
@@ -48,6 +54,13 @@ var managedIdentityName = '${containerAppName}-identity'
 var logAnalyticsName = '${resourcePrefix}-logs'
 var containerAppEnvName = '${resourcePrefix}-env'
 
+// Common tags for all resources
+var commonTags = {
+  Environment: 'Production'
+  Application: 'MCP-Toolkit'
+  owner: ownerTag
+}
+
 // Built-in role definition IDs
 var cosmosDataContributorRoleId = '00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
 var cognitiveServicesOpenAIUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd' // Cognitive Services OpenAI User
@@ -78,10 +91,7 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {
       }
     ]
   }
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
+  tags: commonTags
 }
 
 // Create sample database and container
@@ -129,10 +139,7 @@ resource openAIAccount 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
     customSubDomainName: openAIAccountName
     publicNetworkAccess: 'Enabled'
   }
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
+  tags: commonTags
 }
 
 // Create embedding deployment
@@ -163,20 +170,14 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
   properties: {
     adminUserEnabled: true
   }
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
+  tags: commonTags
 }
 
 // Create user-assigned managed identity
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: managedIdentityName
   location: location
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
+  tags: commonTags
 }
 
 // Create Log Analytics workspace
@@ -192,10 +193,7 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
       enableLogAccessUsingOnlyResourcePermissions: true
     }
   }
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
+  tags: commonTags
 }
 
 // Create Container App Environment
@@ -212,10 +210,7 @@ resource containerAppEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' 
     }
     zoneRedundant: false
   }
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
+  tags: commonTags
 }
 
 // Create Container App (will be updated later with actual image)

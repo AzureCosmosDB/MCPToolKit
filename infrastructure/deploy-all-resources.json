@@ -41,6 +41,12 @@
         "description": "The type of principal (User, ServicePrincipal, or Group)"
       }
     },
+    "ownerTag": {
+      "type": "string",
+      "metadata": {
+        "description": "Owner tag value required by Azure Policy"
+      }
+    },
     "cosmosAccountName": {
       "type": "string",
       "defaultValue": "[format('{0}-cosmos-{1}', parameters('resourcePrefix'), uniqueString(resourceGroup().id))]",
@@ -98,6 +104,11 @@
     "managedIdentityName": "[format('{0}-identity', parameters('containerAppName'))]",
     "logAnalyticsName": "[format('{0}-logs', parameters('resourcePrefix'))]",
     "containerAppEnvName": "[format('{0}-env', parameters('resourcePrefix'))]",
+    "commonTags": {
+      "Environment": "Production",
+      "Application": "MCP-Toolkit",
+      "owner": "[parameters('ownerTag')]"
+    },
     "cosmosDataContributorRoleId": "00000000-0000-0000-0000-000000000002",
     "cognitiveServicesOpenAIUserRoleId": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
     "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
