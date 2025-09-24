@@ -25,6 +25,8 @@ Get started instantly with a complete Azure infrastructure deployment that inclu
 
 [![Deploy with GitHub Actions](https://github.com/AzureCosmosDB/MCPToolKit/actions/workflows/deploy-complete.yml/badge.svg)](https://github.com/AzureCosmosDB/MCPToolKit/actions/workflows/deploy-complete.yml)
 
+> **⚠️ Important**: If your Azure subscription has policies requiring an "owner" tag, you'll need to provide an **Owner Tag** value during deployment. This is typically your email address or username.
+
 **What gets deployed:**
 - ✅ **Azure Cosmos DB** (serverless) with sample database and container
 - ✅ **Azure OpenAI** service with text-embedding-ada-002 deployment
