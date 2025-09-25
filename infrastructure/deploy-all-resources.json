@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.37.4.10188",
-      "templateHash": "17803754679932250592"
+      "templateHash": "6408998329167753745"
     }
   },
   "parameters": {
@@ -45,6 +45,13 @@
       "type": "string",
       "metadata": {
         "description": "Owner tag value required by Azure Policy"
+      }
+    },
+    "deployAzureOpenAI": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Whether to deploy Azure OpenAI resources"
       }
     },
     "cosmosAccountName": {
@@ -140,10 +147,7 @@
           }
         ]
       },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      }
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
@@ -186,8 +190,9 @@
       ]
     },
     {
+      "condition": "[parameters('deployAzureOpenAI')]",
       "type": "Microsoft.CognitiveServices/accounts",
-      "apiVersion": "2023-05-01",
+      "apiVersion": "2024-10-01",
       "name": "[parameters('openAIAccountName')]",
       "location": "[parameters('location')]",
       "sku": {
@@ -198,14 +203,12 @@
         "customSubDomainName": "[parameters('openAIAccountName')]",
         "publicNetworkAccess": "Enabled"
       },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      }
+      "tags": "[variables('commonTags')]"
     },
     {
+      "condition": "[parameters('deployAzureOpenAI')]",
       "type": "Microsoft.CognitiveServices/accounts/deployments",
-      "apiVersion": "2023-05-01",
+      "apiVersion": "2024-10-01",
       "name": "[format('{0}/{1}', parameters('openAIAccountName'), 'text-embedding-ada-002')]",
       "properties": {
         "model": {
@@ -234,20 +237,14 @@
       "properties": {
         "adminUserEnabled": true
       },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      }
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2023-01-31",
       "name": "[variables('managedIdentityName')]",
       "location": "[parameters('location')]",
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      }
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.OperationalInsights/workspaces",
@@ -263,10 +260,7 @@
           "enableLogAccessUsingOnlyResourcePermissions": true
         }
       },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      }
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.App/managedEnvironments",
@@ -283,10 +277,7 @@
         },
         "zoneRedundant": false
       },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      },
+      "tags": "[variables('commonTags')]",
       "dependsOn": [
         "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
       ]
@@ -332,11 +323,11 @@
                 },
                 {
                   "name": "OPENAI_ENDPOINT",
-                  "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName')), '2023-05-01').endpoint]"
+                  "value": "[if(parameters('deployAzureOpenAI'), reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName')), '2024-10-01').endpoint, '')]"
                 },
                 {
                   "name": "OPENAI_EMBEDDING_DEPLOYMENT",
-                  "value": "text-embedding-ada-002"
+                  "value": "[if(parameters('deployAzureOpenAI'), 'text-embedding-ada-002', '')]"
                 },
                 {
                   "name": "ASPNETCORE_ENVIRONMENT",
@@ -488,11 +479,11 @@
     },
     "openAIEndpoint": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName')), '2023-05-01').endpoint]"
+      "value": "[if(parameters('deployAzureOpenAI'), reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName')), '2024-10-01').endpoint, '')]"
     },
     "openAIEmbeddingDeployment": {
       "type": "string",
-      "value": "text-embedding-ada-002"
+      "value": "[if(parameters('deployAzureOpenAI'), 'text-embedding-ada-002', '')]"
     },
     "containerAppUrl": {
       "type": "string",
