@@ -15,8 +15,8 @@ param principalId string
 ])
 param principalType string = 'User'
 
-@description('Owner tag value required by Azure Policy')
-param ownerTag string
+@description('Owner tag value (optional)')
+param ownerTag string = 'mcp-toolkit-user'
 
 @description('Whether to deploy Azure OpenAI resources')
 param deployAzureOpenAI bool = true
@@ -31,7 +31,7 @@ param openAIAccountName string = '${resourcePrefix}-openai-${uniqueString(resour
 param containerAppName string = '${resourcePrefix}-app'
 
 @description('Container registry name')
-param containerRegistryName string = '${resourcePrefix}acr${uniqueString(resourceGroup().id)}'
+param containerRegistryName string = '${replace(resourcePrefix, '-', '')}acr${uniqueString(resourceGroup().id)}'
 
 @description('Azure OpenAI SKU')
 @allowed([
