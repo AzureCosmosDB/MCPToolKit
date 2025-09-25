@@ -5,10 +5,7 @@ param resourcePrefix string = 'mcp-toolkit'
 param location string = resourceGroup().location
 
 @description('The Azure AD Object ID of the user/service principal that will have access to the resources')
-param principal      ]
-    }
-  }
-  tags: commonTagsng
+param principalId string
 
 @description('The type of principal (User, ServicePrincipal, or Group)')
 @allowed([
@@ -20,6 +17,9 @@ param principalType string = 'User'
 
 @description('Owner tag value required by Azure Policy')
 param ownerTag string
+
+@description('Whether to deploy Azure OpenAI resources')
+param deployAzureOpenAI bool = true
 
 @description('Cosmos DB account name')
 param cosmosAccountName string = '${resourcePrefix}-cosmos-${uniqueString(resourceGroup().id)}'
@@ -127,8 +127,8 @@ resource sampleContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
   }
 }
 
-// Create Azure OpenAI Account
-resource openAIAccount 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
+// Create Azure OpenAI Account (conditional)
+resource openAIAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (deployAzureOpenAI) {
   name: openAIAccountName
   location: location
   sku: {
@@ -143,7 +143,7 @@ resource openAIAccount 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
 }
 
 // Create embedding deployment
-resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
+resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (deployAzureOpenAI) {
   parent: openAIAccount
   name: 'text-embedding-ada-002'
   properties: {
@@ -253,11 +253,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'OPENAI_ENDPOINT'
-              value: openAIAccount.properties.endpoint
+              value: deployAzureOpenAI ? openAIAccount.properties.endpoint : ''
             }
             {
               name: 'OPENAI_EMBEDDING_DEPLOYMENT'
-              value: embeddingDeployment.name
+              value: deployAzureOpenAI ? embeddingDeployment.name : ''
             }
             {
               name: 'ASPNETCORE_ENVIRONMENT'
@@ -383,8 +383,8 @@ resource acrRoleAssignmentMI 'Microsoft.Authorization/roleAssignments@2022-04-01
 
 // Outputs
 output cosmosEndpoint string = cosmosAccount.properties.documentEndpoint
-output openAIEndpoint string = openAIAccount.properties.endpoint
-output openAIEmbeddingDeployment string = embeddingDeployment.name
+output openAIEndpoint string = deployAzureOpenAI ? openAIAccount.properties.endpoint : ''
+output openAIEmbeddingDeployment string = deployAzureOpenAI ? embeddingDeployment.name : ''
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output containerRegistryName string = containerRegistry.name
 output containerRegistryLoginServer string = containerRegistry.properties.loginServer
