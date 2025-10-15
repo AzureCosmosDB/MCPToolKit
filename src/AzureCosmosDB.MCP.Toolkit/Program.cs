@@ -21,16 +21,32 @@ builder.Services.AddMcpServer()
     .WithHttpTransport()
     .WithToolsFromAssembly();
 
+// Add controllers for the UI
+builder.Services.AddControllers();
+
 // Add health checks for Azure Container Apps
 builder.Services.AddHealthChecks();
+
+// Register CosmosDbToolsService for dependency injection
+builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.CosmosDbToolsService>();
 
 var app = builder.Build();
 
 // Add health check endpoint for container orchestrators
 app.MapHealthChecks("/health");
 
+// Serve static files (for the UI)
+app.UseStaticFiles();
+
+// Add routing and controllers
+app.UseRouting();
+app.MapControllers();
+
 // Map MCP endpoints
 app.MapMcp();
+
+// Serve the UI at the root
+app.MapFallbackToFile("index.html");
 
 app.Run();
 
