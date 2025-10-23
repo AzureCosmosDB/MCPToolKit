@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Cosmos DB MCP Toolkit Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #0078d4, #106ebe);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .section h2 {
+            color: #0078d4;
+            border-bottom: 2px solid #e1e1e1;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .config-item {
+            margin-bottom: 15px;
+        }
+
+        .config-item label {
+            font-weight: 600;
+            color: #555;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .config-item input, .config-item textarea, .config-item select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .config-item textarea {
+            min-height: 60px;
+            resize: vertical;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: #0078d4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        .btn:hover {
+            background: #106ebe;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .tool-selector {
+            margin-bottom: 20px;
+        }
+
+        .tool-params {
+            margin-bottom: 20px;
+        }
+
+        .param-group {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #e1e1e1;
+            border-radius: 4px;
+            background: #f8f9fa;
+        }
+
+        .response-container {
+            background: #f8f9fa;
+            border: 1px solid #e1e1e1;
+            border-radius: 4px;
+            padding: 20px;
+            margin-top: 20px;
+            min-height: 200px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .info {
+            background: #cce7ff;
+            border: 1px solid #9ecaff;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-healthy {
+            background: #28a745;
+        }
+
+        .status-unhealthy {
+            background: #dc3545;
+        }
+
+        .status-unknown {
+            background: #6c757d;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .actions {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Azure Cosmos DB MCP Toolkit Test</h1>
+            <p>Interactive testing interface for Model Context Protocol tools</p>
+        </div>
+
+        <div class="section">
+            <h2>Configuration</h2>
+            <div class="info">
+                <strong>Server Status:</strong> 
+                <span class="status-indicator status-unknown" id="statusIndicator"></span>
+                <span id="statusText">Checking...</span>
+            </div>
+            
+            <div class="config-item">
+                <label for="serverUrl">Azure MCP Server URL:</label>
+                <input type="text" id="serverUrl" value="https://mcp-toolkit-app.greenrock-3ca4379b.eastus.azurecontainerapps.io" readonly>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Actions</h2>
+            <div class="actions">
+                <button class="btn" id="listToolsBtn">List Tools</button>
+                <button class="btn" id="runToolBtn">Run Selected Tool</button>
+                <button class="btn btn-secondary" id="clearOutputBtn">Clear Output</button>
+                <button class="btn btn-secondary" id="checkHealthBtn">Check Health</button>
+            </div>
+
+            <div class="tool-selector">
+                <label for="toolSelect">Select MCP Tool:</label>
+                <select id="toolSelect">
+                    <option value="">Select a tool...</option>
+                </select>
+            </div>
+
+            <div class="tool-params" id="toolParams" style="display: none;">
+                <h3>Tool Parameters</h3>
+                <div id="parameterInputs"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Response</h2>
+            <div class="response-container" id="responseContainer">
+                Welcome to the Azure Cosmos DB MCP Toolkit Test Interface!
+                
+Click "List Tools" to discover available MCP tools or "Check Health" to verify server status.
+
+Available tools:
+• list_databases - Lists all databases in your Cosmos DB account
+• list_collections - Lists containers in a specific database  
+• get_recent_documents - Gets recent documents from a container
+• find_document_by_id - Finds a document by its ID
+• text_search - Full-text search within documents
+• vector_search - Semantic search using AI embeddings
+• get_approximate_schema - Analyzes document structure
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const serverUrl = document.getElementById('serverUrl').value;
+        const responseContainer = document.getElementById('responseContainer');
+        const toolSelect = document.getElementById('toolSelect');
+        const toolParams = document.getElementById('toolParams');
+        const parameterInputs = document.getElementById('parameterInputs');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+
+        let availableTools = [];
+
+        // Tool definitions with their parameters
+        const toolDefinitions = {
+            'list_databases': {
+                description: 'Lists all databases available in the Cosmos DB account',
+                parameters: []
+            },
+            'list_collections': {
+                description: 'Lists containers (collections) for a specified database',
+                parameters: [
+                    { name: 'databaseId', type: 'string', required: true, description: 'Database ID to list containers from' }
+                ]
+            },
+            'get_recent_documents': {
+                description: 'Gets the most recent N documents ordered by timestamp (_ts DESC). N must be between 1-20',
+                parameters: [
+                    { name: 'databaseId', type: 'string', required: true, description: 'Database ID containing the container' },
+                    { name: 'containerId', type: 'string', required: true, description: 'Container ID to query' },
+                    { name: 'n', type: 'number', required: true, description: 'Number of documents to return (1-20)' }
+                ]
+            },
+            'find_document_by_id': {
+                description: 'Finds a document by its ID in the specified database/container',
+                parameters: [
+                    { name: 'databaseId', type: 'string', required: true, description: 'Database ID containing the container' },
+                    { name: 'containerId', type: 'string', required: true, description: 'Container ID to query' },
+                    { name: 'id', type: 'string', required: true, description: 'The ID of the document to find' }
+                ]
+            },
+            'text_search': {
+                description: 'Select TOP N documents where a given property contains the provided search string. N must be between 1-20',
+                parameters: [
+                    { name: 'databaseId', type: 'string', required: true, description: 'Database ID containing the container' },
+                    { name: 'containerId', type: 'string', required: true, description: 'Container ID to query' },
+                    { name: 'property', type: 'string', required: true, description: 'Document property to search, e.g. name or profile.name' },
+                    { name: 'searchPhrase', type: 'string', required: true, description: 'Search term to look for within the property' },
+                    { name: 'n', type: 'number', required: true, description: 'Number of documents to return (1-20)' }
+                ]
+            },
+            'vector_search': {
+                description: 'Performs vector search on Cosmos DB using Azure OpenAI embeddings',
+                parameters: [
+                    { name: 'databaseId', type: 'string', required: true, description: 'Database ID containing the container' },
+                    { name: 'containerId', type: 'string', required: true, description: 'Container ID to query' },
+                    { name: 'searchText', type: 'string', required: true, description: 'Text to search for semantically similar content' },
+                    { name: 'vectorProperty', type: 'string', required: true, description: 'Property name where vector embeddings are stored' },
+                    { name: 'selectProperties', type: 'string', required: true, description: 'Comma-separated list of specific properties to project in results' },
+                    { name: 'topN', type: 'number', required: true, description: 'Number of documents to return (1-50)' }
+                ]
+            },
+            'get_approximate_schema': {
+                description: 'Approximates a container schema by sampling up to 10 documents',
+                parameters: [
+                    { name: 'databaseId', type: 'string', required: true, description: 'Database ID containing the container' },
+                    { name: 'containerId', type: 'string', required: true, description: 'Container ID to inspect' }
+                ]
+            }
+        };
+
+        // Check server health on load
+        checkHealth();
+
+        // Event listeners
+        document.getElementById('listToolsBtn').addEventListener('click', listTools);
+        document.getElementById('runToolBtn').addEventListener('click', runSelectedTool);
+        document.getElementById('clearOutputBtn').addEventListener('click', clearOutput);
+        document.getElementById('checkHealthBtn').addEventListener('click', checkHealth);
+        document.getElementById('toolSelect').addEventListener('change', onToolSelected);
+
+        async function checkHealth() {
+            try {
+                updateStatus('unknown', 'Checking...');
+                const response = await fetch(`${serverUrl}/health`);
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    updateStatus('healthy', `Healthy (${text})`);
+                    showResponse('Health Check: Server is healthy\n' + JSON.stringify({
+                        status: 'healthy',
+                        response: text,
+                        timestamp: new Date().toISOString()
+                    }, null, 2));
+                } else {
+                    updateStatus('unhealthy', `Error ${response.status}`);
+                    showResponse(`Health Check Failed: HTTP ${response.status}\n${response.statusText}`);
+                }
+            } catch (error) {
+                updateStatus('unhealthy', 'Connection failed');
+                showResponse(`Health Check Error: ${error.message}`);
+            }
+        }
+
+        function updateStatus(status, text) {
+            statusIndicator.className = `status-indicator status-${status}`;
+            statusText.textContent = text;
+        }
+
+        async function listTools() {
+            try {
+                showResponse('Listing available MCP tools...');
+                
+                // Simulate MCP tools/list call
+                const tools = Object.keys(toolDefinitions).map(name => ({
+                    name: name,
+                    description: toolDefinitions[name].description
+                }));
+
+                availableTools = tools;
+                populateToolSelector(tools);
+                
+                showResponse('Available MCP Tools:\n' + JSON.stringify({
+                    tools: tools,
+                    count: tools.length,
+                    timestamp: new Date().toISOString()
+                }, null, 2));
+
+            } catch (error) {
+                showResponse(`Error listing tools: ${error.message}`);
+            }
+        }
+
+        function populateToolSelector(tools) {
+            toolSelect.innerHTML = '<option value="">Select a tool...</option>';
+            tools.forEach(tool => {
+                const option = document.createElement('option');
+                option.value = tool.name;
+                option.textContent = `${tool.name} - ${tool.description}`;
+                toolSelect.appendChild(option);
+            });
+        }
+
+        function onToolSelected() {
+            const selectedTool = toolSelect.value;
+            if (selectedTool && toolDefinitions[selectedTool]) {
+                showToolParameters(selectedTool);
+            } else {
+                toolParams.style.display = 'none';
+            }
+        }
+
+        function showToolParameters(toolName) {
+            const tool = toolDefinitions[toolName];
+            if (tool.parameters.length === 0) {
+                toolParams.style.display = 'none';
+                return;
+            }
+
+            parameterInputs.innerHTML = '';
+            tool.parameters.forEach(param => {
+                const paramGroup = document.createElement('div');
+                paramGroup.className = 'param-group';
+                
+                const label = document.createElement('label');
+                label.textContent = `${param.name}${param.required ? ' *' : ''}: ${param.description}`;
+                
+                const input = document.createElement(param.type === 'text' ? 'textarea' : 'input');
+                input.type = param.type === 'number' ? 'number' : 'text';
+                input.id = `param_${param.name}`;
+                input.placeholder = param.description;
+                if (param.required) {
+                    input.required = true;
+                }
+
+                paramGroup.appendChild(label);
+                paramGroup.appendChild(input);
+                parameterInputs.appendChild(paramGroup);
+            });
+
+            toolParams.style.display = 'block';
+        }
+
+        async function runSelectedTool() {
+            const selectedTool = toolSelect.value;
+            if (!selectedTool) {
+                showResponse('Please select a tool first.');
+                return;
+            }
+
+            try {
+                showResponse('Running tool...');
+                
+                const tool = toolDefinitions[selectedTool];
+                const parameters = {};
+                
+                // Collect parameters
+                tool.parameters.forEach(param => {
+                    const input = document.getElementById(`param_${param.name}`);
+                    if (input) {
+                        let value = input.value.trim();
+                        if (param.type === 'number' && value) {
+                            value = parseInt(value);
+                        }
+                        if (param.required && !value) {
+                            throw new Error(`Parameter '${param.name}' is required`);
+                        }
+                        if (value) {
+                            parameters[param.name] = value;
+                        }
+                    }
+                });
+
+                // Make the MCP tool call (simulated for now)
+                const result = await callMCPTool(selectedTool, parameters);
+                
+                showResponse(`Tool: ${selectedTool}\nParameters: ${JSON.stringify(parameters, null, 2)}\n\nResult:\n${JSON.stringify(result, null, 2)}`);
+
+            } catch (error) {
+                showResponse(`Error running tool '${selectedTool}': ${error.message}`);
+            }
+        }
+
+        async function callMCPTool(toolName, parameters) {
+            // This would make the actual MCP call to your server
+            // For now, we'll simulate the call
+            
+            const request = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tool: toolName,
+                    parameters: parameters,
+                    timestamp: new Date().toISOString()
+                })
+            };
+
+            // Simulate API call to your MCP endpoint
+            const response = await fetch(`${serverUrl}/api/mcp/tools/${toolName}`, request);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            return await response.json();
+        }
+
+        function showResponse(content) {
+            responseContainer.textContent = content;
+            responseContainer.scrollTop = responseContainer.scrollHeight;
+        }
+
+        function clearOutput() {
+            responseContainer.textContent = 'Output cleared.';
+        }
+    </script>
+</body>
+</html>
