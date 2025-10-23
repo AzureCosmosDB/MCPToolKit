@@ -10,6 +10,22 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 - 🐳 **Production Ready** - Containerized deployment to Azure Container Apps
 - 🚀 **Easy Deployment** - One-click Azure deployment with complete infrastructure
 - ⚡ **VS Code Integration** - Works seamlessly with GitHub Copilot Chat
+- 🎯 **Interactive UI** - Web-based testing interface for exploring MCP tools
+
+## Quick Start
+
+### 🌐 Try the Interactive UI
+
+Test the MCP toolkit immediately using the web interface:
+
+**Deployed UI**: [https://mcp-toolkit-app.greenrock-3ca4379b.eastus.azurecontainerapps.io](https://mcp-toolkit-app.greenrock-3ca4379b.eastus.azurecontainerapps.io)
+
+The UI allows you to:
+- Check server health status
+- List available MCP tools
+- Test tools with interactive parameter input
+- View formatted JSON responses
+- Explore all 7 MCP tools without VS Code dependency
 
 ## Quick Start
 

@@ -17,12 +17,24 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 // Add services
-builder.Services.AddMcpServer()
-    .WithHttpTransport()
-    .WithToolsFromAssembly();
+// Note: Commenting out built-in MCP server to use custom controller
+// builder.Services.AddMcpServer()
+//     .WithHttpTransport()
+//     .WithToolsFromAssembly();
 
 // Add controllers for the UI
 builder.Services.AddControllers();
+
+// Add CORS for external MCP access
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("MCPPolicy", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
 
 // Add health checks for Azure Container Apps
 builder.Services.AddHealthChecks();
@@ -35,18 +47,23 @@ var app = builder.Build();
 // Add health check endpoint for container orchestrators
 app.MapHealthChecks("/health");
 
-// Serve static files (for the UI)
+// Enable CORS
+app.UseCors("MCPPolicy");
+
+// Configure static files with more explicit options
+app.UseDefaultFiles(); // This will serve index.html as default
 app.UseStaticFiles();
 
 // Add routing and controllers
 app.UseRouting();
 app.MapControllers();
 
-// Map MCP endpoints
-app.MapMcp();
+// Note: Commenting out built-in MCP endpoint to use custom controller
+// Map MCP endpoints with specific path
+// app.MapMcp("/mcp");
 
-// Serve the UI at the root
-app.MapFallbackToFile("index.html");
+// Add a simple root endpoint as fallback
+app.MapGet("/", () => Results.Redirect("/index.html"));
 
 app.Run();
 
