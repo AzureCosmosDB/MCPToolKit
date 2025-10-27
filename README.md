@@ -8,42 +8,50 @@ Follow these 3 simple steps to get your MCP Toolkit running:
 
 ### Step 1: Deploy Infrastructure (5 minutes)
 
-Click the Deploy to Azure button to create all required Azure resources:
+Deploy the core Azure infrastructure using Bicep:
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
+```powershell
+cd infrastructure
+az deployment group create `
+    --resource-group "your-resource-group-name" `
+    --template-file "main.bicep" `
+    --parameters containerAppName="mcp-toolkit-app" environmentName="mcp-toolkit-env"
+```
 
 This creates:
 - Container App for hosting the MCP server
 - Container Registry for your app images  
-- Entra ID app for authentication
+- Managed Identity for secure resource access
 - All necessary networking and security
 
-### Step 2: Deploy Application (3 minutes)
+**Note:** The Entra ID app will be created in Step 2 for better reliability.
 
-Clone the repository and run the deployment script:
+### Step 2: Configure Permissions (2 minutes)
+
+Run the automated setup script to create the Entra ID app and configure all permissions:
 
 ```powershell
-# Clone repository
-git clone https://github.com/AzureCosmosDB/MCPToolKit.git
-cd MCPToolKit
+cd ..
+.\scripts\Setup-Permissions.ps1 -ResourceGroup "your-resource-group-name"
+```
 
+This automatically:
+- ✅ Creates the Entra ID app with MCP Tool Executor role
+- ✅ Assigns you to the MCP role
+- ✅ Configures Cosmos DB read permissions
+- ✅ Configures Azure OpenAI permissions
+
+### Step 3: Deploy Application (3 minutes)
+
+Build and deploy your application:
+
+```powershell
 # Deploy application (replace with your actual resource names from Step 1)
-.\scripts\Quick-Deploy.ps1 -ResourceGroup "rg-your-resource-group" -ContainerAppName "mcp-toolkit-app" -RegistryName "your-registry-name"
+.\scripts\Quick-Deploy.ps1 `
+    -ResourceGroup "your-resource-group-name" `
+    -ContainerAppName "mcp-toolkit-app" `
+    -RegistryName "your-registry-name"
 ```
-
-### Step 3: Configure Permissions (1 minute)
-
-Run the automated setup script to configure all permissions:
-
-```powershell
-# Easy automated setup
-.\scripts\Setup-Permissions.ps1 -ResourceGroup "rg-your-resource-group"
-```
-
-This automatically configures:
-- User access to MCP tools
-- Cosmos DB read permissions
-- Azure OpenAI access
 
 ### ✅ Test Your Setup
 

@@ -7,6 +7,9 @@ param containerAppName string = 'mcp-demo-app'
 @description('Environment name for the Container Apps Environment')
 param environmentName string = 'mcp-toolkit-env'
 
+@description('Display name for the Entra App')
+param entraAppDisplayName string = 'Azure Cosmos DB MCP Toolkit API'
+
 @description('Container registry name')
 param containerRegistryName string = 'mcpdemo${uniqueString(resourceGroup().id)}'
 
@@ -31,9 +34,6 @@ param commonTags object = {
   Application: 'MCP-Toolkit'
 }
 
-// NOTE: Entra App creation has been moved to the Setup-Permissions.ps1 script
-// for better reliability. The script will create the app if it doesn't exist.
-
 // Container Registry
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: containerRegistryName
@@ -52,6 +52,17 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
   name: '${containerAppName}-identity'
   location: location
   tags: commonTags
+}
+
+// Assign AcrPull role to managed identity
+resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistry.id, managedIdentity.id, 'AcrPull')
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
 }
 
 // Create Container App Environment
@@ -124,8 +135,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'AzureAd__TenantId'
               value: tenant().tenantId
             }
-            // NOTE: AzureAd__ClientId will be set by Setup-Permissions.ps1 script
-            // after the Entra app is created
           ]
           probes: [
             {
@@ -173,6 +182,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
     }
   }
+  dependsOn: [
+    acrPullRole
+  ]
   tags: commonTags
 }
 
@@ -189,5 +201,3 @@ output CONTAINER_APP_NAME string = containerApp.name
 output CONTAINER_APP_URL string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output CONTAINER_APP_PRINCIPAL_ID string = managedIdentity.properties.principalId
 output AZURE_CONTAINER_APP_ENVIRONMENT_ID string = containerAppEnvironment.id
-
-// Note: Entra app outputs will be displayed by Setup-Permissions.ps1 script
