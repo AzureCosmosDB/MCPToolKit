@@ -84,6 +84,59 @@ Invoke-RestMethod -Uri http://localhost:8080/mcp -Method Post -ContentType "appl
 
 ## Configuration
 
+### Azure Resource Permissions
+
+The MCP Toolkit requires specific Azure roles for accessing Cosmos DB and OpenAI services:
+
+#### Cosmos DB Permissions (Choose One)
+
+**Option 1: Cosmos DB Built-in Data Reader (Recommended)**
+```powershell
+# Assign to Managed Identity for production
+az cosmosdb sql role assignment create --account-name "your-cosmos-account" --resource-group "cosmos-rg" --scope "/" --principal-id "managed-identity-id" --role-definition-name "Cosmos DB Built-in Data Reader"
+
+# Or assign to user for development
+az cosmosdb sql role assignment create --account-name "your-cosmos-account" --resource-group "cosmos-rg" --scope "/" --principal-id "user-object-id" --role-definition-name "Cosmos DB Built-in Data Reader"
+```
+
+**Option 2: Custom Read-Only Role (Maximum Security)**
+```powershell
+# Create custom role with minimal read permissions
+$roleDefinition = @{
+    RoleName = "MCP Toolkit Read Only"
+    Type = "CustomRole"
+    AssignableScopes = @("/")
+    Permissions = @(@{
+        DataActions = @(
+            "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/read",
+            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/executeQuery"
+        )
+        NotDataActions = @(
+            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/create",
+            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/upsert",
+            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/replace",
+            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/delete"
+        )
+    })
+}
+
+# Create and assign the role
+$roleDefinition | ConvertTo-Json -Depth 10 | Out-File cosmos-readonly-role.json
+az cosmosdb sql role definition create --account-name "your-cosmos-account" --resource-group "cosmos-rg" --body @cosmos-readonly-role.json
+```
+
+#### Azure OpenAI Permissions (For Vector Search)
+
+**Required Role: Cognitive Services OpenAI User**
+```powershell
+# Assign to Managed Identity
+az role assignment create --assignee "managed-identity-id" --role "Cognitive Services OpenAI User" --scope "/subscriptions/sub-id/resourceGroups/openai-rg/providers/Microsoft.CognitiveServices/accounts/openai-account"
+
+# Or assign to user for development  
+az role assignment create --assignee "user@domain.com" --role "Cognitive Services OpenAI User" --scope "/subscriptions/sub-id/resourceGroups/openai-rg/providers/Microsoft.CognitiveServices/accounts/openai-account"
+```
+
 ### Environment Variables
 | Variable | Description | Example |
 |----------|-------------|---------|
@@ -93,22 +146,28 @@ Invoke-RestMethod -Uri http://localhost:8080/mcp -Method Post -ContentType "appl
 | `DEV_BYPASS_AUTH` | Bypass auth for development | `true` or `false` |
 
 ### Authentication Setup
-1. **Assign Role to Users**
+
+#### Quick Setup for Users
+1. **Assign MCP Role to Users**
 ```powershell
 az ad app role assignment create --id "your-entra-app-client-id" --principal "user@domain.com" --role "Mcp.Tool.Executor"
 ```
 
-2. **Get Access Token**
+2. **Configure Azure Resource Access** (See Azure Resource Permissions section above)
+
+3. **Get Access Token**
 ```powershell
 $token = az account get-access-token --resource "api://your-client-id" --query "accessToken" --output tsv
 ```
 
-3. **Test MCP Calls**
+4. **Test MCP Calls**
 ```powershell
 $headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" }
 $body = '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 Invoke-RestMethod -Uri "https://your-app-url/mcp" -Method Post -Headers $headers -Body $body
 ```
+
+> **📖 Detailed Setup**: For comprehensive authentication configuration including custom roles and security options, see [Authentication Setup Guide](docs/AUTHENTICATION-SETUP.md)
 
 ## VS Code Integration
 
