@@ -54,26 +54,43 @@ try {
         Write-Host "Tenant ID: $tenantId" -ForegroundColor Gray
     }
     
-    # Get the token using our other script
+    # Get access token using Azure CLI
     Write-Host ""
-    $scriptPath = Join-Path $PSScriptRoot "Get-AADToken.ps1"
+    Write-Host "🔑 Getting Azure AD access token..." -ForegroundColor Green
     
-    if ($tenantId) {
-        $token = & $scriptPath -ClientId $clientId -TenantId $tenantId
-    } else {
-        $token = & $scriptPath -ClientId $clientId
-    }
+    $resource = "api://$clientId"
     
-    if ($token) {
+    try {
+        if ($tenantId) {
+            $tokenResult = az account get-access-token --resource $resource --tenant $tenantId --query "accessToken" -o tsv
+        } else {
+            $tokenResult = az account get-access-token --resource $resource --query "accessToken" -o tsv
+        }
+        
+        if ($LASTEXITCODE -eq 0 -and $tokenResult) {
+            $token = $tokenResult.Trim()
+            Write-Host "✅ Token acquired successfully" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "🌐 Ready to test with your deployed server:" -ForegroundColor Cyan
+            Write-Host "curl -X POST '$serverUrl/mcp' \\" -ForegroundColor Gray
+            Write-Host "  -H 'Authorization: Bearer $token' \\" -ForegroundColor Gray
+            Write-Host "  -H 'Content-Type: application/json' \\" -ForegroundColor Gray
+            Write-Host "  -d '{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":1}'" -ForegroundColor Gray
+            
+            return $token
+        } else {
+            throw "Failed to get access token from Azure CLI"
+        }
+        
+    } catch {
+        Write-Error "❌ Error getting access token: $($_.Exception.Message)"
         Write-Host ""
-        Write-Host "🌐 Ready to test with your deployed server:" -ForegroundColor Cyan
-        Write-Host "curl -X POST '$serverUrl/mcp' \\" -ForegroundColor Gray
-        Write-Host "  -H 'Authorization: Bearer $token' \\" -ForegroundColor Gray
-        Write-Host "  -H 'Content-Type: application/json' \\" -ForegroundColor Gray
-        Write-Host "  -d '{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":1}'" -ForegroundColor Gray
+        Write-Host "🔍 Troubleshooting:" -ForegroundColor Yellow
+        Write-Host "1. Make sure you're logged in: az login" -ForegroundColor Gray
+        Write-Host "2. Check your permissions for the app registration" -ForegroundColor Gray
+        Write-Host "3. Verify the client ID is correct" -ForegroundColor Gray
+        exit 1
     }
-    
-    return $token
     
 } catch {
     Write-Error "❌ Error reading deployment info: $($_.Exception.Message)"

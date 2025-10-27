@@ -26,28 +26,14 @@ You must already have:
 cd scripts
 
 # Run the deployment script
-./Deploy-Complete.ps1 `
-    -ResourceGroupName "mcp-toolkit-rg" `
-    -Location "East US" `
-    -PrincipalId "your-user-object-id" `
-    -CosmosEndpoint "https://yourcosmosdb.documents.azure.com:443/" `
-    -OpenAIEndpoint "https://youropenai.openai.azure.com/" `
-    -OpenAIEmbeddingDeployment "text-embedding-ada-002"
+.\Deploy-CosmosMcpServer.ps1 -ResourceGroup "mcp-toolkit-rg"
 ```
 
 ### Option 2: Bash Script
 
 ```bash
-# Set environment variables
-export RESOURCE_GROUP_NAME="mcp-toolkit-rg"
-export LOCATION="East US"
-export PRINCIPAL_ID="your-user-object-id"
-export COSMOS_ENDPOINT="https://yourcosmosdb.documents.azure.com:443/"
-export OPENAI_ENDPOINT="https://youropenai.openai.azure.com/"
-export OPENAI_EMBEDDING_DEPLOYMENT="text-embedding-ada-002"
-
 # Run deployment script
-./scripts/deploy-complete.sh
+./scripts/deploy-cosmos-mcp-server.sh --resource-group "mcp-toolkit-rg"
 ```
 
 ### Option 3: Manual Bicep Deployment
