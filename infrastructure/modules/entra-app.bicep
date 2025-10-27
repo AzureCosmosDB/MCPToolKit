@@ -17,7 +17,7 @@
   defines what it can actually do in your specific environment.
 */
 
-extension microsoftGraphV1
+import 'br/public:avm/microsoft-graph/provider:0.1.5' as graph
 
 @description('Display name for the Entra Application')
 param entraAppDisplayName string
@@ -33,38 +33,6 @@ var entraAppRoleId = guid(subscription().id, entraAppRoleValue)
 var entraAppRoleDisplayName = 'MCP Tool Executor'
 var entraAppRoleDescription = 'Executor role for MCP Tool operations on Cosmos DB'
 
-resource entraApp 'Microsoft.Graph/applications@v1.0' = {
+resource entraApp 'Microsoft.Graph/applications@v1.0' existing = {
   uniqueName: entraAppUniqueName 
-  displayName: entraAppDisplayName
-  serviceManagementReference: orgServiceManagementReferenceId
-  appRoles: [
-    {
-      id: entraAppRoleId
-      displayName: entraAppRoleDisplayName
-      description: entraAppRoleDescription
-      value: entraAppRoleValue
-      isEnabled: true
-      allowedMemberTypes: ['Application']
-    }
-  ]
 }
-
-resource entraAppUpdate 'Microsoft.Graph/applications@v1.0' = {
-  uniqueName: entraAppUniqueName
-  displayName: entraAppDisplayName
-  serviceManagementReference: orgServiceManagementReferenceId
-  appRoles: entraApp.appRoles
-  identifierUris: ['api://${entraApp.appId}']
-}
-
-// Create service principal for the Entra App
-resource entraServicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
-  appId: entraApp.appId
-}
-
-output entraAppClientId string = entraApp.appId
-output entraAppObjectId string = entraApp.id
-output entraAppIdentifierUri string = 'api://${entraApp.appId}'
-output entraAppRoleValue string = entraAppRoleValue
-output entraAppRoleId string = entraApp.appRoles[0].id
-output entraAppServicePrincipalObjectId string = entraServicePrincipal.id

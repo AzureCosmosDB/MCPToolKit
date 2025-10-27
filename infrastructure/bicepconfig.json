@@ -1,0 +1,7 @@
+{
+  "experimentalFeaturesEnabled": {
+    "extensibility": true,
+    "extensionRegistry": true,
+    "dynamicTypeLoading": true
+  }
+}
