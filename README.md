@@ -8,15 +8,9 @@ Follow these 3 simple steps to get your MCP Toolkit running:
 
 ### Step 1: Deploy Infrastructure (5 minutes)
 
-Deploy the core Azure infrastructure using Bicep:
+Click the Deploy to Azure button to create all required Azure resources:
 
-```powershell
-cd infrastructure
-az deployment group create `
-    --resource-group "your-resource-group-name" `
-    --template-file "main.bicep" `
-    --parameters containerAppName="mcp-toolkit-app" environmentName="mcp-toolkit-env"
-```
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
 
 This creates:
 - Container App for hosting the MCP server
