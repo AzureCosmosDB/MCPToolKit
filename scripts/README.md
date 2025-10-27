@@ -2,14 +2,33 @@
 
 This directory contains deployment and testing scripts for the Azure Cosmos DB MCP Toolkit.
 
+# Scripts Directory
+
+This directory contains deployment and testing scripts for the Azure Cosmos DB MCP Toolkit.
+
 ## 🚀 Deployment Scripts
 
-### `Deploy-CosmosMcpServer.ps1` (Windows PowerShell)
+### `Quick-Deploy.ps1` ⭐ **RECOMMENDED**
 
-**Primary deployment script** for Windows that creates everything automatically:
+**Fast deployment script** for updating existing Azure resources after "Deploy to Azure" button:
+
+- ✅ Works with existing Azure infrastructure 
+- ✅ Builds and deploys latest application code
+- ✅ Updates Container App with new revision
+- ✅ Tests deployment automatically
+- ✅ Takes 2-3 minutes
+
+**Usage:**
+```powershell
+.\Quick-Deploy.ps1 -ResourceGroup "rg-sajee-cosmos-mcp-kit" -ContainerAppName "mcp-toolkit-app" -RegistryName "mcptoolkitacr57c4u6r4dcvto"
+```
+
+### `Deploy-CosmosMcpServer.ps1` (Full Setup)
+
+**Complete deployment script** for Windows that creates everything from scratch:
 
 - ✅ Entra ID App Registration with `Mcp.Tool.Executor` role
-- ✅ Azure Container Apps infrastructure
+- ✅ Azure Container Apps infrastructure  
 - ✅ Azure Container Registry
 - ✅ Complete authentication setup
 
@@ -18,9 +37,9 @@ This directory contains deployment and testing scripts for the Azure Cosmos DB M
 .\Deploy-CosmosMcpServer.ps1 -ResourceGroup "rg-mcp-demo"
 ```
 
-### `deploy-cosmos-mcp-server.sh` (Bash)
+### `deploy-cosmos-mcp-server.sh` (Full Setup)
 
-**Primary deployment script** for Linux/macOS with the same functionality.
+**Complete deployment script** for Linux/macOS with the same functionality.
 
 **Usage:**
 ```bash

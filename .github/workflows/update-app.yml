@@ -1,0 +1,80 @@
+name: Update Deployed App
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: 'Azure Resource Group name (from your deployment)'
+        required: true
+        type: string
+      container_app_name:
+        description: 'Container App name (from your deployment)'
+        required: true
+        type: string
+      registry_name:
+        description: 'Azure Container Registry name (from your deployment)'
+        required: true
+        type: string
+
+env:
+  IMAGE_NAME: mcp-toolkit
+
+jobs:
+  update-app:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Login to Azure Container Registry
+      run: |
+        az acr login --name ${{ github.event.inputs.registry_name }}
+        
+    - name: Build and push Docker image
+      run: |
+        # Build the Docker image with latest code
+        docker build -t ${{ github.event.inputs.registry_name }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+        docker build -t ${{ github.event.inputs.registry_name }}.azurecr.io/${{ env.IMAGE_NAME }}:latest .
+        
+        # Push both tags
+        docker push ${{ github.event.inputs.registry_name }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        docker push ${{ github.event.inputs.registry_name }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+        
+    - name: Update Container App
+      run: |
+        az containerapp update \
+          --name ${{ github.event.inputs.container_app_name }} \
+          --resource-group ${{ github.event.inputs.resource_group }} \
+          --image ${{ github.event.inputs.registry_name }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          --revision-suffix sha-$(echo ${{ github.sha }} | cut -c1-7)
+          
+    - name: Get Container App URL and Test
+      run: |
+        APP_URL=$(az containerapp show \
+          --name ${{ github.event.inputs.container_app_name }} \
+          --resource-group ${{ github.event.inputs.resource_group }} \
+          --query "properties.configuration.ingress.fqdn" \
+          --output tsv)
+        
+        echo "🚀 Application updated successfully!"
+        echo "📱 Access your MCP Toolkit at: https://$APP_URL"
+        echo "🏥 Health check: https://$APP_URL/api/health"
+        echo "🔧 MCP endpoint: https://$APP_URL/mcp"
+        
+        # Wait for deployment and test
+        echo "⏳ Waiting for deployment to complete..."
+        sleep 30
+        
+        # Test health endpoint
+        echo "🔍 Testing health endpoint..."
+        if curl -f -s "https://$APP_URL/api/health"; then
+          echo "✅ Health check passed - deployment successful!"
+        else
+          echo "⚠️ Health check failed - check deployment status"
+        fi
