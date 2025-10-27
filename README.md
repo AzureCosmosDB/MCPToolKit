@@ -4,18 +4,41 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 
 ## 🚀 Deploy to Azure
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
+### Quick 2-Step Deployment
 
-**One-click deployment with complete infrastructure setup!** No manual configuration required.
+**Step 1: Deploy Infrastructure** [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
 
-> **💡 Note**: The deployment requires existing Azure Cosmos DB and Azure OpenAI services. The toolkit connects to your existing resources without creating new ones, keeping costs predictable.
+**Step 2: Deploy Application**
+```powershell
+# Clone repository
+git clone https://github.com/AzureCosmosDB/MCPToolKit.git
+cd MCPToolKit
 
-### Prerequisites for Deploy to Azure
-- **Azure Subscription** with Contributor or Owner access
-- **Existing Azure Cosmos DB account** with databases and containers containing data
-- **Existing Azure OpenAI service** with text embedding deployment (for vector search)
-- **Azure AD permissions** for app registration (automatic during deployment)
-- **Principal ID** (your Azure AD Object ID) - see instructions below
+# Get your resource names from Azure Portal after Step 1
+# Then run these commands with your actual resource names:
+
+az acr login --name "your-registry-name"
+docker build -t "your-registry-name.azurecr.io/mcp-toolkit:latest" .
+docker push "your-registry-name.azurecr.io/mcp-toolkit:latest"
+az containerapp update --name "mcp-toolkit-app" --resource-group "your-rg" --image "your-registry-name.azurecr.io/mcp-toolkit:latest"
+```
+
+**Total time**: ~10 minutes
+
+> **Why 2 steps?** ARM templates deploy infrastructure but can't build applications from source code. This follows Azure security best practices.
+
+### Verify Deployment
+```powershell
+# Test health endpoint
+Invoke-RestMethod "https://your-app-url/api/health"
+```
+
+### Prerequisites
+- Azure subscription with Contributor access
+- Existing Azure Cosmos DB account
+- Existing Azure OpenAI service (for vector search)
+- Docker Desktop installed
+- Azure CLI installed
 
 ## Features
 
@@ -23,88 +46,135 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 - 🧠 **AI-Powered Vector Search** - Semantic search using Azure OpenAI embeddings  
 - 🔐 **Enterprise Security** - Azure Entra ID authentication with role-based access control
 - 🐳 **Production Ready** - Containerized deployment to Azure Container Apps
-- 🚀 **Easy Deployment** - Automated deployment with complete infrastructure setup
-- 🛡️ **Authentication Modes** - Production Entra ID auth + development bypass mode
 
-## Quick Start
+### Find Your Resource Names
 
-### 🌟 Deploy to Azure (One-Click)
+After Step 1, get these from Azure Portal → Your Resource Group:
+- **Container App**: Usually `mcp-toolkit-app`
+- **Container Registry**: Starts with `mcptoolkitacr` + random string
+## Local Development
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
-
-Click the button above to deploy directly to Azure Portal with guided setup!
-
-**What gets deployed automatically:**
-- ✅ Azure Container Apps with managed identity
-- ✅ Azure Container Registry  
-- ✅ Entra ID App Registration with `Mcp.Tool.Executor` role
-- ✅ Complete authentication and authorization setup
-- ✅ Container app with proper environment configuration
-
-**Required inputs during deployment:**
-- **Resource Group** - Create new or select existing
-- **Resource Prefix** - Unique identifier for your resources
-- **Principal ID** - Your Azure AD user/service principal Object ID
-- **Cosmos Endpoint** - Your existing Cosmos DB account URL (e.g., `https://mycosmosdb.documents.azure.com:443/`)
-- **OpenAI Endpoint** - Your Azure OpenAI service URL (e.g., `https://myopenai.openai.azure.com/`)
-- **OpenAI Embedding Deployment** - Your embedding model deployment name (e.g., `text-embedding-ada-002`)
-
-**Deployment takes 5-10 minutes** and creates all necessary Azure resources with proper security configuration.
-
-#### 🔑 How to Get Your Principal ID (Object ID)
-
-**Option 1: Azure Portal**
-1. Go to [Azure Portal](https://portal.azure.com) → Azure Active Directory → Users
-2. Search for your username → Copy the "Object ID"
-
-**Option 2: Azure CLI**
-```bash
-# Get your own Object ID
-az ad signed-in-user show --query id -o tsv
-
-# Or get Object ID by email
-az ad user show --id "your-email@domain.com" --query id -o tsv
-```
-
-**Option 3: PowerShell**
-```powershell
-# Get your own Object ID
-(Get-AzADUser -UserPrincipalName (Get-AzContext).Account.Id).Id
-```
-
-### 🚀 Alternative: Command Line Deployment
-
-For developers who prefer automated scripting:
-
-#### PowerShell (Windows)
+### Quick Start
 ```powershell
 git clone https://github.com/AzureCosmosDB/MCPToolKit.git
 cd MCPToolKit
-.\scripts\Deploy-CosmosMcpServer.ps1 -ResourceGroup "rg-mcp-toolkit-demo"
+
+# Set bypass mode for development
+$env:DEV_BYPASS_AUTH = "true"
+
+# Run with Docker Compose (includes Cosmos DB emulator)
+docker-compose up -d
+
+# Or run directly
+cd src/AzureCosmosDB.MCP.Toolkit
+dotnet run
 ```
 
-#### Bash (Linux/macOS)  
-```bash
+**Test locally:**
+```powershell
+# Health check
+Invoke-RestMethod http://localhost:8080/api/health
+
+# List tools (no auth required with bypass)
+$body = '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+Invoke-RestMethod -Uri http://localhost:8080/mcp -Method Post -ContentType "application/json" -Body $body
+```
+
+**Option A: PowerShell Script (Recommended)**
+```powershell
+# Clone the repository (if you haven't already)
 git clone https://github.com/AzureCosmosDB/MCPToolKit.git
 cd MCPToolKit
-chmod +x scripts/deploy-cosmos-mcp-server.sh
-./scripts/deploy-cosmos-mcp-server.sh --resource-group "rg-mcp-toolkit-demo"
+
+# Run quick deployment script with your actual resource names
 ```
-- ✅ Complete authentication and authorization setup
-- ✅ Container app with proper environment configuration
+
+## MCP Tools
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| **list_databases** | Lists all databases | None |
+| **list_collections** | Lists containers in database | `databaseId` |
+| **get_recent_documents** | Gets recent documents (1-20) | `databaseId`, `containerId`, `n` |
+| **find_document_by_id** | Finds document by ID | `databaseId`, `containerId`, `id` |
+| **text_search** | Full-text search on properties | `databaseId`, `containerId`, `property`, `searchPhrase`, `n` |
+| **vector_search** | Semantic search with AI embeddings | `databaseId`, `containerId`, `searchText`, `vectorProperty`, `selectProperties`, `topN` |
+| **get_approximate_schema** | Analyzes document structure | `databaseId`, `containerId` |
+
+# Script will:
+# ✅ Login to your Azure Container Registry
+# ✅ Build Docker image from latest code  
+# ✅ Push image to your registry
+# ✅ Update Container App with new image
+# ✅ Test deployment automatically
+```
+
+**Option B: Manual Commands**
+```powershell
+# Prerequisites: Make sure Docker is running and you're logged into Azure CLI
+az login
+docker version
+
+# Login to your container registry
+az acr login --name mcptoolkitacr57c4u6r4dcvto
+
+# Build and push Docker image
+docker build -t mcptoolkitacr57c4u6r4dcvto.azurecr.io/mcp-toolkit:latest .
+docker push mcptoolkitacr57c4u6r4dcvto.azurecr.io/mcp-toolkit:latest
+
+# Update Container App to use your image
+az containerapp update \
+  --name mcp-toolkit-app \
+  --resource-group rg-sajee-cosmos-mcp-kit \
+  --image mcptoolkitacr57c4u6r4dcvto.azurecr.io/mcp-toolkit:latest \
+  --revision-suffix $(Get-Date -Format "MMdd-HHmm")
+```
+
+**Option C: GitHub Actions (For Teams)**
+1. Fork this repository to your GitHub account
+2. Go to Actions → "Update Deployed App" 
+3. Click "Run workflow" and enter your resource details
+4. Automatic build and deployment from latest code
 
 ### 📊 Test Your Deployment
 
-#### **🌐 Secure Web Testing (Recommended)**
-```bash
-# Download the enhanced web client
-curl -O https://raw.githubusercontent.com/AzureCosmosDB/MCPToolKit/main/cosmos-mcp-client.html
+#### **� Health Check (No Authentication Required)**
+```powershell
+# Test basic connectivity
+Invoke-RestMethod "https://mcp-toolkit-app.proudwave-e0461bc6.eastus.azurecontainerapps.io/api/health"
 
-# Start local server  
+# Expected response: {"status":"Healthy","version":"1.0.0"}
+```
+
+#### **🔧 MCP Tools Test (Authentication Required)**
+```powershell
+# First, get an access token (requires role assignment - see Authentication section)
+$clientId = "your-entra-app-client-id"  # From deployment-info.json
+$token = az account get-access-token --resource "api://$clientId" --query "accessToken" -o tsv
+
+# Test MCP tools
+$headers = @{
+    "Authorization" = "Bearer $token"
+    "Content-Type" = "application/json"
+}
+$body = '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+Invoke-RestMethod -Uri "https://mcp-toolkit-app.proudwave-e0461bc6.eastus.azurecontainerapps.io/mcp" -Method Post -Headers $headers -Body $body
+```
+
+#### **🌐 Web Interface Testing**
+Your deployed app includes a built-in web interface:
+```
+https://mcp-toolkit-app.proudwave-e0461bc6.eastus.azurecontainerapps.io/
+```
+
+For **enhanced secure testing** with Azure AD authentication:
+```powershell
+# Download enhanced web client (optional)
+Invoke-WebRequest "https://raw.githubusercontent.com/AzureCosmosDB/MCPToolKit/main/test-ui.html" -OutFile "test-ui.html"
+
+# Start local server and open in browser
 python -m http.server 3000
-
-# Open: http://localhost:3000/cosmos-mcp-client.html
-# Use your deployed server URL and Client ID for secure testing
+# Then open: http://localhost:3000/test-ui.html
 ```
 
 #### **⚡ Quick Command Line Test**
@@ -324,16 +394,112 @@ Add to your VS Code configuration:
 
 ## Troubleshooting
 
-### Health Check
-```bash
-# Local
-curl http://localhost:8080/health
+### 🔧 Deployment Issues
 
-# Azure
-curl https://your-app.azurecontainerapps.io/health
+**"Deploy to Azure button doesn't work completely"**
+- ✅ **This is expected!** ARM templates can only create infrastructure, not build applications
+- ✅ **Solution**: Follow our 2-step process above (Deploy → Build & Deploy)
+- ✅ **Why?** Building code requires GitHub Actions, Docker, or similar CI/CD tools
+
+**"Container App shows hello world page"**
+- ✅ **Expected initially** - ARM templates deploy a placeholder container
+- ✅ **Solution**: Run Step 2 (Quick-Deploy.ps1 or manual deployment)
+- ✅ **Check**: Your app should show "Azure Cosmos DB MCP Toolkit" title after Step 2
+
+**"Quick-Deploy.ps1 authentication errors"**
+```powershell
+# Make sure you're logged into Azure CLI
+az login
+az account set --subscription "your-subscription-id"
+
+# Verify access to your resource group  
+az group show --name "rg-sajee-cosmos-mcp-kit"
+
+# Test container registry access
+az acr login --name "mcptoolkitacr57c4u6r4dcvto"
 ```
 
-### Common Issues
+**"Docker build/push fails"**
+```powershell
+# Ensure Docker Desktop is running
+docker version
+
+# Test Docker build locally
+docker build -t test-build .
+
+# If registry push fails, re-login
+az acr login --name "mcptoolkitacr57c4u6r4dcvto"
+```
+
+**"404 or timeout errors on Container App URL"**
+- ✅ **Wait 2-3 minutes** after deployment for container to start
+- ✅ **Check revision status**: Go to Azure Portal → Container App → Revisions
+- ✅ **View logs**: Azure Portal → Container App → Log stream
+
+### 🏥 Health Check
+```powershell
+# Local development
+Invoke-RestMethod "http://localhost:8080/api/health"
+
+# Azure deployment (replace with your actual URL)
+Invoke-RestMethod "https://mcp-toolkit-app.proudwave-e0461bc6.eastus.azurecontainerapps.io/api/health"
+
+# Expected response: {"status":"Healthy","version":"1.0.0"}
+```
+
+### 🎯 Common Issues
+
+**"Authentication required errors"**
+- ✅ Verify role assignment: User needs `Mcp.Tool.Executor` role
+- ✅ Check token scope: Should be `api://your-app-id`
+- ✅ For local development: Set `DEV_BYPASS_AUTH=true`
+
+### 📊 Verify Deployment Success
+
+**1. Check Container App is running:**
+```powershell
+# Health check should return status 200
+Invoke-RestMethod "https://mcp-toolkit-app.proudwave-e0461bc6.eastus.azurecontainerapps.io/api/health"
+
+# Expected response: {"status":"Healthy","version":"1.0.0"}
+```
+
+**2. Test MCP endpoint (requires authentication):**
+```powershell
+# Get access token (replace with your client ID from deployment-info.json)
+$clientId = "your-entra-app-client-id"
+$token = az account get-access-token --resource "api://$clientId" --query "accessToken" -o tsv
+
+# Test tools list
+$headers = @{
+    "Authorization" = "Bearer $token"
+    "Content-Type" = "application/json"  
+}
+$body = '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+Invoke-RestMethod -Uri "https://mcp-toolkit-app.proudwave-e0461bc6.eastus.azurecontainerapps.io/mcp" -Method Post -Headers $headers -Body $body
+```
+
+**3. Expected successful response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {"name": "list_databases", "description": "Lists all databases"},
+      {"name": "list_collections", "description": "Lists containers in database"},
+      {"name": "get_recent_documents", "description": "Gets recent documents"},
+      {"name": "text_search", "description": "Full-text search on properties"},
+      {"name": "vector_search", "description": "Semantic search with AI embeddings"},
+      {"name": "find_document_by_id", "description": "Finds document by ID"},
+      {"name": "get_approximate_schema", "description": "Analyzes document structure"}
+    ]
+  }
+}
+}
+```
+
+### 🎯 Common Issues
 
 **Authentication Errors**
 - Verify role assignment: User needs `Mcp.Tool.Executor` role
