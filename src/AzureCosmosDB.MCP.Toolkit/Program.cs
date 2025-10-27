@@ -6,8 +6,19 @@ using System.Text.Json;
 using Azure.Identity;
 using System.Text.RegularExpressions;
 using Azure.AI.OpenAI;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add controllers
+builder.Services.AddControllers();
+
+// Disable default claim mapping for cleaner token handling
+JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
 
 // Configure for container environment
 builder.WebHost.ConfigureKestrel(options =>
@@ -16,14 +27,67 @@ builder.WebHost.ConfigureKestrel(options =>
     options.ListenAnyIP(8080);
 });
 
-// Add services
-// Note: Commenting out built-in MCP server to use custom controller
-// builder.Services.AddMcpServer()
-//     .WithHttpTransport()
-//     .WithToolsFromAssembly();
+// Get Azure AD configuration from appsettings
+var azureAd = builder.Configuration.GetSection("AzureAd");
+var tenantId = azureAd["TenantId"];
+var clientId = azureAd["ClientId"];
 
-// Add controllers for the UI
-builder.Services.AddControllers();
+// Check if authentication should be bypassed for development
+var devBypassAuth = Environment.GetEnvironmentVariable("DEV_BYPASS_AUTH") == "true" || 
+                   builder.Configuration.GetValue<bool>("DevelopmentMode:BypassAuthentication");
+var isDevelopment = builder.Environment.IsDevelopment();
+
+if (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(clientId))
+{
+    // Add JWT Bearer authentication only if configuration is available
+    builder.Services
+        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.Authority = $"https://login.microsoftonline.com/{tenantId}/v2.0";
+
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = $"https://login.microsoftonline.com/{tenantId}/v2.0",
+
+                ValidateAudience = true,
+                ValidAudiences = new[] { clientId, $"api://{clientId}" },
+
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ClockSkew = TimeSpan.FromMinutes(2),
+                RoleClaimType = "roles",
+            };
+
+            options.MapInboundClaims = false;
+            options.RefreshOnIssuerKeyNotFound = true;
+        });
+
+    // Add authorization with policy for MCP Tool Executor role
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("McpToolExecutor", p => p.RequireRole("Mcp.Tool.Executor"));
+
+        options.DefaultPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build();
+    });
+}
+else
+{
+    // Development mode - bypass authentication
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("McpToolExecutor", policy => policy.RequireAssertion(_ => true));
+        options.DefaultPolicy = new AuthorizationPolicyBuilder()
+            .RequireAssertion(_ => true)
+            .Build();
+    });
+}
+
+// Add HTTP context accessor for authentication
+builder.Services.AddHttpContextAccessor();
 
 // Add CORS for external MCP access
 builder.Services.AddCors(options =>
@@ -39,10 +103,22 @@ builder.Services.AddCors(options =>
 // Add health checks for Azure Container Apps
 builder.Services.AddHealthChecks();
 
-// Register CosmosDbToolsService for dependency injection
+// Register services for dependency injection
 builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.CosmosDbToolsService>();
+builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.AuthenticationService>();
+
+// Configure forwarded headers for proxy scenarios
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 var app = builder.Build();
+
+// Configure forwarded headers
+app.UseForwardedHeaders();
 
 // Add health check endpoint for container orchestrators
 app.MapHealthChecks("/health");
@@ -53,6 +129,17 @@ app.UseCors("MCPPolicy");
 // Configure static files with more explicit options
 app.UseDefaultFiles(); // This will serve index.html as default
 app.UseStaticFiles();
+
+// Always add authentication and authorization middleware for consistency
+// The actual authentication logic is handled in the controller based on configuration
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Development mode logging
+if (isDevelopment || devBypassAuth)
+{
+    app.Logger.LogInformation("Running in development mode with authentication bypass");
+}
 
 // Add routing and controllers
 app.UseRouting();

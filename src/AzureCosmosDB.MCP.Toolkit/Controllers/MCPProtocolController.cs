@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AzureCosmosDB.MCP.Toolkit.Services;
@@ -7,18 +8,25 @@ namespace AzureCosmosDB.MCP.Toolkit.Controllers;
 
 [ApiController]
 [Route("mcp")]
+[AllowAnonymous] // Allow all requests, we'll handle auth manually in the controller
 public class MCPProtocolController : ControllerBase
 {
     private readonly CosmosDbToolsService _cosmosDbTools;
+    private readonly AuthenticationService _authService;
     private readonly ILogger<MCPProtocolController> _logger;
 
-    public MCPProtocolController(CosmosDbToolsService cosmosDbTools, ILogger<MCPProtocolController> logger)
+    public MCPProtocolController(
+        CosmosDbToolsService cosmosDbTools, 
+        AuthenticationService authService,
+        ILogger<MCPProtocolController> logger)
     {
         _cosmosDbTools = cosmosDbTools;
+        _authService = authService;
         _logger = logger;
     }
 
     [HttpOptions]
+    [AllowAnonymous] // Allow OPTIONS requests without authentication for CORS preflight
     public IActionResult HandleMCPOptions()
     {
         Response.Headers["Access-Control-Allow-Origin"] = "*";
@@ -28,17 +36,34 @@ public class MCPProtocolController : ControllerBase
     }
 
     [HttpPost]
+    [AllowAnonymous] // Allow all requests, we'll handle auth manually
     public async Task<IActionResult> HandleMCPRequest([FromBody] JsonElement requestJson)
     {
+        // Check authentication if enabled
+        if (_authService.IsAuthenticationEnabled() && User.Identity?.IsAuthenticated != true)
+        {
+            return Unauthorized(new MCPResponse
+            {
+                JsonRpc = "2.0",
+                Id = requestJson.TryGetProperty("id", out var idProp) ? idProp : null,
+                Error = new
+                {
+                    code = -32001,
+                    message = "Authentication required"
+                }
+            });
+        }
+
         // Parse the JSON-RPC request manually for better control
         var method = requestJson.TryGetProperty("method", out var methodProp) ? methodProp.GetString() : null;
-        var id = requestJson.TryGetProperty("id", out var idProp) ? idProp : (JsonElement?)null;
+        var id = requestJson.TryGetProperty("id", out var idProp2) ? idProp2 : (JsonElement?)null;
         var paramsObj = requestJson.TryGetProperty("params", out var paramsProp) ? paramsProp : (JsonElement?)null;
 
         try
         {
-
-            _logger.LogInformation("Received MCP request: {Method} with ID: {Id}", method, id);
+            // Log authentication information
+            _logger.LogInformation("Received MCP request: {Method} with ID: {Id} from {UserInfo}", 
+                method, id, _authService.GetUserIdentityInfo());
             _logger.LogInformation("Full request body: {RequestBody}", requestJson.GetRawText());
 
             // Set proper headers for streaming response and CORS
@@ -173,6 +198,12 @@ public class MCPProtocolController : ControllerBase
                     });
 
                 case "tools/call":
+                    // Check for MCP Tool Executor role before executing tools
+                    if (_authService.IsAuthenticationEnabled() && !User.IsInRole("Mcp.Tool.Executor"))
+                    {
+                        return Forbid("Insufficient permissions. The 'Mcp.Tool.Executor' role is required to execute tools.");
+                    }
+
                     if (paramsObj.HasValue && paramsObj.Value.TryGetProperty("name", out var toolNameProp))
                     {
                         var toolName = toolNameProp.GetString();

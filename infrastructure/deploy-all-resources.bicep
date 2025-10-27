@@ -4,10 +4,10 @@ param resourcePrefix string = 'mcp-toolkit'
 @description('Location for all resources')
 param location string = resourceGroup().location
 
-@description('The Azure AD Object ID of the user/service principal that will have access to the resources')
+@description('The Azure AD Object ID of the user/service principal that will have access to the external resources (for manual RBAC assignment)')
 param principalId string
 
-@description('The type of principal (User, ServicePrincipal, or Group)')
+@description('The type of principal (User, ServicePrincipal, or Group) for external resource access')
 @allowed([
   'User'
   'ServicePrincipal'
@@ -18,14 +18,14 @@ param principalType string = 'User'
 @description('Owner tag value (optional)')
 param ownerTag string = 'mcp-toolkit-user'
 
-@description('Whether to deploy Azure OpenAI resources')
-param deployAzureOpenAI bool = true
+@description('Cosmos DB endpoint (external resource)')
+param cosmosEndpoint string
 
-@description('Cosmos DB account name')
-param cosmosAccountName string = '${resourcePrefix}-cosmos-${uniqueString(resourceGroup().id)}'
+@description('Azure OpenAI endpoint (external resource)')
+param openaiEndpoint string
 
-@description('Azure OpenAI account name')
-param openAIAccountName string = '${resourcePrefix}-openai-${uniqueString(resourceGroup().id)}'
+@description('Azure OpenAI embedding deployment name')
+param openaiEmbeddingDeployment string
 
 @description('Container app name')
 param containerAppName string = '${resourcePrefix}-app'
@@ -33,26 +33,16 @@ param containerAppName string = '${resourcePrefix}-app'
 @description('Container registry name')
 param containerRegistryName string = '${replace(resourcePrefix, '-', '')}acr${uniqueString(resourceGroup().id)}'
 
-@description('Azure OpenAI SKU')
-@allowed([
-  'S0'
-])
-param openAISku string = 'S0'
+@description('Entra App display name')
+param entraAppDisplayName string = '${resourcePrefix}-entra-app'
 
-@description('Cosmos DB consistency level')
-@allowed([
-  'Eventual'
-  'ConsistentPrefix'
-  'Session'
-  'BoundedStaleness'
-  'Strong'
-])
-param cosmosConsistencyLevel string = 'Session'
+@description('AI Foundry project resource ID (optional - only needed if assigning Entra App role to AIF project MI)')
+param aifProjectResourceId string = ''
 
 // Variables
 var managedIdentityName = '${containerAppName}-identity'
-var logAnalyticsName = '${resourcePrefix}-logs'
 var containerAppEnvName = '${resourcePrefix}-env'
+var entraAppUniqueName = '${replace(toLower(entraAppDisplayName), ' ', '-')}-${uniqueString(deployment().name, resourceGroup().id)}'
 
 // Common tags for all resources
 var commonTags = {
@@ -62,101 +52,14 @@ var commonTags = {
 }
 
 // Built-in role definition IDs
-var cosmosDataContributorRoleId = '00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
-var cognitiveServicesOpenAIUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd' // Cognitive Services OpenAI User
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
 
-// Create Cosmos DB Account
-resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {
-  name: cosmosAccountName
-  location: location
-  kind: 'GlobalDocumentDB'
-  properties: {
-    consistencyPolicy: {
-      defaultConsistencyLevel: cosmosConsistencyLevel
-    }
-    locations: [
-      {
-        locationName: location
-        failoverPriority: 0
-        isZoneRedundant: false
-      }
-    ]
-    databaseAccountOfferType: 'Standard'
-    enableAutomaticFailover: false
-    enableMultipleWriteLocations: false
-    capabilities: [
-      {
-        name: 'EnableServerless'
-      }
-    ]
-  }
-  tags: commonTags
-}
-
-// Create sample database and container
-resource sampleDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-04-15' = {
-  parent: cosmosAccount
-  name: 'SampleDB'
-  properties: {
-    resource: {
-      id: 'SampleDB'
-    }
-  }
-}
-
-resource sampleContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
-  parent: sampleDatabase
-  name: 'SampleContainer'
-  properties: {
-    resource: {
-      id: 'SampleContainer'
-      partitionKey: {
-        paths: ['/id']
-        kind: 'Hash'
-      }
-      indexingPolicy: {
-        indexingMode: 'consistent'
-        includedPaths: [
-          {
-            path: '/*'
-          }
-        ]
-      }
-    }
-  }
-}
-
-// Create Azure OpenAI Account (conditional)
-resource openAIAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (deployAzureOpenAI) {
-  name: openAIAccountName
-  location: location
-  sku: {
-    name: openAISku
-  }
-  kind: 'OpenAI'
-  properties: {
-    customSubDomainName: openAIAccountName
-    publicNetworkAccess: 'Enabled'
-  }
-  tags: commonTags
-}
-
-// Create embedding deployment
-resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (deployAzureOpenAI) {
-  parent: openAIAccount
-  name: 'text-embedding-ada-002'
-  properties: {
-    model: {
-      format: 'OpenAI'
-      name: 'text-embedding-ada-002'
-      version: '2'
-    }
-    raiPolicyName: 'Microsoft.Default'
-  }
-  sku: {
-    name: 'Standard'
-    capacity: 120
+// Deploy Entra App
+module entraApp 'modules/entra-app.bicep' = {
+  name: 'entra-app-deployment'
+  params: {
+    entraAppDisplayName: entraAppDisplayName
+    entraAppUniqueName: entraAppUniqueName
   }
 }
 
@@ -180,34 +83,11 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
   tags: commonTags
 }
 
-// Create Log Analytics workspace
-resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: logAnalyticsName
-  location: location
-  properties: {
-    sku: {
-      name: 'PerGB2018'
-    }
-    retentionInDays: 30
-    features: {
-      enableLogAccessUsingOnlyResourcePermissions: true
-    }
-  }
-  tags: commonTags
-}
-
-// Create Container App Environment
+// Create Container App Environment (without Log Analytics)
 resource containerAppEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: containerAppEnvName
   location: location
   properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalytics.properties.customerId
-        sharedKey: logAnalytics.listKeys().primarySharedKey
-      }
-    }
     zoneRedundant: false
   }
   tags: commonTags
@@ -249,15 +129,15 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           env: [
             {
               name: 'COSMOS_ENDPOINT'
-              value: cosmosAccount.properties.documentEndpoint
+              value: cosmosEndpoint
             }
             {
               name: 'OPENAI_ENDPOINT'
-              value: deployAzureOpenAI ? openAIAccount.properties.endpoint : ''
+              value: openaiEndpoint
             }
             {
               name: 'OPENAI_EMBEDDING_DEPLOYMENT'
-              value: deployAzureOpenAI ? embeddingDeployment.name : ''
+              value: openaiEmbeddingDeployment
             }
             {
               name: 'ASPNETCORE_ENVIRONMENT'
@@ -266,6 +146,22 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'ASPNETCORE_URLS'
               value: 'http://+:8080'
+            }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: managedIdentity.properties.clientId
+            }
+            {
+              name: 'AzureAd__TenantId'
+              value: tenant().tenantId
+            }
+            {
+              name: 'AzureAd__ClientId'
+              value: entraApp.outputs.entraAppClientId
+            }
+            {
+              name: 'AzureAd__Audience'
+              value: entraApp.outputs.entraAppClientId
             }
           ]
           resources: {
@@ -318,57 +214,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
     }
   }
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
+  tags: commonTags
 }
 
 // RBAC Assignments
-
-// Assign Cosmos DB Data Contributor role to managed identity
-resource cosmosRoleAssignmentMI 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2023-04-15' = {
-  parent: cosmosAccount
-  name: guid(cosmosAccount.id, managedIdentity.id, cosmosDataContributorRoleId)
-  properties: {
-    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/${cosmosDataContributorRoleId}'
-    principalId: managedIdentity.properties.principalId
-    scope: cosmosAccount.id
-  }
-}
-
-// Assign Cosmos DB Data Contributor role to user/service principal
-resource cosmosRoleAssignmentUser 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2023-04-15' = {
-  parent: cosmosAccount
-  name: guid(cosmosAccount.id, principalId, cosmosDataContributorRoleId)
-  properties: {
-    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/${cosmosDataContributorRoleId}'
-    principalId: principalId
-    scope: cosmosAccount.id
-  }
-}
-
-// Assign OpenAI User role to managed identity
-resource openAIRoleAssignmentMI 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: openAIAccount
-  name: guid(openAIAccount.id, managedIdentity.id, cognitiveServicesOpenAIUserRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUserRoleId)
-    principalId: managedIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-// Assign OpenAI User role to user/service principal
-resource openAIRoleAssignmentUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: openAIAccount
-  name: guid(openAIAccount.id, principalId, cognitiveServicesOpenAIUserRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUserRoleId)
-    principalId: principalId
-    principalType: principalType
-  }
-}
 
 // Assign ACR Pull role to managed identity
 resource acrRoleAssignmentMI 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -381,27 +230,42 @@ resource acrRoleAssignmentMI 'Microsoft.Authorization/roleAssignments@2022-04-01
   }
 }
 
+// Deploy Entra App role assignment for AIF project MI to access Container App (conditional)
+module aifRoleAssignment 'modules/aif-role-assignment-entraapp.bicep' = if (!empty(aifProjectResourceId)) {
+  name: 'aif-role-assignment'
+  params: {
+    aifProjectResourceId: aifProjectResourceId
+    entraAppServicePrincipalObjectId: entraApp.outputs.entraAppServicePrincipalObjectId
+    entraAppRoleId: entraApp.outputs.entraAppRoleId
+  }
+}
+
 // Outputs
-output cosmosEndpoint string = cosmosAccount.properties.documentEndpoint
-output openAIEndpoint string = deployAzureOpenAI ? openAIAccount.properties.endpoint : ''
-output openAIEmbeddingDeployment string = deployAzureOpenAI ? embeddingDeployment.name : ''
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output containerRegistryName string = containerRegistry.name
 output containerRegistryLoginServer string = containerRegistry.properties.loginServer
 output managedIdentityPrincipalId string = managedIdentity.properties.principalId
 output managedIdentityClientId string = managedIdentity.properties.clientId
-output logAnalyticsWorkspaceId string = logAnalytics.id
 output containerAppEnvironmentId string = containerAppEnvironment.id
 output containerAppId string = containerApp.id
 output resourceGroupName string = resourceGroup().name
 
+// Entra App outputs
+output entraAppClientId string = entraApp.outputs.entraAppClientId
+output entraAppObjectId string = entraApp.outputs.entraAppObjectId
+output entraAppServicePrincipalId string = entraApp.outputs.entraAppServicePrincipalObjectId
+output entraAppRoleId string = entraApp.outputs.entraAppRoleId
+output entraAppIdentifierUri string = entraApp.outputs.entraAppIdentifierUri
+output entraAppRoleValue string = entraApp.outputs.entraAppRoleValue
+
 // Resource configuration for post-deployment
 output postDeploymentInfo object = {
-  cosmosAccount: cosmosAccountName
-  openAIAccount: openAIAccountName
   containerRegistry: containerRegistryName
   containerApp: containerAppName
   managedIdentityPrincipalId: managedIdentity.properties.principalId
-  sampleDatabaseName: sampleDatabase.name
-  sampleContainerName: sampleContainer.name
+  mcpServerUri: 'https://${containerApp.properties.configuration.ingress.fqdn}'
+  entraAppClientId: entraApp.outputs.entraAppClientId
+  entraAppRoleValue: entraApp.outputs.entraAppRoleValue
+  entraAppRoleId: entraApp.outputs.entraAppRoleId
+  entraAppServicePrincipalObjectId: entraApp.outputs.entraAppServicePrincipalObjectId
 }

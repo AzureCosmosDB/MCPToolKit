@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Cosmos DB MCP Server Test</title>
+    <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0078d4;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .auth-section {
+            background: #e8f4fd;
+            border: 1px solid #0078d4;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #0078d4;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #323130;
+        }
+        input[type="text"], input[type="url"], select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        input[type="text"]:focus, input[type="url"]:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #0078d4;
+            box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        button:hover:not(:disabled) {
+            background-color: #106ebe;
+        }
+        button:disabled {
+            background-color: #a19f9d;
+            cursor: not-allowed;
+        }
+        .login-btn {
+            background-color: #107c10;
+        }
+        .login-btn:hover:not(:disabled) {
+            background-color: #0e700e;
+        }
+        .logout-btn {
+            background-color: #d13438;
+        }
+        .logout-btn:hover:not(:disabled) {
+            background-color: #b52d32;
+        }
+        .user-info {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .auth-status {
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .auth-status.authenticated {
+            color: #107c10;
+        }
+        .auth-status.unauthenticated {
+            color: #d13438;
+        }
+        .discover-btn {
+            background-color: #107c10;
+        }
+        .discover-btn:hover:not(:disabled) {
+            background-color: #0e700e;
+        }
+        .output {
+            background-color: #f8f8f8;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            min-height: 200px;
+            max-height: 600px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.4;
+        }
+        .loading {
+            color: #0078d4;
+            font-style: italic;
+        }
+        .error {
+            color: #d13438;
+            background-color: #fdf2f2;
+            border-color: #f1aeb5;
+        }
+        .success {
+            color: #107c10;
+        }
+        .info {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #e1f5fe;
+            border-left: 4px solid #0078d4;
+            border-radius: 4px;
+        }
+        .curl-example {
+            background-color: #2d2d30;
+            color: #cccccc;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            position: relative;
+        }
+        .curl-container {
+            position: relative;
+            margin: 10px 0;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #0078d4;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .copy-btn:hover {
+            background: #106ebe;
+        }
+        .copy-btn.copied {
+            background: #107c10;
+        }
+        .collapsible {
+            background-color: #e1e1e1;
+            color: #0078d4;
+            cursor: pointer;
+            padding: 15px;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            width: 100%;
+            position: relative;
+        }
+        .collapsible:after {
+            content: '▼';
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            transition: transform 0.3s;
+        }
+        .collapsible.collapsed:after {
+            transform: translateY(-50%) rotate(-90deg);
+        }
+        .collapsible-content {
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        .collapsible-content.collapsed {
+            max-height: 0;
+        }
+        .collapsible-content:not(.collapsed) {
+            max-height: 1000px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Azure Cosmos DB MCP Server Test</h1>
+        
+        <div class="auth-section">
+            <h3>🔐 Azure AD Authentication</h3>
+            <div id="authStatus" class="auth-status unauthenticated">
+                Not authenticated
+            </div>
+            
+            <div id="configSection">
+                <div class="form-group">
+                    <label for="clientId">Entra App Client ID:</label>
+                    <input type="text" id="clientId" placeholder="12345678-1234-1234-1234-123456789abc" value="">
+                    <small style="color: #666;">Get this from your deployment-info.json or Azure portal</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="tenantId">Tenant ID (optional):</label>
+                    <input type="text" id="tenantId" placeholder="87654321-4321-4321-4321-210987654321" value="">
+                    <small style="color: #666;">Leave empty to use your default tenant</small>
+                </div>
+            </div>
+            
+            <div id="userInfo" class="user-info" style="display: none;">
+                <strong>Logged in as:</strong> <span id="userName"></span><br>
+                <strong>Tenant:</strong> <span id="userTenant"></span><br>
+                <strong>Roles:</strong> <span id="userRoles">Checking...</span>
+            </div>
+            
+            <div class="button-group">
+                <button id="loginBtn" class="login-btn" onclick="login()">🔑 Sign In with Azure AD</button>
+                <button id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none;">🚪 Sign Out</button>
+                <button id="getTokenBtn" onclick="getTokenSilently()" style="display: none;">🔄 Refresh Token</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Configuration</h3>
+            <div class="form-group">
+                <label for="serverUrl">Azure Cosmos DB MCP Server URL:</label>
+                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-demo-app.greenmeadow-90f91b98.eastus.azurecontainerapps.io" oninput="updateCurlExamples()">
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Actions</h3>
+            <div class="button-group">
+                <button onclick="listTools()" id="listToolsBtn">List Tools</button>
+                <button onclick="testTool()" id="testToolBtn" class="discover-btn">Test Tool</button>
+                <button onclick="clearOutput()" style="background-color: #605e5c;">Clear Output</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="collapsible collapsed" onclick="toggleCollapse(this)">Test Cosmos DB Tools</h3>
+            
+            <div class="collapsible-content collapsed">
+                <div class="info">
+                    <span style="font-size: 11px;">Configure your Cosmos DB parameters below. If you've run deployment scripts, you can find these values in the Azure portal under your Cosmos DB account.</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="cosmosDatabase">Database ID:</label>
+                    <input type="text" id="cosmosDatabase" placeholder="your-database-name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="cosmosContainer">Container ID:</label>
+                    <input type="text" id="cosmosContainer" placeholder="your-container-name">
+                </div>
+
+                <div class="form-group">
+                    <label for="toolSelect">Select Tool:</label>
+                    <select id="toolSelect" onchange="updateToolParameters()">
+                        <option value="">Select a tool...</option>
+                        <option value="list_databases">List Databases</option>
+                        <option value="list_collections">List Collections</option>
+                        <option value="get_recent_documents">Get Recent Documents</option>
+                        <option value="find_document_by_id">Find Document by ID</option>
+                        <option value="text_search">Text Search</option>
+                        <option value="vector_search">Vector Search</option>
+                        <option value="get_approximate_schema">Get Schema</option>
+                    </select>
+                </div>
+
+                <div id="toolParameters" style="display: none;">
+                    <div class="form-group">
+                        <label for="docId">Document ID (for find_document_by_id):</label>
+                        <input type="text" id="docId" placeholder="document-id">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="searchProperty">Property (for text_search):</label>
+                        <input type="text" id="searchProperty" placeholder="name or profile.description">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="searchPhrase">Search Phrase (for text_search):</label>
+                        <input type="text" id="searchPhrase" placeholder="Azure">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="vectorSearch">Search Text (for vector_search):</label>
+                        <input type="text" id="vectorSearch" placeholder="machine learning algorithms">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="vectorProperty">Vector Property (for vector_search):</label>
+                        <input type="text" id="vectorProperty" placeholder="vector or embeddings">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="selectProperties">Select Properties (for vector_search):</label>
+                        <input type="text" id="selectProperties" placeholder="id,title,content">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="resultCount">Number of Results (1-50):</label>
+                        <input type="number" id="resultCount" min="1" max="50" value="5">
+                    </div>
+                </div>
+                
+                <div class="button-group">
+                    <button onclick="testCosmosDbTool()" id="testCosmosBtn" style="background-color: #8a2be2;">Invoke Selected Tool</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Azure Cosmos DB MCP Server Response</h3>
+            <div id="output" class="output">Ready to make requests...</div>
+        </div>
+
+        <div class="section">
+            <h3>Equivalent cURL Commands</h3>
+            <div id="curlExamples">
+                <p><strong>List Tools:</strong></p>
+                <div class="curl-container">
+                    <div class="curl-example" id="listToolsCurl">Configure server URL and token first</div>
+                    <button class="copy-btn" onclick="copyToClipboard('listToolsCurl', this)">Copy</button>
+                </div>
+                
+                <p><strong>Test Selected Tool:</strong></p>
+                <div class="curl-container">
+                    <div class="curl-example" id="testToolCurl">Configure server URL and token first</div>
+                    <button class="copy-btn" onclick="copyToClipboard('testToolCurl', this)">Copy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // MSAL Configuration
+        let msalInstance = null;
+        let currentAccount = null;
+        let currentAccessToken = null;
+
+        // Initialize MSAL
+        function initializeMsal() {
+            const clientId = document.getElementById('clientId').value.trim();
+            const tenantId = document.getElementById('tenantId').value.trim();
+            
+            if (!clientId) {
+                showError('Please enter the Client ID first');
+                return false;
+            }
+
+            const authority = tenantId ? 
+                `https://login.microsoftonline.com/${tenantId}` : 
+                'https://login.microsoftonline.com/common';
+
+            const msalConfig = {
+                auth: {
+                    clientId: clientId,
+                    authority: authority,
+                    redirectUri: window.location.origin + window.location.pathname
+                },
+                cache: {
+                    cacheLocation: "sessionStorage",
+                    storeAuthStateInCookie: false
+                }
+            };
+
+            try {
+                msalInstance = new msal.PublicClientApplication(msalConfig);
+                return true;
+            } catch (error) {
+                showError(`Failed to initialize MSAL: ${error.message}`);
+                return false;
+            }
+        }
+
+        // Login function
+        async function login() {
+            if (!initializeMsal()) return;
+
+            const clientId = document.getElementById('clientId').value.trim();
+            
+            const loginRequest = {
+                scopes: [`api://${clientId}/Mcp.Tool.Executor`],
+                prompt: "select_account"
+            };
+
+            try {
+                showLoading('Redirecting to Azure AD login...');
+                const response = await msalInstance.loginPopup(loginRequest);
+                
+                currentAccount = response.account;
+                currentAccessToken = response.accessToken;
+                
+                updateAuthUI(true);
+                await getTokenSilently(); // Get a fresh token with proper scopes
+                
+            } catch (error) {
+                console.error('Login failed:', error);
+                showError(`Login failed: ${error.message}`);
+                updateAuthUI(false);
+            }
+        }
+
+        // Logout function
+        async function logout() {
+            if (!msalInstance) return;
+
+            try {
+                await msalInstance.logoutPopup({
+                    account: currentAccount
+                });
+                
+                currentAccount = null;
+                currentAccessToken = null;
+                updateAuthUI(false);
+                showResponse('Logged out successfully');
+                
+            } catch (error) {
+                console.error('Logout failed:', error);
+                showError(`Logout failed: ${error.message}`);
+            }
+        }
+
+        // Get token silently
+        async function getTokenSilently() {
+            if (!msalInstance || !currentAccount) {
+                showError('Please login first');
+                return null;
+            }
+
+            const clientId = document.getElementById('clientId').value.trim();
+            
+            const tokenRequest = {
+                scopes: [`api://${clientId}/Mcp.Tool.Executor`],
+                account: currentAccount
+            };
+
+            try {
+                const response = await msalInstance.acquireTokenSilent(tokenRequest);
+                currentAccessToken = response.accessToken;
+                
+                showResponse(`Token refreshed successfully!\nExpires: ${new Date(response.expiresOn)}`);
+                updateCurlExamples();
+                
+                return response.accessToken;
+                
+            } catch (error) {
+                console.error('Silent token acquisition failed:', error);
+                
+                if (error instanceof msal.InteractionRequiredAuthError) {
+                    // Fallback to interactive token acquisition
+                    try {
+                        const response = await msalInstance.acquireTokenPopup(tokenRequest);
+                        currentAccessToken = response.accessToken;
+                        updateCurlExamples();
+                        return response.accessToken;
+                    } catch (interactiveError) {
+                        showError(`Token acquisition failed: ${interactiveError.message}`);
+                        return null;
+                    }
+                } else {
+                    showError(`Token acquisition failed: ${error.message}`);
+                    return null;
+                }
+            }
+        }
+
+        // Update authentication UI
+        function updateAuthUI(isAuthenticated) {
+            const authStatus = document.getElementById('authStatus');
+            const loginBtn = document.getElementById('loginBtn');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const getTokenBtn = document.getElementById('getTokenBtn');
+            const userInfo = document.getElementById('userInfo');
+            const configSection = document.getElementById('configSection');
+
+            if (isAuthenticated && currentAccount) {
+                authStatus.className = 'auth-status authenticated';
+                authStatus.textContent = '✅ Authenticated';
+                
+                loginBtn.style.display = 'none';
+                logoutBtn.style.display = 'inline-block';
+                getTokenBtn.style.display = 'inline-block';
+                
+                userInfo.style.display = 'block';
+                configSection.style.display = 'none';
+                
+                document.getElementById('userName').textContent = currentAccount.name || currentAccount.username;
+                document.getElementById('userTenant').textContent = currentAccount.tenantId;
+                
+                // Check for roles in the token
+                if (currentAccessToken) {
+                    try {
+                        const tokenPayload = JSON.parse(atob(currentAccessToken.split('.')[1]));
+                        const roles = tokenPayload.roles || [];
+                        document.getElementById('userRoles').textContent = roles.length > 0 ? roles.join(', ') : 'No roles found';
+                    } catch (e) {
+                        document.getElementById('userRoles').textContent = 'Unable to parse roles';
+                    }
+                }
+                
+            } else {
+                authStatus.className = 'auth-status unauthenticated';
+                authStatus.textContent = '❌ Not authenticated';
+                
+                loginBtn.style.display = 'inline-block';
+                logoutBtn.style.display = 'none';
+                getTokenBtn.style.display = 'none';
+                
+                userInfo.style.display = 'none';
+                configSection.style.display = 'block';
+            }
+        }
+
+        // Check for existing session on page load
+        window.addEventListener('load', async function() {
+            const clientId = document.getElementById('clientId').value.trim();
+            if (clientId && initializeMsal()) {
+                try {
+                    const accounts = msalInstance.getAllAccounts();
+                    if (accounts.length > 0) {
+                        currentAccount = accounts[0];
+                        updateAuthUI(true);
+                        await getTokenSilently();
+                    }
+                } catch (error) {
+                    console.error('Failed to check existing session:', error);
+                }
+            }
+            updateCurlExamples();
+        });
+
+        function updateCurlExamples() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const accessToken = currentAccessToken || 'YOUR_ACCESS_TOKEN';
+            
+            if (serverUrl) {
+                const listToolsCurl = `curl -v -X POST "${serverUrl}/mcp" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "Authorization: Bearer ${accessToken}" -d '{"jsonrpc": "2.0", "id": "test123", "method": "tools/list", "params": {}}'`;
+                
+                // Get current tool parameters for curl example
+                const database = document.getElementById('cosmosDatabase')?.value || 'sample-database';
+                const container = document.getElementById('cosmosContainer')?.value || 'sample-container';
+                const tool = document.getElementById('toolSelect')?.value || 'list_databases';
+                
+                let toolParams = { databaseId: database, containerId: container };
+                
+                if (tool === 'get_recent_documents') {
+                    toolParams.n = 5;
+                } else if (tool === 'find_document_by_id') {
+                    toolParams.id = document.getElementById('docId')?.value || 'sample-id';
+                } else if (tool === 'text_search') {
+                    toolParams.property = document.getElementById('searchProperty')?.value || 'name';
+                    toolParams.searchPhrase = document.getElementById('searchPhrase')?.value || 'Azure';
+                    toolParams.n = 5;
+                } else if (tool === 'vector_search') {
+                    toolParams.searchText = document.getElementById('vectorSearch')?.value || 'machine learning';
+                    toolParams.vectorProperty = document.getElementById('vectorProperty')?.value || 'vector';
+                    toolParams.selectProperties = document.getElementById('selectProperties')?.value || 'id,title';
+                    toolParams.topN = 5;
+                } else if (tool === 'list_databases') {
+                    toolParams = {}; // No parameters needed
+                } else if (tool === 'list_collections') {
+                    toolParams = { databaseId: database };
+                }
+                
+                const testToolCurl = `curl -s -X POST "${serverUrl}/mcp" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "Authorization: Bearer ${accessToken}" -d '{"jsonrpc":"2.0","id":"test-tool-123","method":"tools/call","params":{"name":"mcp_mcp-toolkit-t_${tool}","arguments":${JSON.stringify(toolParams)}}}'`;
+
+                if (document.getElementById('listToolsCurl')) {
+                    document.getElementById('listToolsCurl').textContent = listToolsCurl;
+                }
+                if (document.getElementById('testToolCurl')) {
+                    document.getElementById('testToolCurl').textContent = testToolCurl;
+                }
+            }
+        }
+
+        function validateInputs() {
+            const serverUrl = document.getElementById('serverUrl').value.trim();
+            
+            if (!serverUrl) {
+                showError('Please enter the server URL');
+                return false;
+            }
+            
+            if (!currentAccessToken) {
+                showError('Please login with Azure AD first');
+                return false;
+            }
+            
+            try {
+                new URL(serverUrl);
+            } catch (e) {
+                showError('Please enter a valid URL');
+                return false;
+            }
+            
+            return true;
+        }
+
+        async function makeRequest(payload, actionName) {
+            if (!validateInputs()) return;
+
+            const serverUrl = document.getElementById('serverUrl').value.trim();
+            
+            // Ensure we have a fresh token
+            const token = await getTokenSilently();
+            if (!token) {
+                showError('Failed to get access token. Please login again.');
+                return;
+            }
+            
+            showLoading(`Making ${actionName} request...`);
+            
+            // Disable buttons during request
+            document.getElementById('listToolsBtn').disabled = true;
+            document.getElementById('testToolBtn').disabled = true;
+            document.getElementById('testCosmosBtn').disabled = true;
+            
+            try {
+                const response = await fetch(`${serverUrl}/mcp`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json, text/event-stream',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload),
+                    mode: 'cors'
+                });
+
+                const responseText = await response.text();
+                
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        showError(`Authentication failed. Please check:\n1. You have the 'Mcp.Tool.Executor' role\n2. Your token is valid\n3. The Client ID is correct\n\nHTTP ${response.status}: ${responseText}`);
+                    } else {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}\n\nResponse: ${responseText}`);
+                    }
+                    return;
+                }
+
+                // Try to parse as JSON
+                let responseData;
+                try {
+                    responseData = JSON.parse(responseText);
+                } catch (e) {
+                    responseData = responseText;
+                }
+
+                showResponse(responseData);
+                
+            } catch (error) {
+                console.error('Request failed:', error);
+                
+                if (error.message.includes('CORS') || error.message.includes('fetch')) {
+                    showError(`${actionName} failed due to CORS restrictions.\n\nError: ${error.message}\n\n🔧 Solutions:\n1. Use the cURL commands shown below\n2. Configure CORS in your Azure Container App`);
+                } else {
+                    showError(`${actionName} failed: ${error.message}`);
+                }
+            } finally {
+                // Re-enable buttons
+                document.getElementById('listToolsBtn').disabled = false;
+                document.getElementById('testToolBtn').disabled = false;
+                document.getElementById('testCosmosBtn').disabled = false;
+            }
+        }
+
+        async function listTools() {
+            const payload = {
+                jsonrpc: "2.0",
+                id: "list-tools-" + Date.now(),
+                method: "tools/list",
+                params: {}
+            };
+            
+            await makeRequest(payload, "List Tools");
+        }
+
+        async function testTool() {
+            const payload = {
+                jsonrpc: "2.0",
+                id: "test-" + Date.now(),
+                method: "tools/call",
+                params: {
+                    name: "mcp_mcp-toolkit-t_list_databases",
+                    arguments: {}
+                }
+            };
+            
+            await makeRequest(payload, "Test List Databases");
+        }
+
+        async function testCosmosDbTool() {
+            // Get values from form fields
+            const database = document.getElementById('cosmosDatabase').value.trim();
+            const container = document.getElementById('cosmosContainer').value.trim();
+            const tool = document.getElementById('toolSelect').value;
+            
+            if (!tool) {
+                showError('Please select a tool first');
+                return;
+            }
+
+            let toolParams = {};
+            
+            // Build parameters based on selected tool
+            switch (tool) {
+                case 'list_databases':
+                    // No parameters needed
+                    break;
+                case 'list_collections':
+                    if (!database) {
+                        showError('Database ID is required for list_collections');
+                        return;
+                    }
+                    toolParams = { databaseId: database };
+                    break;
+                case 'get_recent_documents':
+                    if (!database || !container) {
+                        showError('Database ID and Container ID are required');
+                        return;
+                    }
+                    toolParams = { 
+                        databaseId: database, 
+                        containerId: container,
+                        n: parseInt(document.getElementById('resultCount').value) || 5
+                    };
+                    break;
+                case 'find_document_by_id':
+                    const docId = document.getElementById('docId').value.trim();
+                    if (!database || !container || !docId) {
+                        showError('Database ID, Container ID, and Document ID are required');
+                        return;
+                    }
+                    toolParams = { 
+                        databaseId: database, 
+                        containerId: container,
+                        id: docId
+                    };
+                    break;
+                case 'text_search':
+                    const property = document.getElementById('searchProperty').value.trim();
+                    const phrase = document.getElementById('searchPhrase').value.trim();
+                    if (!database || !container || !property || !phrase) {
+                        showError('Database ID, Container ID, Property, and Search Phrase are required');
+                        return;
+                    }
+                    toolParams = { 
+                        databaseId: database, 
+                        containerId: container,
+                        property: property,
+                        searchPhrase: phrase,
+                        n: parseInt(document.getElementById('resultCount').value) || 5
+                    };
+                    break;
+                case 'vector_search':
+                    const searchText = document.getElementById('vectorSearch').value.trim();
+                    const vectorProp = document.getElementById('vectorProperty').value.trim();
+                    const selectProps = document.getElementById('selectProperties').value.trim();
+                    if (!database || !container || !searchText || !vectorProp || !selectProps) {
+                        showError('Database ID, Container ID, Search Text, Vector Property, and Select Properties are required');
+                        return;
+                    }
+                    toolParams = { 
+                        databaseId: database, 
+                        containerId: container,
+                        searchText: searchText,
+                        vectorProperty: vectorProp,
+                        selectProperties: selectProps,
+                        topN: parseInt(document.getElementById('resultCount').value) || 5
+                    };
+                    break;
+                case 'get_approximate_schema':
+                    if (!database || !container) {
+                        showError('Database ID and Container ID are required');
+                        return;
+                    }
+                    toolParams = { 
+                        databaseId: database, 
+                        containerId: container
+                    };
+                    break;
+            }
+            
+            const payload = {
+                jsonrpc: "2.0",
+                id: "test-cosmos-" + Date.now(),
+                method: "tools/call",
+                params: {
+                    name: `mcp_mcp-toolkit-t_${tool}`,
+                    arguments: toolParams
+                }
+            };
+            
+            await makeRequest(payload, `Test ${tool}`);
+        }
+
+        function clearOutput() {
+            const output = document.getElementById('output');
+            output.className = 'output';
+            output.textContent = 'Output cleared. Ready for next request...';
+        }
+
+        function toggleCollapse(element) {
+            const content = element.nextElementSibling;
+            const isCollapsed = element.classList.contains('collapsed');
+            
+            if (isCollapsed) {
+                element.classList.remove('collapsed');
+                content.classList.remove('collapsed');
+            } else {
+                element.classList.add('collapsed');
+                content.classList.add('collapsed');
+            }
+        }
+    </script>
+</body>
+</html>

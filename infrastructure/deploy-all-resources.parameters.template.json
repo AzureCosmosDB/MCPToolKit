@@ -16,6 +16,21 @@
     },
     "ownerTag": {
       "value": "mcp-toolkit-user"
+    },
+    "cosmosEndpoint": {
+      "value": ""
+    },
+    "openaiEndpoint": {
+      "value": ""
+    },
+    "openaiEmbeddingDeployment": {
+      "value": "text-embedding-ada-002"
+    },
+    "entraAppDisplayName": {
+      "value": "Azure Cosmos DB MCP Toolkit"
+    },
+    "aifProjectResourceId": {
+      "value": ""
     }
   }
 }
