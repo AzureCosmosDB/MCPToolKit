@@ -53,95 +53,59 @@ Write-Host "Pushing image..." -ForegroundColor Yellow
 docker push $ImageName
 if ($LASTEXITCODE -ne 0) { Write-Error "Push failed" }
 
-# Update Container App
-Write-Host "Updating Container App..." -ForegroundColor Yellow
-$RevisionSuffix = "v" + (Get-Date -Format "MMdd-HHmm")
+# Configure Container App registry credentials
+Write-Host "Configuring registry access..." -ForegroundColor Yellow
+$RegistryServer = "$RegistryName.azurecr.io"
 
-az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $ImageName --revision-suffix $RevisionSuffix
-if ($LASTEXITCODE -ne 0) { Write-Error "Update failed" }
+# Get the managed identity for the Container App Environment
+$ContainerAppEnv = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "properties.environmentId" --output tsv
+$EnvName = Split-Path $ContainerAppEnv -Leaf
 
-# Get URL
-$AppUrl = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "properties.configuration.ingress.fqdn" --output tsv
+# Enable admin user on ACR temporarily for Container Apps
+az acr update --name $RegistryName --admin-enabled true
+if ($LASTEXITCODE -ne 0) { Write-Warning "Failed to enable ACR admin - trying managed identity approach" }
 
-Write-Host "Deployment completed successfully!" -ForegroundColor Green
-Write-Host "App URL: https://$AppUrl" -ForegroundColor Cyan
-Write-Host "Health: https://$AppUrl/api/health" -ForegroundColor Cyan
+# Get ACR credentials
+$AcrUsername = az acr credential show --name $RegistryName --query "username" --output tsv
+$AcrPassword = az acr credential show --name $RegistryName --query "passwords[0].value" --output tsv
 
-# Test deployment
-Write-Host "Testing..." -ForegroundColor Yellow
-Start-Sleep -Seconds 10
-try {
-    $Health = Invoke-RestMethod -Uri "https://$AppUrl/api/health" -TimeoutSec 30
-    Write-Host "Health check passed: $($Health.status)" -ForegroundColor Green
-} catch {
-    Write-Host "Health check failed - app may still be starting" -ForegroundColor Yellow
-}
-
-Write-Host "🏗️ Building Docker image..." -ForegroundColor Yellow
-docker build -t $FullImageName -t $LatestImageName .
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Docker build failed"
-}
-
-# Push Docker image
-Write-Host "📤 Pushing Docker image to registry..." -ForegroundColor Yellow
-docker push $FullImageName
-docker push $LatestImageName
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Docker push failed"
-}
-
-# Update Container App
-Write-Host "🔄 Updating Container App..." -ForegroundColor Yellow
+# Update Container App with registry credentials
+Write-Host "Updating Container App with registry credentials..." -ForegroundColor Yellow
 $RevisionSuffix = "v" + (Get-Date -Format "MMdd-HHmm")
 
 az containerapp update `
     --name $ContainerAppName `
     --resource-group $ResourceGroup `
-    --image $FullImageName `
+    --image $ImageName `
+    --registry-server $RegistryServer `
+    --registry-username $AcrUsername `
+    --registry-password $AcrPassword `
     --revision-suffix $RevisionSuffix
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Container App update failed"
-}
+if ($LASTEXITCODE -ne 0) { Write-Error "Container App update failed" }
 
-# Get Container App URL
-Write-Host "🌐 Getting Container App URL..." -ForegroundColor Yellow
-$AppUrl = az containerapp show `
-    --name $ContainerAppName `
-    --resource-group $ResourceGroup `
-    --query "properties.configuration.ingress.fqdn" `
-    --output tsv
+# Disable admin user after deployment for security
+Write-Host "Securing registry..." -ForegroundColor Yellow
+az acr update --name $RegistryName --admin-enabled false
 
-if ([string]::IsNullOrEmpty($AppUrl)) {
-    Write-Error "Failed to get Container App URL"
-}
+# Get URL
+$AppUrl = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "properties.configuration.ingress.fqdn" --output tsv
 
 Write-Host ""
-Write-Host "🎉 Deployment completed successfully!" -ForegroundColor Green
-Write-Host "📱 Your MCP Toolkit is available at: https://$AppUrl" -ForegroundColor Cyan
-Write-Host "🏥 Health check: https://$AppUrl/api/health" -ForegroundColor Cyan
-Write-Host "🔧 MCP endpoint: https://$AppUrl/mcp" -ForegroundColor Cyan
+Write-Host "Deployment completed successfully!" -ForegroundColor Green
+Write-Host "App URL: https://$AppUrl" -ForegroundColor Cyan
+Write-Host "Health: https://$AppUrl/api/health" -ForegroundColor Cyan
 
-# Test the deployment
+# Test deployment
 Write-Host ""
-Write-Host "🔍 Testing deployment..." -ForegroundColor Yellow
-Start-Sleep -Seconds 10
+Write-Host "Testing deployment..." -ForegroundColor Yellow
+Start-Sleep -Seconds 15
 
 try {
-    $HealthResponse = Invoke-RestMethod -Uri "https://$AppUrl/api/health" -Method Get -TimeoutSec 30
-    Write-Host "✅ Health check passed!" -ForegroundColor Green
-    Write-Host "   Status: $($HealthResponse.status)" -ForegroundColor Gray
-    Write-Host "   Version: $($HealthResponse.version)" -ForegroundColor Gray
+    $Health = Invoke-RestMethod -Uri "https://$AppUrl/api/health" -TimeoutSec 30
+    Write-Host "Health check passed: $($Health.status)" -ForegroundColor Green
+    if ($Health.version) { Write-Host "Version: $($Health.version)" -ForegroundColor Gray }
 } catch {
-    Write-Host "⚠️ Health check failed. The app might still be starting up." -ForegroundColor Yellow
-    Write-Host "   Please check the URL manually in a few minutes." -ForegroundColor Gray
+    Write-Host "Health check failed - app may still be starting" -ForegroundColor Yellow
+    Write-Host "Please check the URL manually in a few minutes" -ForegroundColor Gray
 }
-
-Write-Host ""
-Write-Host "🎯 Next steps:" -ForegroundColor Cyan
-Write-Host "   1. Open the UI at https://$AppUrl" -ForegroundColor Gray
-Write-Host "   2. Test the MCP tools in the web interface" -ForegroundColor Gray
-Write-Host "   3. Configure your Cosmos DB connection if needed" -ForegroundColor Gray
