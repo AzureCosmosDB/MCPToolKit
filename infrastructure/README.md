@@ -1,57 +1,93 @@
-# Azure Policy Owner Tag Workaround
+# Infrastructure Deployment
 
-If your Azure subscription requires an "owner" tag on all resources, use this workaround to deploy the MCP Toolkit.
+This directory contains the infrastructure templates for deploying the Azure MCP Toolkit Container App.
 
-## Quick Fix
+## What Gets Deployed
+
+The infrastructure templates create only the necessary resources for running the MCP Toolkit:
+
+- **Azure Container Registry** for storing container images
+- **Azure Container Apps Environment** with managed identity
+- **Azure Container App** for running the MCP Toolkit
+- **Managed Identity** for secure authentication
+
+## Prerequisites
+
+You must already have:
+- **Azure Cosmos DB** account with your data
+- **Azure OpenAI** service with text-embedding-ada-002 deployment
+
+## Deployment Options
 
 ### Option 1: PowerShell Script (Recommended)
 
 ```powershell
-# Navigate to the infrastructure directory
-cd infrastructure
+# Navigate to the scripts directory
+cd scripts
 
-# Run the deployment script with owner tag
-./deploy-with-owner-tag.ps1 -ResourceGroupName "rg-mcp-toolkit" -Location "East US" -PrincipalId "your-user-object-id" -OwnerTag "your-email@company.com"
+# Run the deployment script
+./Deploy-Complete.ps1 `
+    -ResourceGroupName "mcp-toolkit-rg" `
+    -Location "East US" `
+    -PrincipalId "your-user-object-id" `
+    -CosmosEndpoint "https://yourcosmosdb.documents.azure.com:443/" `
+    -OpenAIEndpoint "https://youropenai.openai.azure.com/" `
+    -OpenAIEmbeddingDeployment "text-embedding-ada-002"
 ```
 
-### Option 2: Manual Bicep Deployment
+### Option 2: Bash Script
+
+```bash
+# Set environment variables
+export RESOURCE_GROUP_NAME="mcp-toolkit-rg"
+export LOCATION="East US"
+export PRINCIPAL_ID="your-user-object-id"
+export COSMOS_ENDPOINT="https://yourcosmosdb.documents.azure.com:443/"
+export OPENAI_ENDPOINT="https://youropenai.openai.azure.com/"
+export OPENAI_EMBEDDING_DEPLOYMENT="text-embedding-ada-002"
+
+# Run deployment script
+./scripts/deploy-complete.sh
+```
+
+### Option 3: Manual Bicep Deployment
 
 ```powershell
 # Get your user object ID
 $principalId = az ad signed-in-user show --query id -o tsv
 
-# Create resource group with owner tag
-az group create --name "rg-mcp-toolkit" --location "East US" --tags owner="your-email@company.com"
+# Create resource group
+az group create --name "mcp-toolkit-rg" --location "East US"
 
 # Deploy using Bicep template
 az deployment group create \
-  --resource-group "rg-mcp-toolkit" \
+  --resource-group "mcp-toolkit-rg" \
   --template-file "deploy-all-resources.bicep" \
   --parameters \
     "principalId=$principalId" \
-    "ownerTag=your-email@company.com"
+    "cosmosEndpoint=https://yourcosmosdb.documents.azure.com:443/" \
+    "openaiEndpoint=https://youropenai.openai.azure.com/" \
+    "openaiEmbeddingDeployment=text-embedding-ada-002"
 ```
 
-### Option 3: Use Azure Portal with Modified Template
+## Post-Deployment Steps
 
-1. Download the Bicep file: `deploy-all-resources.bicep`
-2. The file already includes the `ownerTag` parameter
-3. Deploy using Azure CLI as shown in Option 2
+After deployment, you need to:
 
-## What Changed
+1. **Set up RBAC permissions** for your external resources
+2. **Build and deploy the container image**
+3. **Test the deployment**
 
-The Bicep template now includes:
-- `ownerTag` parameter (required)
-- `commonTags` variable that includes the owner tag
-- All resources now use the `commonTags` variable
+See the [Deploy to Azure Guide](../docs/deploy-to-azure-guide.md) for detailed post-deployment instructions.
 
-## Error You Might See
+## Azure Policy Owner Tag Support
 
-```json
-{
-  "code": "RequestDisallowedByPolicy",
-  "message": "Resource 'rg-mcp-toolkit' was disallowed by policy. Policy identifiers: '[{\"policyAssignment\":{\"name\":\"Require owner tag\"..."
-}
-```
+The Bicep template includes an `ownerTag` parameter for organizations that require owner tags on all resources. If you encounter policy errors, make sure to provide the `ownerTag` parameter during deployment.
 
-This means your subscription has a policy requiring all resources to have an "owner" tag. Use one of the options above to comply with this policy.
+## Files
+
+- `deploy-all-resources.bicep` - Main Bicep template for all resources
+- `deploy-all-resources.json` - ARM template (auto-generated from Bicep)
+- `deploy-all-resources.parameters.template.json` - Parameter template file
+- `main.bicep` - Simplified template for existing deployments
+- `deploy-with-owner-tag.ps1` - PowerShell script for organizations with owner tag policies

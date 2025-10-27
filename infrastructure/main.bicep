@@ -1,67 +1,68 @@
-@description('The name of the container app')
-param containerAppName string = 'mcp-toolkit'
-
-@description('The name of the container app environment')
-param environmentName string = 'mcp-toolkit-env'
-
-@description('The location for all resources')
+@description('Location for all resources')
 param location string = resourceGroup().location
 
-@description('The container image to deploy')
-param containerImage string
+@description('Name for the Azure Container App')
+param containerAppName string = 'mcp-demo-app'
 
-@description('Cosmos DB endpoint')
-param cosmosEndpoint string
+@description('Environment name for the Container Apps Environment')
+param environmentName string = 'mcp-toolkit-env'
 
-@description('Azure OpenAI endpoint')
-param openaiEndpoint string
+@description('Display name for the Entra App')
+param entraAppDisplayName string = 'Azure Cosmos DB MCP Toolkit API'
 
-@description('Azure OpenAI embedding deployment name')
-param openaiEmbeddingDeployment string
+@description('Container registry name')
+param containerRegistryName string = 'mcpdemo${uniqueString(resourceGroup().id)}'
 
-@description('The name of the user-assigned managed identity')
-param managedIdentityName string = '${containerAppName}-identity'
+@description('Container image name')
+param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
-@description('Container app CPU and memory configuration')
-param containerResources object = {
-  cpu: json('0.5')
-  memory: '1Gi'
+@description('Number of CPU cores allocated to the container')
+param cpuCores string = '0.5'
+
+@description('Amount of memory allocated to the container')
+param memorySize string = '1Gi'
+
+@description('Minimum number of replicas')
+param minReplicas int = 1
+
+@description('Maximum number of replicas')
+param maxReplicas int = 3
+
+@description('Common tags for all resources')
+param commonTags object = {
+  Environment: 'Production'
+  Application: 'MCP-Toolkit'
 }
 
-@description('Scaling configuration')
-param scalingConfig object = {
-  minReplicas: 1
-  maxReplicas: 3
-  concurrentRequests: 10
+var entraAppUniqueName = '${replace(toLower(entraAppDisplayName), ' ', '-')}-${uniqueString(deployment().name, resourceGroup().id)}'
+
+// Deploy Entra App
+module entraApp 'modules/entra-app.bicep' = {
+  name: 'entra-app-deployment'
+  params: {
+    entraAppDisplayName: entraAppDisplayName
+    entraAppUniqueName: entraAppUniqueName
+  }
+}
+
+// Container Registry
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+  name: containerRegistryName
+  location: location
+  sku: {
+    name: 'Basic'
+  }
+  properties: {
+    adminUserEnabled: true
+  }
+  tags: commonTags
 }
 
 // Create user-assigned managed identity
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: managedIdentityName
+  name: '${containerAppName}-identity'
   location: location
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
-}
-
-// Create Log Analytics workspace
-resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: '${containerAppName}-logs'
-  location: location
-  properties: {
-    sku: {
-      name: 'PerGB2018'
-    }
-    retentionInDays: 30
-    features: {
-      enableLogAccessUsingOnlyResourcePermissions: true
-    }
-  }
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
+  tags: commonTags
 }
 
 // Create Container App Environment
@@ -69,19 +70,9 @@ resource containerAppEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' 
   name: environmentName
   location: location
   properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalytics.properties.customerId
-        sharedKey: logAnalytics.listKeys().primarySharedKey
-      }
-    }
     zoneRedundant: false
   }
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
+  tags: commonTags
 }
 
 // Create Container App
@@ -97,11 +88,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: containerAppEnvironment.id
     configuration: {
+      activeRevisionsMode: 'Single'
       ingress: {
         external: true
         targetPort: 8080
-        transport: 'http'
         allowInsecure: false
+        transport: 'http'
         traffic: [
           {
             weight: 100
@@ -109,27 +101,24 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           }
         ]
       }
+      registries: [
+        {
+          server: containerRegistry.properties.loginServer
+          identity: managedIdentity.id
+        }
+      ]
       secrets: []
-      activeRevisionsMode: 'Single'
     }
     template: {
       containers: [
         {
           image: containerImage
           name: containerAppName
+          resources: {
+            cpu: json(cpuCores)
+            memory: memorySize
+          }
           env: [
-            {
-              name: 'COSMOS_ENDPOINT'
-              value: cosmosEndpoint
-            }
-            {
-              name: 'OPENAI_ENDPOINT'
-              value: openaiEndpoint
-            }
-            {
-              name: 'OPENAI_EMBEDDING_DEPLOYMENT'
-              value: openaiEmbeddingDeployment
-            }
             {
               name: 'ASPNETCORE_ENVIRONMENT'
               value: 'Production'
@@ -138,8 +127,19 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'ASPNETCORE_URLS'
               value: 'http://+:8080'
             }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: managedIdentity.properties.clientId
+            }
+            {
+              name: 'AzureAd__TenantId'
+              value: tenant().tenantId
+            }
+            {
+              name: 'AzureAd__ClientId'
+              value: entraApp.outputs.entraAppClientId
+            }
           ]
-          resources: containerResources
           probes: [
             {
               type: 'Readiness'
@@ -171,32 +171,41 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: scalingConfig.minReplicas
-        maxReplicas: scalingConfig.maxReplicas
+        minReplicas: minReplicas
+        maxReplicas: maxReplicas
         rules: [
           {
             name: 'http-requests'
             http: {
               metadata: {
-                concurrentRequests: string(scalingConfig.concurrentRequests)
+                concurrentRequests: '10'
               }
             }
           }
         ]
       }
-      revisionSuffix: ''
     }
   }
-  tags: {
-    Environment: 'Production'
-    Application: 'MCP-Toolkit'
-  }
+  tags: commonTags
 }
 
-// Outputs
-output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
-output managedIdentityPrincipalId string = managedIdentity.properties.principalId
-output managedIdentityClientId string = managedIdentity.properties.clientId
-output logAnalyticsWorkspaceId string = logAnalytics.id
-output containerAppEnvironmentId string = containerAppEnvironment.id
-output containerAppId string = containerApp.id
+// Outputs for azd and other consumers
+output AZURE_LOCATION string = location
+output AZURE_TENANT_ID string = tenant().tenantId
+output AZURE_SUBSCRIPTION_ID string = subscription().subscriptionId
+
+// Entra App outputs
+output ENTRA_APP_CLIENT_ID string = entraApp.outputs.entraAppClientId
+output ENTRA_APP_OBJECT_ID string = entraApp.outputs.entraAppObjectId
+output ENTRA_APP_SERVICE_PRINCIPAL_ID string = entraApp.outputs.entraAppServicePrincipalObjectId
+output ENTRA_APP_ROLE_ID string = entraApp.outputs.entraAppRoleId
+output ENTRA_APP_IDENTIFIER_URI string = entraApp.outputs.entraAppIdentifierUri
+
+// Infrastructure outputs
+output RESOURCE_GROUP_NAME string = resourceGroup().name
+output CONTAINER_REGISTRY_LOGIN_SERVER string = containerRegistry.properties.loginServer
+output CONTAINER_REGISTRY_NAME string = containerRegistry.name
+output CONTAINER_APP_NAME string = containerApp.name
+output CONTAINER_APP_URL string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
+output CONTAINER_APP_PRINCIPAL_ID string = managedIdentity.properties.principalId
+output AZURE_CONTAINER_APP_ENVIRONMENT_ID string = containerAppEnvironment.id

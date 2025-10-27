@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.37.4.10188",
-      "templateHash": "17803754679932250592"
+      "templateHash": "7135957668334360856"
     }
   },
   "parameters": {
@@ -26,7 +26,7 @@
     "principalId": {
       "type": "string",
       "metadata": {
-        "description": "The Azure AD Object ID of the user/service principal that will have access to the resources"
+        "description": "The Azure AD Object ID of the user/service principal that will have access to the external resources (for manual RBAC assignment)"
       }
     },
     "principalType": {
@@ -38,7 +38,7 @@
         "Group"
       ],
       "metadata": {
-        "description": "The type of principal (User, ServicePrincipal, or Group)"
+        "description": "The type of principal (User, ServicePrincipal, or Group) for external resource access"
       }
     },
     "ownerTag": {
@@ -48,18 +48,22 @@
         "description": "Owner tag value (optional)"
       }
     },
-    "cosmosAccountName": {
+    "cosmosEndpoint": {
       "type": "string",
-      "defaultValue": "[format('{0}-cosmos-{1}', parameters('resourcePrefix'), uniqueString(resourceGroup().id))]",
       "metadata": {
-        "description": "Cosmos DB account name"
+        "description": "Cosmos DB endpoint (external resource)"
       }
     },
-    "openAIAccountName": {
+    "openaiEndpoint": {
       "type": "string",
-      "defaultValue": "[format('{0}-openai-{1}', parameters('resourcePrefix'), uniqueString(resourceGroup().id))]",
       "metadata": {
-        "description": "Azure OpenAI account name"
+        "description": "Azure OpenAI endpoint (external resource)"
+      }
+    },
+    "openaiEmbeddingDeployment": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure OpenAI embedding deployment name"
       }
     },
     "containerAppName": {
@@ -75,155 +79,19 @@
       "metadata": {
         "description": "Container registry name"
       }
-    },
-    "openAISku": {
-      "type": "string",
-      "defaultValue": "S0",
-      "allowedValues": [
-        "S0"
-      ],
-      "metadata": {
-        "description": "Azure OpenAI SKU"
-      }
-    },
-    "cosmosConsistencyLevel": {
-      "type": "string",
-      "defaultValue": "Session",
-      "allowedValues": [
-        "Eventual",
-        "ConsistentPrefix",
-        "Session",
-        "BoundedStaleness",
-        "Strong"
-      ],
-      "metadata": {
-        "description": "Cosmos DB consistency level"
-      }
     }
   },
   "variables": {
     "managedIdentityName": "[format('{0}-identity', parameters('containerAppName'))]",
-    "logAnalyticsName": "[format('{0}-logs', parameters('resourcePrefix'))]",
     "containerAppEnvName": "[format('{0}-env', parameters('resourcePrefix'))]",
     "commonTags": {
       "Environment": "Production",
       "Application": "MCP-Toolkit",
       "owner": "[parameters('ownerTag')]"
     },
-    "cosmosDataContributorRoleId": "00000000-0000-0000-0000-000000000002",
-    "cognitiveServicesOpenAIUserRoleId": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
     "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
   },
   "resources": [
-    {
-      "type": "Microsoft.DocumentDB/databaseAccounts",
-      "apiVersion": "2023-04-15",
-      "name": "[parameters('cosmosAccountName')]",
-      "location": "[parameters('location')]",
-      "kind": "GlobalDocumentDB",
-      "properties": {
-        "consistencyPolicy": {
-          "defaultConsistencyLevel": "[parameters('cosmosConsistencyLevel')]"
-        },
-        "locations": [
-          {
-            "locationName": "[parameters('location')]",
-            "failoverPriority": 0,
-            "isZoneRedundant": false
-          }
-        ],
-        "databaseAccountOfferType": "Standard",
-        "enableAutomaticFailover": false,
-        "enableMultipleWriteLocations": false,
-        "capabilities": [
-          {
-            "name": "EnableServerless"
-          }
-        ]
-      },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      }
-    },
-    {
-      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
-      "apiVersion": "2023-04-15",
-      "name": "[format('{0}/{1}', parameters('cosmosAccountName'), 'SampleDB')]",
-      "properties": {
-        "resource": {
-          "id": "SampleDB"
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
-      "apiVersion": "2023-04-15",
-      "name": "[format('{0}/{1}/{2}', parameters('cosmosAccountName'), 'SampleDB', 'SampleContainer')]",
-      "properties": {
-        "resource": {
-          "id": "SampleContainer",
-          "partitionKey": {
-            "paths": [
-              "/id"
-            ],
-            "kind": "Hash"
-          },
-          "indexingPolicy": {
-            "indexingMode": "consistent",
-            "includedPaths": [
-              {
-                "path": "/*"
-              }
-            ]
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', parameters('cosmosAccountName'), 'SampleDB')]"
-      ]
-    },
-    {
-      "type": "Microsoft.CognitiveServices/accounts",
-      "apiVersion": "2024-10-01",
-      "name": "[parameters('openAIAccountName')]",
-      "location": "[parameters('location')]",
-      "sku": {
-        "name": "[parameters('openAISku')]"
-      },
-      "kind": "OpenAI",
-      "properties": {
-        "customSubDomainName": "[parameters('openAIAccountName')]",
-        "publicNetworkAccess": "Enabled"
-      },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      }
-    },
-    {
-      "type": "Microsoft.CognitiveServices/accounts/deployments",
-      "apiVersion": "2024-10-01",
-      "name": "[format('{0}/{1}', parameters('openAIAccountName'), 'text-embedding-ada-002')]",
-      "properties": {
-        "model": {
-          "format": "OpenAI",
-          "name": "text-embedding-ada-002",
-          "version": "2"
-        },
-        "raiPolicyName": "Microsoft.Default"
-      },
-      "sku": {
-        "name": "Standard",
-        "capacity": 120
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName'))]"
-      ]
-    },
     {
       "type": "Microsoft.ContainerRegistry/registries",
       "apiVersion": "2023-07-01",
@@ -235,39 +103,14 @@
       "properties": {
         "adminUserEnabled": true
       },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      }
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2023-01-31",
       "name": "[variables('managedIdentityName')]",
       "location": "[parameters('location')]",
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      }
-    },
-    {
-      "type": "Microsoft.OperationalInsights/workspaces",
-      "apiVersion": "2022-10-01",
-      "name": "[variables('logAnalyticsName')]",
-      "location": "[parameters('location')]",
-      "properties": {
-        "sku": {
-          "name": "PerGB2018"
-        },
-        "retentionInDays": 30,
-        "features": {
-          "enableLogAccessUsingOnlyResourcePermissions": true
-        }
-      },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      }
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.App/managedEnvironments",
@@ -275,22 +118,9 @@
       "name": "[variables('containerAppEnvName')]",
       "location": "[parameters('location')]",
       "properties": {
-        "appLogsConfiguration": {
-          "destination": "log-analytics",
-          "logAnalyticsConfiguration": {
-            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName')), '2022-10-01').customerId]",
-            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName')), '2022-10-01').primarySharedKey]"
-          }
-        },
         "zoneRedundant": false
       },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
-      ]
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.App/containerApps",
@@ -329,15 +159,15 @@
               "env": [
                 {
                   "name": "COSMOS_ENDPOINT",
-                  "value": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), '2023-04-15').documentEndpoint]"
+                  "value": "[parameters('cosmosEndpoint')]"
                 },
                 {
                   "name": "OPENAI_ENDPOINT",
-                  "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName')), '2023-05-01').endpoint]"
+                  "value": "[parameters('openaiEndpoint')]"
                 },
                 {
                   "name": "OPENAI_EMBEDDING_DEPLOYMENT",
-                  "value": "text-embedding-ada-002"
+                  "value": "[parameters('openaiEmbeddingDeployment')]"
                 },
                 {
                   "name": "ASPNETCORE_ENVIRONMENT",
@@ -398,72 +228,10 @@
           }
         }
       },
-      "tags": {
-        "Environment": "Production",
-        "Application": "MCP-Toolkit"
-      },
+      "tags": "[variables('commonTags')]",
       "dependsOn": [
         "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppEnvName'))]",
-        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts/deployments', parameters('openAIAccountName'), 'text-embedding-ada-002')]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
-      "apiVersion": "2023-04-15",
-      "name": "[format('{0}/{1}', parameters('cosmosAccountName'), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), variables('cosmosDataContributorRoleId')))]",
-      "properties": {
-        "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/{1}', resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), variables('cosmosDataContributorRoleId'))]",
-        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]",
-        "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName'))]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName'))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
-      "apiVersion": "2023-04-15",
-      "name": "[format('{0}/{1}', parameters('cosmosAccountName'), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), parameters('principalId'), variables('cosmosDataContributorRoleId')))]",
-      "properties": {
-        "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/{1}', resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), variables('cosmosDataContributorRoleId'))]",
-        "principalId": "[parameters('principalId')]",
-        "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName'))]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "apiVersion": "2022-04-01",
-      "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('openAIAccountName'))]",
-      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), variables('cognitiveServicesOpenAIUserRoleId'))]",
-      "properties": {
-        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesOpenAIUserRoleId'))]",
-        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]",
-        "principalType": "ServicePrincipal"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "apiVersion": "2022-04-01",
-      "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('openAIAccountName'))]",
-      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName')), parameters('principalId'), variables('cognitiveServicesOpenAIUserRoleId'))]",
-      "properties": {
-        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesOpenAIUserRoleId'))]",
-        "principalId": "[parameters('principalId')]",
-        "principalType": "[parameters('principalType')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName'))]"
       ]
     },
     {
@@ -483,18 +251,6 @@
     }
   ],
   "outputs": {
-    "cosmosEndpoint": {
-      "type": "string",
-      "value": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), '2023-04-15').documentEndpoint]"
-    },
-    "openAIEndpoint": {
-      "type": "string",
-      "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIAccountName')), '2023-05-01').endpoint]"
-    },
-    "openAIEmbeddingDeployment": {
-      "type": "string",
-      "value": "text-embedding-ada-002"
-    },
     "containerAppUrl": {
       "type": "string",
       "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-03-01').configuration.ingress.fqdn)]"
@@ -515,10 +271,6 @@
       "type": "string",
       "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').clientId]"
     },
-    "logAnalyticsWorkspaceId": {
-      "type": "string",
-      "value": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
-    },
     "containerAppEnvironmentId": {
       "type": "string",
       "value": "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppEnvName'))]"
@@ -534,13 +286,9 @@
     "postDeploymentInfo": {
       "type": "object",
       "value": {
-        "cosmosAccount": "[parameters('cosmosAccountName')]",
-        "openAIAccount": "[parameters('openAIAccountName')]",
         "containerRegistry": "[parameters('containerRegistryName')]",
         "containerApp": "[parameters('containerAppName')]",
-        "managedIdentityPrincipalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]",
-        "sampleDatabaseName": "SampleDB",
-        "sampleContainerName": "SampleContainer"
+        "managedIdentityPrincipalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]"
       }
     }
   }
