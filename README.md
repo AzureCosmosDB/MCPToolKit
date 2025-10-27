@@ -2,54 +2,107 @@
 
 A Model Context Protocol (MCP) server that enables AI agents to interact with Azure Cosmos DB through natural language queries. Features enterprise-grade security with Azure Entra ID authentication, document operations, vector search, and schema discovery.
 
-## Features
+## � Quick Start Guide
 
-- 🔍 **Document Operations** - Query documents, full-text search, schema discovery
-- 🧠 **AI-Powered Vector Search** - Semantic search using Azure OpenAI embeddings  
-- 🔐 **Enterprise Security** - Azure Entra ID authentication with role-based access control
-- 🐳 **Production Ready** - Containerized deployment to Azure Container Apps
+Follow these 3 simple steps to get your MCP Toolkit running:
 
-## Prerequisites
+### Step 1: Deploy Infrastructure (5 minutes)
 
-- Azure subscription with Contributor access
-- Azure Cosmos DB account
-- Azure OpenAI service (for vector search)
-- Docker Desktop installed
-- Azure CLI installed
+Click the Deploy to Azure button to create all required Azure resources:
 
-## Quick Start
-
-### Deploy to Azure
-
-**Step 1: Deploy Infrastructure**
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
 
-**Step 2: Deploy Application**
+This creates:
+- Container App for hosting the MCP server
+- Container Registry for your app images  
+- Entra ID app for authentication
+- All necessary networking and security
+
+### Step 2: Deploy Application (3 minutes)
+
+Clone the repository and run the deployment script:
+
 ```powershell
 # Clone repository
 git clone https://github.com/AzureCosmosDB/MCPToolKit.git
 cd MCPToolKit
 
-# Use the deployment script with your resource names from Step 1
-.\scripts\Quick-Deploy.ps1 -ResourceGroup "your-rg" -ContainerAppName "mcp-toolkit-app" -RegistryName "your-registry-name"
+# Deploy application (replace with your actual resource names from Step 1)
+.\scripts\Quick-Deploy.ps1 -ResourceGroup "rg-your-resource-group" -ContainerAppName "mcp-toolkit-app" -RegistryName "your-registry-name"
 ```
 
-**Total deployment time**: ~10 minutes
+### Step 3: Configure Permissions (1 minute)
 
-### Verify Deployment
+Run the automated setup script to configure all permissions:
+
 ```powershell
-# Test health endpoint
-Invoke-RestMethod "https://your-app-url/api/health"
+# Easy automated setup
+.\scripts\Setup-Permissions.ps1 -ResourceGroup "rg-your-resource-group"
 ```
+
+This automatically configures:
+- User access to MCP tools
+- Cosmos DB read permissions
+- Azure OpenAI access
+
+### ✅ Test Your Setup
+
+```powershell
+# Get access token
+$clientId = az ad app list --display-name "*mcp*" --query "[0].appId" --output tsv
+$token = az account get-access-token --resource "api://$clientId" --query "accessToken" --output tsv
+
+# Test MCP tools
+$headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" }
+$body = '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+$appUrl = az containerapp show --name "mcp-toolkit-app" --resource-group "rg-your-resource-group" --query "properties.configuration.ingress.fqdn" --output tsv
+Invoke-RestMethod -Uri "https://$appUrl/mcp" -Method Post -Headers $headers -Body $body
+```
+
+**Expected result:** You should see a list of available MCP tools.
+
+---
+
+## Prerequisites
+
+Before starting, make sure you have:
+- Azure subscription with Contributor access
+- Azure Cosmos DB account (existing)
+- Azure OpenAI service (for vector search, optional)
+- Docker Desktop installed
+- Azure CLI installed and logged in (`az login`)
+
+## What You Get
+
+### Features
+- 🔍 **Document Operations** - Query documents, full-text search, schema discovery
+- 🧠 **AI-Powered Vector Search** - Semantic search using Azure OpenAI embeddings  
+- 🔐 **Enterprise Security** - Azure Entra ID authentication with role-based access control
+- 🐳 **Production Ready** - Containerized deployment to Azure Container Apps
+
+### MCP Tools Available
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| **list_databases** | Lists all databases | None |
+| **list_collections** | Lists containers in database | `databaseId` |
+| **get_recent_documents** | Gets recent documents (1-20) | `databaseId`, `containerId`, `n` |
+| **find_document_by_id** | Finds document by ID | `databaseId`, `containerId`, `id` |
+| **text_search** | Full-text search on properties | `databaseId`, `containerId`, `property`, `searchPhrase`, `n` |
+| **vector_search** | Semantic search with AI embeddings | `databaseId`, `containerId`, `searchText`, `vectorProperty`, `selectProperties`, `topN` |
+| **get_approximate_schema** | Analyzes document structure | `databaseId`, `containerId` |
+
+---
 
 ## Local Development
 
-### Quick Start
+For development and testing on your local machine:
+
 ```powershell
 git clone https://github.com/AzureCosmosDB/MCPToolKit.git
 cd MCPToolKit
 
-# Set bypass mode for development
+# Set bypass mode for development (no authentication required)
 $env:DEV_BYPASS_AUTH = "true"
 
 # Run with Docker Compose (includes Cosmos DB emulator)
@@ -65,77 +118,14 @@ dotnet run
 # Health check
 Invoke-RestMethod http://localhost:8080/api/health
 
-# List tools (no auth required with bypass)
+# List tools (no auth required with bypass mode)
 $body = '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 Invoke-RestMethod -Uri http://localhost:8080/mcp -Method Post -ContentType "application/json" -Body $body
 ```
 
-## MCP Tools
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| **list_databases** | Lists all databases | None |
-| **list_collections** | Lists containers in database | `databaseId` |
-| **get_recent_documents** | Gets recent documents (1-20) | `databaseId`, `containerId`, `n` |
-| **find_document_by_id** | Finds document by ID | `databaseId`, `containerId`, `id` |
-| **text_search** | Full-text search on properties | `databaseId`, `containerId`, `property`, `searchPhrase`, `n` |
-| **vector_search** | Semantic search with AI embeddings | `databaseId`, `containerId`, `searchText`, `vectorProperty`, `selectProperties`, `topN` |
-| **get_approximate_schema** | Analyzes document structure | `databaseId`, `containerId` |
+---
 
 ## Configuration
-
-### Azure Resource Permissions
-
-The MCP Toolkit requires specific Azure roles for accessing Cosmos DB and OpenAI services:
-
-#### Cosmos DB Permissions (Choose One)
-
-**Option 1: Cosmos DB Built-in Data Reader (Recommended)**
-```powershell
-# Assign to Managed Identity for production
-az cosmosdb sql role assignment create --account-name "your-cosmos-account" --resource-group "cosmos-rg" --scope "/" --principal-id "managed-identity-id" --role-definition-name "Cosmos DB Built-in Data Reader"
-
-# Or assign to user for development
-az cosmosdb sql role assignment create --account-name "your-cosmos-account" --resource-group "cosmos-rg" --scope "/" --principal-id "user-object-id" --role-definition-name "Cosmos DB Built-in Data Reader"
-```
-
-**Option 2: Custom Read-Only Role (Maximum Security)**
-```powershell
-# Create custom role with minimal read permissions
-$roleDefinition = @{
-    RoleName = "MCP Toolkit Read Only"
-    Type = "CustomRole"
-    AssignableScopes = @("/")
-    Permissions = @(@{
-        DataActions = @(
-            "Microsoft.DocumentDB/databaseAccounts/readMetadata",
-            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/read",
-            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/executeQuery"
-        )
-        NotDataActions = @(
-            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/create",
-            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/upsert",
-            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/replace",
-            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/delete"
-        )
-    })
-}
-
-# Create and assign the role
-$roleDefinition | ConvertTo-Json -Depth 10 | Out-File cosmos-readonly-role.json
-az cosmosdb sql role definition create --account-name "your-cosmos-account" --resource-group "cosmos-rg" --body @cosmos-readonly-role.json
-```
-
-#### Azure OpenAI Permissions (For Vector Search)
-
-**Required Role: Cognitive Services OpenAI User**
-```powershell
-# Assign to Managed Identity
-az role assignment create --assignee "managed-identity-id" --role "Cognitive Services OpenAI User" --scope "/subscriptions/sub-id/resourceGroups/openai-rg/providers/Microsoft.CognitiveServices/accounts/openai-account"
-
-# Or assign to user for development  
-az role assignment create --assignee "user@domain.com" --role "Cognitive Services OpenAI User" --scope "/subscriptions/sub-id/resourceGroups/openai-rg/providers/Microsoft.CognitiveServices/accounts/openai-account"
-```
 
 ### Environment Variables
 | Variable | Description | Example |
@@ -145,31 +135,7 @@ az role assignment create --assignee "user@domain.com" --role "Cognitive Service
 | `OPENAI_EMBEDDING_DEPLOYMENT` | Embedding model deployment | `text-embedding-ada-002` |
 | `DEV_BYPASS_AUTH` | Bypass auth for development | `true` or `false` |
 
-### Authentication Setup
-
-#### Quick Setup for Users
-1. **Assign MCP Role to Users**
-```powershell
-az ad app role assignment create --id "your-entra-app-client-id" --principal "user@domain.com" --role "Mcp.Tool.Executor"
-```
-
-2. **Configure Azure Resource Access** (See Azure Resource Permissions section above)
-
-3. **Get Access Token**
-```powershell
-$token = az account get-access-token --resource "api://your-client-id" --query "accessToken" --output tsv
-```
-
-4. **Test MCP Calls**
-```powershell
-$headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" }
-$body = '{"jsonrpc":"2.0","method":"tools/list","id":1}'
-Invoke-RestMethod -Uri "https://your-app-url/mcp" -Method Post -Headers $headers -Body $body
-```
-
-> **📖 Detailed Setup**: For comprehensive authentication configuration including custom roles and security options, see [Authentication Setup Guide](docs/AUTHENTICATION-SETUP.md)
-
-## VS Code Integration
+### VS Code Integration
 
 Add to your VS Code configuration:
 ```json
@@ -192,12 +158,86 @@ Add to your VS Code configuration:
 @copilot Search for products similar to 'wireless headphones'
 ```
 
+---
+
+## Advanced Configuration
+
+<details>
+<summary>Manual Permission Setup (if automated script doesn't work)</summary>
+
+### Azure Resource Permissions
+
+The MCP Toolkit requires specific Azure roles for accessing Cosmos DB and OpenAI services:
+
+#### Cosmos DB Permissions (Choose One)
+
+**Option 1: Cosmos DB Built-in Data Reader (Recommended)**
+```powershell
+# Get managed identity ID
+$managedIdentityId = az containerapp show --name "mcp-toolkit-app" --resource-group "your-rg" --query "identity.principalId" --output tsv
+
+# Assign to Cosmos DB
+az cosmosdb sql role assignment create --account-name "your-cosmos-account" --resource-group "cosmos-rg" --scope "/" --principal-id $managedIdentityId --role-definition-name "Cosmos DB Built-in Data Reader"
+```
+
+#### Azure OpenAI Permissions (For Vector Search)
+
+**Required Role: Cognitive Services OpenAI User**
+```powershell
+# Get subscription ID
+$subscriptionId = az account show --query "id" --output tsv
+
+# Assign to Managed Identity
+az role assignment create --assignee $managedIdentityId --role "Cognitive Services OpenAI User" --scope "/subscriptions/$subscriptionId/resourceGroups/openai-rg/providers/Microsoft.CognitiveServices/accounts/openai-account"
+```
+
+### Manual Authentication Setup
+
+1. **Get Your Entra App Client ID**
+```powershell
+az ad app list --display-name "*mcp*" --query "[].{Name:displayName, ClientId:appId}" --output table
+```
+
+2. **Assign MCP Role to Users**
+```powershell
+az ad app role assignment create --id "your-entra-app-client-id" --principal "user@domain.com" --role "Mcp.Tool.Executor"
+```
+
+</details>
+
 ## Security
 
 - **JWT Bearer Authentication** - Azure Entra ID token validation
 - **Role-Based Access** - `Mcp.Tool.Executor` role required
 - **Managed Identity** - No stored credentials in production
 - **Read-Only Access** - Cannot modify data
+
+## Troubleshooting
+
+### Common Issues
+
+**"403 Forbidden" when testing tools**
+- Run the permissions setup script: `.\scripts\Setup-Permissions.ps1 -ResourceGroup "your-rg"`
+- Make sure your Cosmos DB account exists and is accessible
+
+**"401 Unauthorized" when testing**
+- Make sure you have the `Mcp.Tool.Executor` role assigned
+- Check that your access token is valid and not expired
+
+**"App shows old version after deployment"**
+- Clear browser cache or use incognito mode
+- Check that the new revision is active: `az containerapp revision list --name "mcp-toolkit-app" --resource-group "your-rg"`
+
+**"Docker build fails"**
+- Make sure Docker Desktop is running
+- Make sure you're in the correct directory (MCPToolKit root)
+
+### Get Help
+
+For detailed troubleshooting and advanced configuration:
+- [Authentication Setup Guide](docs/AUTHENTICATION-SETUP.md)
+- [Testing Guide](TESTING_GUIDE.md)
+- Create an issue in this repository
 
 ## Project Structure
 
@@ -217,9 +257,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contributing
 
 Contributions are welcome! Please read our contributing guidelines and submit pull requests to the main branch.
-
-## Support
-
-For issues and questions:
-- Create an issue in this repository
-- Review the [Testing Guide](TESTING_GUIDE.md) for common scenarios

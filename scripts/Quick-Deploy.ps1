@@ -53,40 +53,39 @@ Write-Host "Pushing image..." -ForegroundColor Yellow
 docker push $ImageName
 if ($LASTEXITCODE -ne 0) { Write-Error "Push failed" }
 
-# Configure Container App registry credentials
-Write-Host "Configuring registry access..." -ForegroundColor Yellow
-$RegistryServer = "$RegistryName.azurecr.io"
-
-# Get the managed identity for the Container App Environment
-$ContainerAppEnv = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "properties.environmentId" --output tsv
-$EnvName = Split-Path $ContainerAppEnv -Leaf
-
-# Enable admin user on ACR temporarily for Container Apps
-az acr update --name $RegistryName --admin-enabled true
-if ($LASTEXITCODE -ne 0) { Write-Warning "Failed to enable ACR admin - trying managed identity approach" }
-
-# Get ACR credentials
-$AcrUsername = az acr credential show --name $RegistryName --query "username" --output tsv
-$AcrPassword = az acr credential show --name $RegistryName --query "passwords[0].value" --output tsv
-
-# Update Container App with registry credentials
-Write-Host "Updating Container App with registry credentials..." -ForegroundColor Yellow
+# Simple approach - just update image and let the existing managed identity handle auth
+Write-Host "Updating Container App with new image..." -ForegroundColor Yellow
 $RevisionSuffix = "v" + (Get-Date -Format "MMdd-HHmm")
 
+# Since we already have managed identity with AcrPull role, try simple update first
 az containerapp update `
     --name $ContainerAppName `
     --resource-group $ResourceGroup `
     --image $ImageName `
-    --registry-server $RegistryServer `
-    --registry-username $AcrUsername `
-    --registry-password $AcrPassword `
     --revision-suffix $RevisionSuffix
 
-if ($LASTEXITCODE -ne 0) { Write-Error "Container App update failed" }
+# If that fails, enable ACR admin and use basic auth
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Simple update failed, trying with ACR admin credentials..." -ForegroundColor Yellow
+    
+    # Enable admin user on ACR
+    az acr update --name $RegistryName --admin-enabled true
+    
+    # Wait for admin to be enabled and try again
+    Start-Sleep -Seconds 15
+    
+    # Try update again - the Container App should now be able to authenticate
+    az containerapp update `
+        --name $ContainerAppName `
+        --resource-group $ResourceGroup `
+        --image $ImageName `
+        --revision-suffix $RevisionSuffix
+        
+    # Disable admin for security after deployment
+    az acr update --name $RegistryName --admin-enabled false
+}
 
-# Disable admin user after deployment for security
-Write-Host "Securing registry..." -ForegroundColor Yellow
-az acr update --name $RegistryName --admin-enabled false
+if ($LASTEXITCODE -ne 0) { Write-Error "Container App update failed" }
 
 # Get URL
 $AppUrl = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "properties.configuration.ingress.fqdn" --output tsv
