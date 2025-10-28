@@ -1,4 +1,4 @@
-.\scripts\Setup-Permissions.ps1 -ResourceGroup "your-resource-group-name"#!/usr/bin/env pwsh
+#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     Quick deployment script for MCP Toolkit

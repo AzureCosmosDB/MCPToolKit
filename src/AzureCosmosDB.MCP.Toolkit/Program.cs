@@ -62,6 +62,67 @@ if (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(c
 
             options.MapInboundClaims = false;
             options.RefreshOnIssuerKeyNotFound = true;
+
+            // Add detailed logging for authentication events
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                    
+                    // Workaround: Azure Container Apps ingress may strip Authorization header
+                    // Check for custom header as fallback
+                    if (string.IsNullOrEmpty(context.Token))
+                    {
+                        if (context.Request.Headers.TryGetValue("X-MS-TOKEN-AAD-ACCESS-TOKEN", out var tokenValue))
+                        {
+                            context.Token = tokenValue;
+                            logger.LogInformation("Token retrieved from X-MS-TOKEN-AAD-ACCESS-TOKEN header (Authorization header was stripped by ingress)");
+                        }
+                    }
+                    
+                    var hasAuth = context.Request.Headers.ContainsKey("Authorization");
+                    var hasCustom = context.Request.Headers.ContainsKey("X-MS-TOKEN-AAD-ACCESS-TOKEN");
+                    logger.LogInformation("Message received. Has Authorization header: {HasAuth}, Has X-MS-TOKEN-AAD-ACCESS-TOKEN: {HasCustom}", hasAuth, hasCustom);
+                    
+                    // Log all headers to see what's coming through
+                    logger.LogInformation("All request headers:");
+                    foreach (var header in context.Request.Headers)
+                    {
+                        var value = header.Key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase) || header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase)
+                            ? header.Value.ToString().Substring(0, Math.Min(30, header.Value.ToString().Length)) + "..."
+                            : header.Value.ToString();
+                        logger.LogInformation("  {Key}: {Value}", header.Key, value);
+                    }
+                    return Task.CompletedTask;
+                },
+                OnAuthenticationFailed = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                    logger.LogError("Authentication failed: {Error}", context.Exception.Message);
+                    logger.LogError("Exception details: {Details}", context.Exception.ToString());
+                    return Task.CompletedTask;
+                },
+                OnTokenValidated = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                    logger.LogInformation("Token validated successfully for user: {User}", context.Principal?.Identity?.Name ?? "Unknown");
+                    return Task.CompletedTask;
+                },
+                OnChallenge = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                    logger.LogWarning("Authentication challenge: {Error}, {ErrorDescription}", context.Error, context.ErrorDescription);
+                    
+                    // Log ALL headers to debug
+                    logger.LogWarning("All request headers:");
+                    foreach (var header in context.Request.Headers)
+                    {
+                        logger.LogWarning("  {Key}: {Value}", header.Key, header.Value);
+                    }
+                    return Task.CompletedTask;
+                }
+            };
         });
 
     // Add authorization with policy for MCP Tool Executor role
@@ -96,7 +157,8 @@ builder.Services.AddCors(options =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .WithExposedHeaders("Cross-Origin-Opener-Policy", "Cross-Origin-Embedder-Policy");
     });
 });
 
@@ -117,6 +179,37 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 
+// Add security headers middleware to allow MSAL authentication
+app.Use(async (context, next) =>
+{
+    // Fix COOP policy to allow MSAL popup authentication
+    context.Response.Headers["Cross-Origin-Opener-Policy"] = "unsafe-none";
+    context.Response.Headers["Cross-Origin-Embedder-Policy"] = "unsafe-none";
+    
+    await next();
+});
+
+// Add early middleware to log ALL incoming headers BEFORE any processing
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/mcp"))
+    {
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning("=== INCOMING REQUEST TO /mcp ===");
+        logger.LogWarning("Method: {Method}, Path: {Path}", context.Request.Method, context.Request.Path);
+        logger.LogWarning("ALL RAW HEADERS:");
+        foreach (var header in context.Request.Headers)
+        {
+            var value = header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase)
+                ? (header.Value.ToString().Length > 30 ? header.Value.ToString().Substring(0, 30) + "..." : header.Value.ToString())
+                : header.Value.ToString();
+            logger.LogWarning("  {Key}: {Value}", header.Key, value);
+        }
+        logger.LogWarning("=== END HEADERS ===");
+    }
+    await next();
+});
+
 // Configure forwarded headers
 app.UseForwardedHeaders();
 
@@ -130,8 +223,10 @@ app.UseCors("MCPPolicy");
 app.UseDefaultFiles(); // This will serve index.html as default
 app.UseStaticFiles();
 
-// Always add authentication and authorization middleware for consistency
-// The actual authentication logic is handled in the controller based on configuration
+// Add routing first
+app.UseRouting();
+
+// Then authentication and authorization middleware (MUST be after UseRouting and before MapControllers)
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -141,8 +236,7 @@ if (isDevelopment || devBypassAuth)
     app.Logger.LogInformation("Running in development mode with authentication bypass");
 }
 
-// Add routing and controllers
-app.UseRouting();
+// Map controllers last
 app.MapControllers();
 
 // Note: Commenting out built-in MCP endpoint to use custom controller
