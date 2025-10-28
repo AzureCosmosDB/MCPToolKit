@@ -44,8 +44,9 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Registry login failed" }
 $ImageTag = (Get-Date -Format "yyyyMMdd-HHmmss")
 $ImageName = "$RegistryName.azurecr.io/mcp-toolkit:$ImageTag"
 
-Write-Host "Building image..." -ForegroundColor Yellow
-docker build -t $ImageName .
+Write-Host "Building image (this may take a few minutes)..." -ForegroundColor Yellow
+Write-Host "Using no-cache to ensure fresh build with latest files..." -ForegroundColor Gray
+docker build --no-cache -t $ImageName .
 if ($LASTEXITCODE -ne 0) { Write-Error "Build failed" }
 
 # Push image
@@ -57,7 +58,18 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Push failed" }
 Write-Host "Updating Container App with new image..." -ForegroundColor Yellow
 $RevisionSuffix = "v" + (Get-Date -Format "MMdd-HHmm")
 
-# Since we already have managed identity with AcrPull role, try simple update first
+# Get managed identity principal ID
+$ManagedIdentityId = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "identity.principalId" --output tsv
+
+if ($ManagedIdentityId) {
+    Write-Host "Assigning AcrPull role to managed identity..." -ForegroundColor Yellow
+    $RegistryId = az acr show --name $RegistryName --query "id" --output tsv
+    az role assignment create --assignee $ManagedIdentityId --role "AcrPull" --scope $RegistryId 2>$null | Out-Null
+    Write-Host "Waiting for role assignment to propagate..." -ForegroundColor Gray
+    Start-Sleep -Seconds 15
+}
+
+# Try update with managed identity
 az containerapp update `
     --name $ContainerAppName `
     --resource-group $ResourceGroup `
@@ -66,15 +78,24 @@ az containerapp update `
 
 # If that fails, enable ACR admin and use basic auth
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Simple update failed, trying with ACR admin credentials..." -ForegroundColor Yellow
+    Write-Host "Managed identity auth failed, trying with ACR admin credentials..." -ForegroundColor Yellow
     
     # Enable admin user on ACR
     az acr update --name $RegistryName --admin-enabled true
     
-    # Wait for admin to be enabled and try again
-    Start-Sleep -Seconds 15
+    # Get admin credentials
+    $AdminUser = az acr credential show --name $RegistryName --query "username" --output tsv
+    $AdminPassword = az acr credential show --name $RegistryName --query "passwords[0].value" --output tsv
     
-    # Try update again - the Container App should now be able to authenticate
+    # Update with registry credentials
+    az containerapp registry set `
+        --name $ContainerAppName `
+        --resource-group $ResourceGroup `
+        --server "$RegistryName.azurecr.io" `
+        --username $AdminUser `
+        --password $AdminPassword
+    
+    # Try update again
     az containerapp update `
         --name $ContainerAppName `
         --resource-group $ResourceGroup `

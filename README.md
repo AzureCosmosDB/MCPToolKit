@@ -25,7 +25,6 @@ This creates:
 Run the automated setup script to create the Entra ID app and configure all permissions:
 
 ```powershell
-cd ..
 .\scripts\Setup-Permissions.ps1 -ResourceGroup "your-resource-group-name"
 ```
 
@@ -40,28 +39,89 @@ This automatically:
 Build and deploy your application:
 
 ```powershell
-# Deploy application (replace with your actual resource names from Step 1)
+# Replace ALL values with your actual resource names from Step 1
 .\scripts\Quick-Deploy.ps1 `
     -ResourceGroup "your-resource-group-name" `
-    -ContainerAppName "mcp-toolkit-app" `
+    -ContainerAppName "your-container-app-name" `
     -RegistryName "your-registry-name"
 ```
 
-### ✅ Test Your Setup
+**Example:**
+```powershell
+.\scripts\Quick-Deploy.ps1 `
+    -ResourceGroup "rg-myproject-mcp" `
+    -ContainerAppName "mcp-toolkit-xyz123" `
+    -RegistryName "mcpregistryabc456"
+```
+
+> 💡 **Tip:** Find your resource names in the Azure Portal or by running:
+> ```powershell
+> az containerapp list --resource-group "your-resource-group-name" --query "[].{Name:name, Registry:properties.configuration.registries[0].server}" --output table
+> ```
+
+### Step 4: Get Configuration Values (1 minute)
+
+After deployment, get the values you'll need for testing and configuration:
 
 ```powershell
+# Get your Tenant ID
+$tenantId = az account show --query "tenantId" --output tsv
+Write-Host "Tenant ID: $tenantId" -ForegroundColor Green
+
+# Get your App Client ID
+$clientId = az ad app list --display-name "*Azure Cosmos DB MCP Toolkit API*" --query "[0].appId" --output tsv
+Write-Host "App Client ID: $clientId" -ForegroundColor Green
+
+# Get your Container App URL
+$appUrl = az containerapp show --name "your-container-app-name" --resource-group "your-resource-group-name" --query "properties.configuration.ingress.fqdn" --output tsv
+Write-Host "App URL: https://$appUrl" -ForegroundColor Green
+```
+
+**Save these values** - you'll need them for testing and VS Code integration.
+
+### Step 5: Test Your Setup
+
+#### Option A: Test via Web UI (Easiest)
+
+1. Open your Container App URL in a browser: `https://your-app-url.azurecontainerapps.io`
+2. The UI will auto-detect your Tenant ID and App Client ID
+3. Click **"Sign In"** to authenticate
+4. Once signed in, try the available tools from the UI
+
+#### Option B: Test via PowerShell
+
+```powershell
+# Replace with your actual resource names
+$resourceGroup = "your-resource-group-name"
+$containerAppName = "your-container-app-name"
+
+# Get App Client ID and URL
+$clientId = az ad app list --display-name "*Azure Cosmos DB MCP Toolkit API*" --query "[0].appId" --output tsv
+$appUrl = az containerapp show --name $containerAppName --resource-group $resourceGroup --query "properties.configuration.ingress.fqdn" --output tsv
+
 # Get access token
-$clientId = az ad app list --display-name "*mcp*" --query "[0].appId" --output tsv
 $token = az account get-access-token --resource "api://$clientId" --query "accessToken" --output tsv
 
 # Test MCP tools
 $headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" }
 $body = '{"jsonrpc":"2.0","method":"tools/list","id":1}'
-$appUrl = az containerapp show --name "mcp-toolkit-app" --resource-group "rg-your-resource-group" --query "properties.configuration.ingress.fqdn" --output tsv
 Invoke-RestMethod -Uri "https://$appUrl/mcp" -Method Post -Headers $headers -Body $body
 ```
 
-**Expected result:** You should see a list of available MCP tools.
+**Expected result:** You should see a JSON response with a list of available MCP tools like:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {"name": "list_databases", "description": "Lists databases available in the Cosmos DB account"},
+      {"name": "list_collections", "description": "Lists containers (collections) for the specified database"},
+      ...
+    ]
+  }
+}
+```
 
 ---
 
@@ -139,18 +199,37 @@ Invoke-RestMethod -Uri http://localhost:8080/mcp -Method Post -ContentType "appl
 
 ### VS Code Integration
 
-Add to your VS Code configuration:
-```json
-// .vscode/mcp.json
-{
-  "servers": {
-    "azure-cosmos-db-mcp": {
-      "type": "http",
-      "url": "https://your-mcp-server.azurecontainerapps.io"
-    }
-  }
-}
-```
+To use your deployed MCP server with VS Code, you need to configure it with your actual values:
+
+1. **Get your configuration values** (from Step 4 above):
+   ```powershell
+   $tenantId = az account show --query "tenantId" --output tsv
+   $clientId = az ad app list --display-name "*Azure Cosmos DB MCP Toolkit API*" --query "[0].appId" --output tsv
+   $appUrl = az containerapp show --name "your-container-app-name" --resource-group "your-resource-group-name" --query "properties.configuration.ingress.fqdn" --output tsv
+   
+   Write-Host "Tenant ID: $tenantId"
+   Write-Host "Client ID: $clientId"
+   Write-Host "App URL: https://$appUrl"
+   ```
+
+2. **Create or update `.vscode/mcp.json`** in your workspace with your actual values:
+   ```json
+   {
+     "servers": {
+       "azure-cosmos-db-mcp": {
+         "type": "http",
+         "url": "https://your-app-url.azurecontainerapps.io",
+         "auth": {
+           "type": "oauth2",
+           "tenantId": "your-tenant-id",
+           "clientId": "your-client-id"
+         }
+       }
+     }
+   }
+   ```
+
+3. **Reload VS Code** and test with Copilot.
 
 ### Example Queries
 ```
@@ -227,8 +306,10 @@ az ad app role assignment create --id "your-entra-app-client-id" --principal "us
 - Check that your access token is valid and not expired
 
 **"App shows old version after deployment"**
+- The deployment script now uses `--no-cache` to force a fresh build
 - Clear browser cache or use incognito mode
-- Check that the new revision is active: `az containerapp revision list --name "mcp-toolkit-app" --resource-group "your-rg"`
+- Check that the new revision is active: `az containerapp revision list --name "your-container-app-name" --resource-group "your-resource-group-name"`
+- If the UI still doesn't show, verify wwwroot/index.html exists in your source: `Test-Path "src/AzureCosmosDB.MCP.Toolkit/wwwroot/index.html"`
 
 **"Docker build fails"**
 - Make sure Docker Desktop is running
@@ -240,6 +321,43 @@ For detailed troubleshooting and advanced configuration:
 - [Authentication Setup Guide](docs/AUTHENTICATION-SETUP.md)
 - [Testing Guide](TESTING_GUIDE.md)
 - Create an issue in this repository
+
+---
+
+## Quick Reference
+
+### Get Your Configuration Values
+
+```powershell
+# Get Tenant ID
+az account show --query "tenantId" --output tsv
+
+# Get App Client ID
+az ad app list --display-name "*Azure Cosmos DB MCP Toolkit API*" --query "[0].appId" --output tsv
+
+# Get Container App URL
+az containerapp show --name "your-container-app-name" --resource-group "your-resource-group-name" --query "properties.configuration.ingress.fqdn" --output tsv
+
+# Get all resource names in your resource group
+az resource list --resource-group "your-resource-group-name" --query "[].{Name:name, Type:type}" --output table
+```
+
+### Quick Test Commands
+
+```powershell
+# Health check
+$appUrl = az containerapp show --name "your-container-app-name" --resource-group "your-resource-group-name" --query "properties.configuration.ingress.fqdn" --output tsv
+Invoke-RestMethod -Uri "https://$appUrl/api/health"
+
+# Test MCP tools
+$clientId = az ad app list --display-name "*Azure Cosmos DB MCP Toolkit API*" --query "[0].appId" --output tsv
+$token = az account get-access-token --resource "api://$clientId" --query "accessToken" --output tsv
+$headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" }
+$body = '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+Invoke-RestMethod -Uri "https://$appUrl/mcp" -Method Post -Headers $headers -Body $body
+```
+
+---
 
 ## Project Structure
 
