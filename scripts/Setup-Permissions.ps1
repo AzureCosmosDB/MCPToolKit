@@ -152,6 +152,44 @@ if (-not $ClientId) {
     }
 }
 
+# Configure redirect URIs for the Container App
+Write-Host "Configuring redirect URIs..." -ForegroundColor Yellow
+$ContainerAppFqdn = az containerapp list --resource-group $ResourceGroup --query "[0].properties.configuration.ingress.fqdn" --output tsv
+
+if ($ContainerAppFqdn) {
+    $redirectUris = @("https://$ContainerAppFqdn", "https://$ContainerAppFqdn/")
+    
+    try {
+        # Get app object ID
+        $appObjectId = az ad app show --id $ClientId --query "id" --output tsv
+        
+        # Use Microsoft Graph API to set SPA redirect URIs
+        $token = az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv
+        $headers = @{
+            "Authorization" = "Bearer $token"
+            "Content-Type" = "application/json"
+        }
+        
+        $spaConfig = @{
+            spa = @{
+                redirectUris = $redirectUris
+            }
+        } | ConvertTo-Json -Depth 10
+        
+        Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/applications/$appObjectId" `
+            -Method PATCH `
+            -Headers $headers `
+            -Body $spaConfig | Out-Null
+        
+        Write-Host "Redirect URIs configured: $($redirectUris -join ', ')" -ForegroundColor Green
+    } catch {
+        Write-Host "Warning: Could not configure redirect URIs automatically. You may need to add them manually in the Azure Portal." -ForegroundColor Yellow
+        Write-Host "Add these URIs to the SPA platform: $($redirectUris -join ', ')" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Warning: Could not find Container App URL. Redirect URIs not configured." -ForegroundColor Yellow
+}
+
 # Get Container App managed identity
 Write-Host "Getting managed identity..." -ForegroundColor Yellow
 $ContainerAppName = az containerapp list --resource-group $ResourceGroup --query "[0].name" --output tsv

@@ -8,7 +8,6 @@ namespace AzureCosmosDB.MCP.Toolkit.Controllers;
 
 [ApiController]
 [Route("mcp")]
-[AllowAnonymous] // Allow all requests, we'll handle auth manually in the controller
 public class MCPProtocolController : ControllerBase
 {
     private readonly CosmosDbToolsService _cosmosDbTools;
@@ -36,28 +35,59 @@ public class MCPProtocolController : ControllerBase
     }
 
     [HttpPost]
-    [AllowAnonymous] // Allow all requests, we'll handle auth manually
+    [AllowAnonymous] // Allow request through, we'll validate manually
     public async Task<IActionResult> HandleMCPRequest([FromBody] JsonElement requestJson)
     {
-        // Check authentication if enabled
-        if (_authService.IsAuthenticationEnabled() && User.Identity?.IsAuthenticated != true)
-        {
-            return Unauthorized(new MCPResponse
-            {
-                JsonRpc = "2.0",
-                Id = requestJson.TryGetProperty("id", out var idProp) ? idProp : null,
-                Error = new
-                {
-                    code = -32001,
-                    message = "Authentication required"
-                }
-            });
-        }
-
-        // Parse the JSON-RPC request manually for better control
+        // Parse request info for logging
         var method = requestJson.TryGetProperty("method", out var methodProp) ? methodProp.GetString() : null;
         var id = requestJson.TryGetProperty("id", out var idProp2) ? idProp2 : (JsonElement?)null;
         var paramsObj = requestJson.TryGetProperty("params", out var paramsProp) ? paramsProp : (JsonElement?)null;
+        
+        // Log authentication details for debugging
+        _logger.LogInformation("Request from user: {User}, Authenticated: {IsAuth}, Identity: {Identity}", 
+            User?.Identity?.Name ?? "Anonymous", 
+            User?.Identity?.IsAuthenticated ?? false,
+            User?.Identity?.AuthenticationType ?? "None");
+
+        // Manual authentication check - for tools/call only (allow initialize and tools/list without auth for discovery)
+        var requiresAuth = method?.ToLowerInvariant() == "tools/call";
+        if (requiresAuth && _authService.IsAuthenticationEnabled())
+        {
+            // Try to manually validate token from header (in case it wasn't stripped)
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault() 
+                ?? Request.Headers["X-MS-TOKEN-AAD-ACCESS-TOKEN"].FirstOrDefault();
+            
+            if (string.IsNullOrEmpty(authHeader))
+            {
+                _logger.LogWarning("Authentication required but no token provided");
+                return Unauthorized(new MCPResponse
+                {
+                    JsonRpc = "2.0",
+                    Id = id,
+                    Error = new
+                    {
+                        code = -32001,
+                        message = "Authentication required. Please provide a valid bearer token."
+                    }
+                });
+            }
+
+            // If we have a token but user is not authenticated, the token validation failed
+            if (User?.Identity?.IsAuthenticated != true)
+            {
+                _logger.LogWarning("Token provided but authentication failed");
+                return Unauthorized(new MCPResponse
+                {
+                    JsonRpc = "2.0",
+                    Id = id,
+                    Error = new
+                    {
+                        code = -32002,
+                        message = "Invalid or expired token"
+                    }
+                });
+            }
+        }
 
         try
         {
@@ -199,7 +229,7 @@ public class MCPProtocolController : ControllerBase
 
                 case "tools/call":
                     // Check for MCP Tool Executor role before executing tools
-                    if (_authService.IsAuthenticationEnabled() && !User.IsInRole("Mcp.Tool.Executor"))
+                    if (_authService.IsAuthenticationEnabled() && User?.Identity?.IsAuthenticated == true && !User.IsInRole("Mcp.Tool.Executor"))
                     {
                         return Forbid("Insufficient permissions. The 'Mcp.Tool.Executor' role is required to execute tools.");
                     }
