@@ -245,8 +245,8 @@ cd scripts
 
 # Deploy with AI Foundry integration
 ./Deploy-All.ps1 `
-    -ResourceGroup "cosmos-mcp-toolkit-final" `
-    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<hub>/projects/<project>"
+    -ResourceGroup "<your-resource-group-name>" `
+    -AIFoundryProjectResourceId "/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.MachineLearningServices/workspaces/<hub-name>/projects/<project-name>"
 ```
 
 This script automatically:
@@ -334,10 +334,10 @@ The MCP Toolkit requires specific Azure roles for accessing Cosmos DB and OpenAI
 **Option 1: Cosmos DB Built-in Data Reader (Recommended)**
 ```powershell
 # Get managed identity ID
-$managedIdentityId = az containerapp show --name "mcp-toolkit-app" --resource-group "your-rg" --query "identity.principalId" --output tsv
+$managedIdentityId = az containerapp show --name "<your-container-app-name>" --resource-group "<your-resource-group-name>" --query "identity.principalId" --output tsv
 
 # Assign to Cosmos DB
-az cosmosdb sql role assignment create --account-name "your-cosmos-account" --resource-group "cosmos-rg" --scope "/" --principal-id $managedIdentityId --role-definition-name "Cosmos DB Built-in Data Reader"
+az cosmosdb sql role assignment create --account-name "<your-cosmos-account-name>" --resource-group "<your-resource-group-name>" --scope "/" --principal-id $managedIdentityId --role-definition-name "Cosmos DB Built-in Data Reader"
 ```
 
 #### Azure OpenAI Permissions (For Vector Search)
@@ -348,7 +348,7 @@ az cosmosdb sql role assignment create --account-name "your-cosmos-account" --re
 $subscriptionId = az account show --query "id" --output tsv
 
 # Assign to Managed Identity
-az role assignment create --assignee $managedIdentityId --role "Cognitive Services OpenAI User" --scope "/subscriptions/$subscriptionId/resourceGroups/openai-rg/providers/Microsoft.CognitiveServices/accounts/openai-account"
+az role assignment create --assignee $managedIdentityId --role "Cognitive Services OpenAI User" --scope "/subscriptions/$subscriptionId/resourceGroups/<your-resource-group-name>/providers/Microsoft.CognitiveServices/accounts/<your-openai-account-name>"
 ```
 
 ### Manual Authentication Setup

@@ -14,7 +14,7 @@ This client demonstrates how to use Azure AI Foundry agents with the Cosmos DB M
    PROJECT_ENDPOINT=https://cosmos-mcp-toolkit-test.services.ai.azure.com/api/projects/cosmos-mcp-toolkit-test-project
    MODEL_DEPLOYMENT_NAME=gpt-4o
    CONNECTION_NAME=mcp-toolkit-connection
-   MCP_SERVER_URL=https://mcp-toolkit-app.wittywave-32c6208c.eastus.azurecontainerapps.io/mcp
+   MCP_SERVER_URL=https://<your-container-app-url>/mcp
    MCP_SERVER_LABEL=cosmosdb
    ```
 
@@ -25,7 +25,7 @@ This client demonstrates how to use Azure AI Foundry agents with the Cosmos DB M
 
 4. **Make sure you have the MCP connection configured in AI Foundry**:
    - Connection Name: `mcp-toolkit-connection`
-   - Target URL: `https://mcp-toolkit-app.wittywave-32c6208c.eastus.azurecontainerapps.io/mcp`
+   - Target URL: `https://<your-container-app-url>/mcp`
    - Audience: `21d81067-43f7-40e6-8c90-b21fcfb75af2`
    - Authentication: Project Managed Identity
 
@@ -64,7 +64,7 @@ Change `content=input_text[0]` to test different questions (e.g., `input_text[1]
 ## Troubleshooting
 
 If you see "network error":
-1. Check container app logs: `az containerapp logs show --name mcp-toolkit-app --resource-group cosmos-mcp-toolkit-final --tail 50`
+1. Check container app logs: `az containerapp logs show --name <your-container-app-name> --resource-group <your-resource-group-name> --tail 50`
 2. Verify the MCP connection in AI Foundry has the correct audience
 3. Make sure the agent has access to the connection
 
