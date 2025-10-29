@@ -44,37 +44,17 @@ if (-not $UserEmail) {
     Write-Host "Using current user: $UserEmail" -ForegroundColor Gray
 }
 
-# Get the Entra App Client ID
-Write-Host "Finding Entra ID App..." -ForegroundColor Yellow
-$ClientId = az ad app list --query "[?contains(displayName, 'Azure Cosmos DB MCP Toolkit API')].appId | [0]" --output tsv
-
-if (-not $ClientId) {
-    Write-Host "No MCP app found. Creating one now..." -ForegroundColor Yellow
+# Create new Entra App (always create fresh with unique name)
+Write-Host "Creating new Entra ID App..." -ForegroundColor Yellow
+$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$appName = "Azure Cosmos DB MCP Toolkit API $timestamp"
+$ClientId = $null
     
     # Create the app with service management reference (required by Azure policy)
     $roleId = [System.Guid]::NewGuid().ToString()
-    $appManifest = @"
-{
-  "displayName": "Azure Cosmos DB MCP Toolkit API",
-  "serviceManagementReference": "4405e061-966a-4249-afdd-f7435f54a510",
-  "appRoles": [
-    {
-      "id": "$roleId",
-      "displayName": "MCP Tool Executor",
-      "description": "Executor role for MCP Tool operations on Cosmos DB",
-      "value": "Mcp.Tool.Executor",
-      "isEnabled": true,
-      "allowedMemberTypes": ["User"]
-    }
-  ]
-}
-"@
-    
-    $tempFile = [System.IO.Path]::GetTempFileName()
-    $appManifest | Out-File -FilePath $tempFile -Encoding utf8 -NoNewline
     
     try {
-        $appJson = az ad app create --display-name "Azure Cosmos DB MCP Toolkit API" --service-management-reference "4405e061-966a-4249-afdd-f7435f54a510"
+        $appJson = az ad app create --display-name $appName --service-management-reference "4405e061-966a-4249-afdd-f7435f54a510"
         if ($LASTEXITCODE -ne 0) { throw "Failed to create app" }
         
         $app = $appJson | ConvertFrom-Json
@@ -84,7 +64,7 @@ if (-not $ClientId) {
         az ad app update --id $ClientId --identifier-uris "api://$ClientId" | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Failed to set identifier URI" }
         
-        # Add app role
+        # Add app role - supports both User and Application for managed identity auth
         $roleManifest = @"
 [
   {
@@ -93,7 +73,7 @@ if (-not $ClientId) {
     "description": "Executor role for MCP Tool operations on Cosmos DB",
     "value": "Mcp.Tool.Executor",
     "isEnabled": true,
-    "allowedMemberTypes": ["User"]
+    "allowedMemberTypes": ["User", "Application"]
   }
 ]
 "@
@@ -108,49 +88,56 @@ if (-not $ClientId) {
         az ad sp create --id $ClientId | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Failed to create service principal" }
         
-        Write-Host "Created new MCP app with ID: $ClientId" -ForegroundColor Green
-    } finally {
-        if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
+        # Expose an API scope so tokens can be requested without admin consent
+        Write-Host "Exposing API..." -ForegroundColor Yellow
+        $scopeId = [System.Guid]::NewGuid().ToString()
+        $apiManifest = @"
+{
+  "oauth2PermissionScopes": [
+    {
+      "id": "$scopeId",
+      "adminConsentDescription": "Allow the application to access MCP Toolkit API on behalf of the signed-in user",
+      "adminConsentDisplayName": "Access MCP Toolkit API",
+      "isEnabled": true,
+      "type": "User",
+      "userConsentDescription": "Allow the application to access MCP Toolkit API on your behalf",
+      "userConsentDisplayName": "Access MCP Toolkit API",
+      "value": "access_as_user"
     }
-} else {
-    Write-Host "Found existing app with ID: $ClientId" -ForegroundColor Green
-    
-    # Make sure service principal exists
-    $spExists = az ad sp show --id $ClientId 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Creating service principal..." -ForegroundColor Yellow
-        az ad sp create --id $ClientId | Out-Null
-    }
-    
-    # Make sure identifier URI is set
-    $appInfo = az ad app show --id $ClientId | ConvertFrom-Json
-    if (-not $appInfo.identifierUris -or $appInfo.identifierUris.Count -eq 0) {
-        Write-Host "Setting identifier URI..." -ForegroundColor Yellow
-        az ad app update --id $ClientId --identifier-uris "api://$ClientId" | Out-Null
-    }
-    
-    # Make sure app role exists
-    if (-not $appInfo.appRoles -or $appInfo.appRoles.Count -eq 0) {
-        Write-Host "Adding app role..." -ForegroundColor Yellow
-        $roleId = [System.Guid]::NewGuid().ToString()
-        $roleManifest = @"
-[
-  {
-    "id": "$roleId",
-    "displayName": "MCP Tool Executor",
-    "description": "Executor role for MCP Tool operations on Cosmos DB",
-    "value": "Mcp.Tool.Executor",
-    "isEnabled": true,
-    "allowedMemberTypes": ["User"]
-  }
-]
-"@
-        $roleFile = [System.IO.Path]::GetTempFileName()
-        $roleManifest | Out-File -FilePath $roleFile -Encoding utf8 -NoNewline
-        az ad app update --id $ClientId --app-roles "@$roleFile" | Out-Null
-        Remove-Item $roleFile -Force
-    }
+  ]
 }
+"@
+        $apiFile = [System.IO.Path]::GetTempFileName()
+        $apiManifest | Out-File -FilePath $apiFile -Encoding utf8 -NoNewline
+        
+        # Get app object ID for Graph API call
+        $appObjectId = az ad app show --id $ClientId --query "id" --output tsv
+        
+        # Use Microsoft Graph API to update
+        $token = az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv
+        $headers = @{
+            "Authorization" = "Bearer $token"
+            "Content-Type" = "application/json"
+        }
+        
+        try {
+            Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/applications/$appObjectId" `
+                -Method PATCH `
+                -Headers $headers `
+                -Body $apiManifest | Out-Null
+            Write-Host "API exposed successfully" -ForegroundColor Green
+        } catch {
+            Write-Host "Warning: Could not expose API automatically" -ForegroundColor Yellow
+        }
+        
+        Remove-Item $apiFile -Force -ErrorAction SilentlyContinue
+        
+        Write-Host "Created new MCP app with ID: $ClientId" -ForegroundColor Green
+        Write-Host "App Name: $appName" -ForegroundColor Green
+    } catch {
+        Write-Error "Failed to create Entra app: $_"
+        exit 1
+    }
 
 # Configure redirect URIs for the Container App
 Write-Host "Configuring redirect URIs..." -ForegroundColor Yellow
@@ -193,6 +180,27 @@ if ($ContainerAppFqdn) {
 # Get Container App managed identity
 Write-Host "Getting managed identity..." -ForegroundColor Yellow
 $ContainerAppName = az containerapp list --resource-group $ResourceGroup --query "[0].name" --output tsv
+
+if (-not $ContainerAppName) {
+    Write-Error "No Container App found in resource group $ResourceGroup"
+    exit 1
+}
+
+# Update Container App with new Entra App Client ID
+Write-Host "Updating Container App with new Entra App Client ID..." -ForegroundColor Yellow
+$tenantId = az account show --query "tenantId" --output tsv
+
+try {
+    az containerapp update `
+        --name $ContainerAppName `
+        --resource-group $ResourceGroup `
+        --set-env-vars "AzureAd__TenantId=$tenantId" "AzureAd__ClientId=$ClientId" "AzureAd__Audience=$ClientId" | Out-Null
+    
+    Write-Host "Container App environment updated with Client ID: $ClientId" -ForegroundColor Green
+} catch {
+    Write-Host "Warning: Could not update Container App automatically. You may need to update it manually." -ForegroundColor Yellow
+    Write-Host "Run: az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars AzureAd__ClientId=$ClientId" -ForegroundColor Yellow
+}
 
 if (-not $ContainerAppName) {
     Write-Error "No Container App found in resource group $ResourceGroup"

@@ -106,11 +106,11 @@ public class MCPProtocolController : ControllerBase
             switch (method?.ToLowerInvariant())
             {
                 case "initialize":
-                    return Ok(new MCPResponse
+                    var initResponse = new
                     {
-                        JsonRpc = "2.0",
-                        Id = id,
-                        Result = new
+                        jsonrpc = "2.0",
+                        id = id,
+                        result = new
                         {
                             protocolVersion = "2024-11-05",
                             capabilities = new
@@ -119,18 +119,21 @@ public class MCPProtocolController : ControllerBase
                             },
                             serverInfo = new
                             {
-                                name = "Azure Cosmos DB MCP Toolkit",
+                                name = "azure-cosmosdb-mcp-toolkit",
                                 version = "1.0.0"
                             }
                         }
-                    });
+                    };
+                    _logger.LogInformation("Returning initialize response: {Response}", JsonSerializer.Serialize(initResponse));
+                    Response.ContentType = "application/json";
+                    return new JsonResult(initResponse);
 
                 case "tools/list":
-                    return Ok(new MCPResponse
+                    var toolsResponse = new
                     {
-                        JsonRpc = "2.0",
-                        Id = id,
-                        Result = new
+                        jsonrpc = "2.0",
+                        id = id,
+                        result = new
                         {
                             tools = new object[]
                             {
@@ -225,7 +228,10 @@ public class MCPProtocolController : ControllerBase
                                 }
                             }
                         }
-                    });
+                    };
+                    _logger.LogInformation("Returning tools/list response with {ToolCount} tools", ((object[])toolsResponse.result.tools).Length);
+                    Response.ContentType = "application/json";
+                    return new JsonResult(toolsResponse);
 
                 case "tools/call":
                     // Check for MCP Tool Executor role before executing tools
@@ -257,11 +263,11 @@ public class MCPProtocolController : ControllerBase
 
                             var result = await ExecuteTool(toolName, toolArgs);
                         
-                            return Ok(new MCPResponse
+                            var toolResponse = new
                             {
-                                JsonRpc = "2.0",
-                                Id = id,
-                                Result = new
+                                jsonrpc = "2.0",
+                                id = id,
+                                result = new
                                 {
                                     content = new[]
                                     {
@@ -272,10 +278,24 @@ public class MCPProtocolController : ControllerBase
                                         }
                                     }
                                 }
-                            });
+                            };
+                            _logger.LogInformation("Returning tools/call response for tool: {ToolName}", toolName);
+                            Response.ContentType = "application/json";
+                            return new JsonResult(toolResponse);
                         }
                     }
                     break;
+                    
+                case "notifications/initialized":
+                    // Client notification that it has successfully initialized
+                    // No response required for notifications
+                    _logger.LogInformation("Client initialized notification received");
+                    return Ok();
+                    
+                case var n when n?.StartsWith("notifications/") == true:
+                    // Other notifications - just acknowledge and continue
+                    _logger.LogInformation("Notification received: {Method}", method);
+                    return Ok();
             }
 
             return BadRequest(new MCPResponse

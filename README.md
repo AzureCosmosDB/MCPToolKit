@@ -2,9 +2,12 @@
 
 A Model Context Protocol (MCP) server that enables AI agents to interact with Azure Cosmos DB through natural language queries. Features enterprise-grade security with Azure Entra ID authentication, document operations, vector search, and schema discovery.
 
-## � Quick Start Guide
+> **✨ NEW: Simplified AI Foundry Integration**  
+> For AI Foundry projects, use the new **one-step deployment** with `scripts/Deploy-All.ps1` which automatically configures authentication and permissions. See [AI Foundry Integration](#ai-foundry-integration) below.
 
-Follow these 3 simple steps to get your MCP Toolkit running:
+## 🚀 Quick Start Guide
+
+Follow these steps to get your MCP Toolkit running:
 
 ### Step 1: Deploy Infrastructure (5 minutes)
 
@@ -233,9 +236,42 @@ To use your deployed MCP server with VS Code, you need to configure it with your
 
 ### Azure AI Foundry Integration
 
-Connect your MCP Toolkit to Azure AI Foundry for AI agent workflows:
+#### One-Step Deployment (RECOMMENDED)
 
-#### Option A: Manual Setup (UI)
+The new `Deploy-All.ps1` script handles everything automatically:
+
+```powershell
+cd scripts
+
+# Deploy with AI Foundry integration
+./Deploy-All.ps1 `
+    -ResourceGroup "cosmos-mcp-toolkit-final" `
+    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<hub>/projects/<project>"
+```
+
+This script automatically:
+- ✅ Builds and deploys the MCP server
+- ✅ Creates Entra app with proper authentication
+- ✅ Assigns Cosmos DB permissions
+- ✅ Configures AI Foundry role assignments
+- ✅ Displays connection configuration
+
+After the script completes, create the MCP connection in AI Foundry:
+
+1. Navigate to AI Foundry project → **Connections**
+2. Click **"New Connection"** → **"Model Context Protocol"**
+3. Configure with values from script output:
+   - **Name**: `cosmos-mcp-toolkit` (or your preferred name)
+   - **MCP Server URL**: From script output
+   - **Authentication**: Connection (Managed Identity)
+   - **Audience/Client ID**: From script output
+
+See `scripts/README.md` for detailed step-by-step instructions.
+
+#### Manual Setup (Alternative)
+
+<details>
+<summary>Click to expand manual setup steps</summary>
 
 1. **Navigate to AI Foundry Portal**
    - Go to [Azure AI Foundry](https://ai.azure.com)
@@ -248,65 +284,31 @@ Connect your MCP Toolkit to Azure AI Foundry for AI agent workflows:
 
 3. **Configure Connection**
    - **Connection Name**: `cosmos-mcp-toolkit`
-   - **Target URL**: Your Container App URL (from Step 4 above)
+   - **Target URL**: Your Container App URL
    - **Authentication**: Select **"Project Managed Identity"**
-   - **Audience**: `api://your-client-id` (Client ID from Step 4)
+   - **Audience**: `api://your-client-id` (Client ID from deployment)
 
-4. **Save and Test** - Your AI agents can now use Cosmos DB MCP tools!
+4. **Assign Permissions**
+   ```powershell
+   # Assign Mcp.Tool.Executor role to AI Foundry MI
+   ./scripts/Setup-AIFoundry-RoleAssignment.ps1 `
+       -ResourceGroup "your-resource-group" `
+       -AIFoundryProjectResourceId "/subscriptions/.../projects/your-project"
+   ```
 
-#### Option B: Automated Setup (Script)
+5. **Save and Test** - Your AI agents can now use Cosmos DB MCP tools!
 
-Use the automated setup script to create the connection:
-
-```bash
-# Make script executable
-chmod +x scripts/Setup-AIFoundry-Connection.sh
-
-# Run the script with your details
-./scripts/Setup-AIFoundry-Connection.sh \
-  --resource-group "your-resource-group-name" \
-  --ai-foundry-project-resource-id "/subscriptions/{subscription-id}/resourceGroups/{resource-group}/providers/Microsoft.CognitiveServices/accounts/{ai-foundry-account}/projects/{project-name}" \
-  --connection-name "cosmos-mcp-toolkit"
+</details>
 ```
 
-**Example:**
-```bash
-./scripts/Setup-AIFoundry-Connection.sh \
-  --resource-group "cosmos-mcp-toolkit-final" \
-  --ai-foundry-project-resource-id "/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/rg-ai-foundry/providers/Microsoft.CognitiveServices/accounts/my-ai-foundry/projects/my-project" \
-  --connection-name "cosmos-mcp"
-```
-
-**What the script does:**
+**What these scripts do:**
 - ✅ Auto-discovers your MCP Toolkit deployment details (Container App URL, Entra App, etc.)
-- ✅ Creates a managed identity connection in AI Foundry
+- ✅ Creates a managed identity connection in AI Foundry (manual UI step still required)
 - ✅ Assigns the `Mcp.Tool.Executor` role to the AI Foundry project's managed identity
 - ✅ Configures authentication with your Entra app
-- ✅ Returns complete connection details in JSON format
 
 **Expected Output:**
-```json
-{
-  "MCP_Toolkit": {
-    "ResourceGroup": "cosmos-mcp-toolkit-final",
-    "ServerURI": "https://mcp-toolkit-app.azurecontainerapps.io",
-    "EntraAppClientId": "12345678-1234-1234-1234-123456789012"
-  },
-  "AI_Foundry": {
-    "ProjectName": "my-project",
-    "ManagedIdentity": {
-      "PrincipalId": "abcd1234-...",
-      "RoleAssignmentId": "xyz789..."
-    }
-  },
-  "Connection": {
-    "Name": "cosmos-mcp-toolkit",
-    "Target": "https://mcp-toolkit-app.azurecontainerapps.io",
-    "Audience": "api://12345678-1234-1234-1234-123456789012",
-    "Status": "Active"
-  }
-}
-```
+The scripts will validate your deployment and provide the necessary configuration details for manual connection setup in the AI Foundry UI.
 
 ### Example Queries
 ```
@@ -437,12 +439,15 @@ Invoke-RestMethod -Uri "https://$appUrl/mcp" -Method Post -Headers $headers -Bod
 ### AI Foundry Integration Commands
 
 ```bash
-# Connect to AI Foundry (Bash/Linux/WSL)
-chmod +x scripts/Setup-AIFoundry-Connection.sh
-./scripts/Setup-AIFoundry-Connection.sh \
-  --resource-group "your-resource-group-name" \
+# Connect to AI Foundry (Discovery + Role Assignment)
+chmod +x scripts/create-aif-mi-connection-assign-role.sh
+./scripts/create-aif-mi-connection-assign-role.sh \
   --ai-foundry-project-resource-id "/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.CognitiveServices/accounts/{account}/projects/{project}" \
   --connection-name "cosmos-mcp-toolkit"
+
+.\scripts\Setup-AIFoundry-RoleAssignment.ps1 \
+  -ResourceGroup "your-resource-group-name" \
+  -AIFoundryProjectResourceId "/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.CognitiveServices/accounts/{account}/projects/{project}"
 ```
 
 ---
