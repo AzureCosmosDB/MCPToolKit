@@ -272,6 +272,8 @@ public class CosmosDbToolsService
         try
         {
             var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
+            // OPENAI_ENDPOINT can be either an AI Foundry project endpoint or legacy Azure OpenAI endpoint
+            // AI Foundry projects expose OpenAI-compatible endpoints (recommended)
             var openaiEndpoint = Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
             var embeddingDeployment = Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
 

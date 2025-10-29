@@ -198,8 +198,10 @@ Invoke-RestMethod -Uri http://localhost:8080/mcp -Method Post -ContentType "appl
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `COSMOS_ENDPOINT` | Cosmos DB account endpoint | `https://myaccount.documents.azure.com:443/` |
-| `OPENAI_ENDPOINT` | AI Foundry project endpoint | `https://myproject.openai.azure.com/` |
+| `OPENAI_ENDPOINT` | AI Foundry project endpoint (or legacy Azure OpenAI) | `https://myproject.openai.azure.com/` |
 | `OPENAI_EMBEDDING_DEPLOYMENT` | Embedding model deployment name | `text-embedding-ada-002` |
+
+> **Note**: `OPENAI_ENDPOINT` refers to your **AI Foundry project endpoint** (recommended) or legacy Azure OpenAI endpoint. AI Foundry projects expose OpenAI-compatible endpoints that work seamlessly with the Azure.AI.OpenAI SDK.
 | `DEV_BYPASS_AUTH` | Bypass auth for development | `true` or `false` |
 
 ### VS Code Integration
