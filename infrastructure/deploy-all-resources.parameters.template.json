@@ -18,19 +18,31 @@
       "value": "mcp-toolkit-user"
     },
     "cosmosEndpoint": {
-      "value": ""
+      "value": "",
+      "metadata": {
+        "description": "Your Cosmos DB endpoint. Example: https://your-cosmos-account.documents.azure.com:443/"
+      }
     },
     "aifProjectEndpoint": {
-      "value": ""
+      "value": "",
+      "metadata": {
+        "description": "AI Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Examples: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/"
+      }
     },
     "embeddingDeploymentName": {
-      "value": "text-embedding-ada-002"
+      "value": "text-embedding-ada-002",
+      "metadata": {
+        "description": "Embedding model deployment name in your AI Foundry project or Azure OpenAI. Common values: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002"
+      }
     },
     "entraAppDisplayName": {
       "value": "Azure Cosmos DB MCP Toolkit"
     },
     "aifProjectResourceId": {
-      "value": ""
+      "value": "",
+      "metadata": {
+        "description": "Optional: AI Foundry project resource ID for assigning Entra App role. Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.MachineLearningServices/workspaces/{project}"
+      }
     }
   }
 }

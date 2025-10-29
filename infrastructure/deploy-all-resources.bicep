@@ -21,10 +21,10 @@ param ownerTag string = 'mcp-toolkit-user'
 @description('Cosmos DB endpoint (external resource)')
 param cosmosEndpoint string
 
-@description('AI Foundry project endpoint (for embeddings and AI models)')
+@description('AI Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Example: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/')
 param aifProjectEndpoint string
 
-@description('Embedding deployment name in AI Foundry project')
+@description('Embedding model deployment name in AI Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002')
 param embeddingDeploymentName string
 
 @description('Container app name')
@@ -127,10 +127,14 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest' // Placeholder image
           name: containerAppName
           env: [
+            // Cosmos DB configuration
             {
               name: 'COSMOS_ENDPOINT'
               value: cosmosEndpoint
             }
+            // AI Foundry / Azure OpenAI configuration
+            // OPENAI_ENDPOINT: AI Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint
+            // The Azure.AI.OpenAI SDK works seamlessly with both AI Foundry and legacy endpoints
             {
               name: 'OPENAI_ENDPOINT'
               value: aifProjectEndpoint
@@ -139,6 +143,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'OPENAI_EMBEDDING_DEPLOYMENT'
               value: embeddingDeploymentName
             }
+            // ASP.NET Core configuration
             {
               name: 'ASPNETCORE_ENVIRONMENT'
               value: 'Production'
@@ -147,10 +152,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'ASPNETCORE_URLS'
               value: 'http://+:8080'
             }
+            // Managed Identity configuration
             {
               name: 'AZURE_CLIENT_ID'
               value: managedIdentity.properties.clientId
             }
+            // Entra App (Azure AD) authentication configuration
             {
               name: 'AzureAd__TenantId'
               value: tenant().tenantId
