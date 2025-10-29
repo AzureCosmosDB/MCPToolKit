@@ -122,6 +122,184 @@ Invoke-RestMethod -Uri "https://$appUrl/mcp" -Method Post -Headers $headers -Bod
 
 ---
 
+## 📋 How to Get Your Configuration Values
+
+After deployment, you'll need these values for testing and AI Foundry integration:
+
+### Quick Commands to Get All Values
+
+```powershell
+# Navigate to your project directory
+cd C:\Cosmos\MCPToolKit
+
+# Set your resource group name
+$resourceGroup = "your-resource-group-name"
+
+# Get all configuration values
+Write-Host "`n=== MCP Toolkit Configuration Values ===" -ForegroundColor Cyan
+
+# 1. MCP Server Endpoint
+$containerAppName = az containerapp list --resource-group $resourceGroup --query "[0].name" -o tsv
+$mcpEndpoint = az containerapp show --name $containerAppName --resource-group $resourceGroup --query "properties.configuration.ingress.fqdn" -o tsv
+Write-Host "`nMCP Server Endpoint:" -ForegroundColor Yellow
+Write-Host "  https://$mcpEndpoint/mcp" -ForegroundColor Green
+
+# 2. Audience / Client ID
+$clientId = az ad app list --display-name "*Azure Cosmos DB MCP Toolkit API*" --query "[0].appId" -o tsv
+Write-Host "`nAudience / Client ID:" -ForegroundColor Yellow
+Write-Host "  $clientId" -ForegroundColor Green
+
+# 3. Tenant ID
+$tenantId = az account show --query "tenantId" -o tsv
+Write-Host "`nTenant ID:" -ForegroundColor Yellow
+Write-Host "  $tenantId" -ForegroundColor Green
+
+# 4. Managed Identity Principal ID (for AI Foundry)
+$identityId = az containerapp show --name $containerAppName --resource-group $resourceGroup --query "identity.userAssignedIdentities" -o json | ConvertFrom-Json
+$principalId = ($identityId.PSObject.Properties.Value)[0].principalId
+Write-Host "`nManaged Identity Principal ID:" -ForegroundColor Yellow
+Write-Host "  $principalId" -ForegroundColor Green
+
+Write-Host "`n========================================" -ForegroundColor Cyan
+```
+
+### Individual Commands
+
+#### 1. Get MCP Server Endpoint
+
+```powershell
+# Get your Container App URL
+$appUrl = az containerapp show `
+    --name "your-container-app-name" `
+    --resource-group "your-resource-group-name" `
+    --query "properties.configuration.ingress.fqdn" `
+    --output tsv
+
+Write-Host "MCP Server Endpoint: https://$appUrl/mcp" -ForegroundColor Green
+```
+
+**Example output:** `https://mcp-toolkit-app.mangostone-b2cd48c2.eastus.azurecontainerapps.io/mcp`
+
+#### 2. Get Audience / Client ID
+
+```powershell
+# Get your Entra App Client ID (Audience)
+$clientId = az ad app list `
+    --display-name "*Azure Cosmos DB MCP Toolkit API*" `
+    --query "[0].appId" `
+    --output tsv
+
+Write-Host "Audience / Client ID: $clientId" -ForegroundColor Green
+```
+
+**Example output:** `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
+
+**What this is used for:**
+- Bearer token audience when calling the MCP API
+- AI Foundry connection configuration
+- VS Code MCP client configuration
+
+#### 3. Get Tenant ID
+
+```powershell
+# Get your Azure AD Tenant ID
+$tenantId = az account show --query "tenantId" --output tsv
+
+Write-Host "Tenant ID: $tenantId" -ForegroundColor Green
+```
+
+**Example output:** `72f988bf-86f1-41af-91ab-2d7cd011db47`
+
+#### 4. Get Managed Identity Principal ID
+
+```powershell
+# Get Container App Managed Identity (for AI Foundry role assignments)
+$containerApp = az containerapp show `
+    --name "your-container-app-name" `
+    --resource-group "your-resource-group-name" | ConvertFrom-Json
+
+$identityId = ($containerApp.identity.userAssignedIdentities.PSObject.Properties.Name)[0]
+$identity = az identity show --ids $identityId | ConvertFrom-Json
+
+Write-Host "Managed Identity Principal ID: $($identity.principalId)" -ForegroundColor Green
+```
+
+**Example output:** `12345678-90ab-cdef-1234-567890abcdef`
+
+---
+
+## 🤖 Configuring AI Foundry MCP Connection
+
+After deployment, configure your AI Foundry project to use the MCP Toolkit:
+
+### Step 1: Navigate to AI Foundry
+
+1. Go to [Azure AI Foundry Portal](https://ai.azure.com)
+2. Select your project
+3. Navigate to **Tools** → **Connections**
+
+### Step 2: Create MCP Connection
+
+1. Click **"New Connection"** or **"Connect a tool"**
+2. Select **"Model Context Protocol (MCP)"** or **"Custom"** tab
+3. Fill in the configuration:
+
+| Field | Value | How to Get |
+|-------|-------|------------|
+| **Connection Name** | `cosmos-mcp-toolkit` | Your choice (any name) |
+| **MCP Server URL** | `https://your-app.azurecontainerapps.io/mcp` | Run command above to get endpoint |
+| **Authentication Method** | **Connection (Managed Identity)** | Select from dropdown |
+| **Audience / Client ID** | `a1b2c3d4-e5f6-...` | Run command above to get Client ID |
+
+### Step 3: Test the Connection
+
+1. Click **"Test Connection"** in AI Foundry
+2. You should see: ✅ Connection successful
+3. View available tools: `list_databases`, `list_collections`, `get_recent_documents`, etc.
+
+### Step 4: Use in AI Agents
+
+Once connected, your AI agents can use natural language to query Cosmos DB:
+
+**Example prompts:**
+- "Show me the databases in Cosmos DB"
+- "List collections in the 'customers' database"
+- "Find documents in the 'orders' container that match 'premium customer'"
+- "Search for products similar to 'wireless headphones'"
+
+### Troubleshooting AI Foundry Connection
+
+If the connection fails:
+
+1. **Verify Managed Identity has permissions:**
+```powershell
+# Check if MI has the Mcp.Tool.Executor role
+$appId = az ad app list --display-name "*Azure Cosmos DB MCP Toolkit API*" --query "[0].appId" -o tsv
+$spId = az ad sp list --filter "appId eq '$appId'" --query "[0].id" -o tsv
+
+# Get AI Foundry project MI
+$aifProject = "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<project-name>"
+$aifMI = az ml workspace show --ids $aifProject --query "identity.principalId" -o tsv
+
+# List role assignments
+az rest --method GET --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$aifMI/appRoleAssignments"
+```
+
+2. **Assign the role manually if needed:**
+```powershell
+.\scripts\Setup-AIFoundry-RoleAssignment.ps1 `
+    -AIFoundryProjectResourceId "<your-aif-project-resource-id>" `
+    -EntraAppClientId "<your-client-id>"
+```
+
+3. **Verify the MCP endpoint is accessible:**
+```powershell
+# Test health endpoint
+Invoke-RestMethod -Uri "https://your-app.azurecontainerapps.io/health"
+```
+
+---
+
 ## Prerequisites
 
 Before starting, make sure you have:
