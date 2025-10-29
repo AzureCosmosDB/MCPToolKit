@@ -31,6 +31,7 @@ builder.WebHost.ConfigureKestrel(options =>
 var azureAd = builder.Configuration.GetSection("AzureAd");
 var tenantId = azureAd["TenantId"];
 var clientId = azureAd["ClientId"];
+var audienceConfig = azureAd["Audience"];
 
 // Check if authentication should be bypassed for development
 var devBypassAuth = Environment.GetEnvironmentVariable("DEV_BYPASS_AUTH") == "true" || 
@@ -39,6 +40,22 @@ var isDevelopment = builder.Environment.IsDevelopment();
 
 if (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(clientId))
 {
+    // Build list of valid audiences
+    var validAudiences = new List<string> { clientId, $"api://{clientId}" };
+    
+    // Add audiences from configuration (supports comma-separated values)
+    if (!string.IsNullOrEmpty(audienceConfig))
+    {
+        var configuredAudiences = audienceConfig.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var aud in configuredAudiences)
+        {
+            if (!validAudiences.Contains(aud))
+            {
+                validAudiences.Add(aud);
+            }
+        }
+    }
+    
     // Add JWT Bearer authentication only if configuration is available
     builder.Services
         .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -52,7 +69,7 @@ if (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(c
                 ValidIssuer = $"https://login.microsoftonline.com/{tenantId}/v2.0",
 
                 ValidateAudience = true,
-                ValidAudiences = new[] { clientId, $"api://{clientId}" },
+                ValidAudiences = validAudiences,
 
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
