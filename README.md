@@ -42,19 +42,13 @@ This automatically:
 Build and deploy your application:
 
 ```powershell
-# Replace ALL values with your actual resource names from Step 1
-.\scripts\Quick-Deploy.ps1 `
-    -ResourceGroup "your-resource-group-name" `
-    -ContainerAppName "your-container-app-name" `
-    -RegistryName "your-registry-name"
+# Replace with your actual resource group name from Step 1
+.\scripts\Deploy-All.ps1 -ResourceGroup "your-resource-group-name"
 ```
 
 **Example:**
 ```powershell
-.\scripts\Quick-Deploy.ps1 `
-    -ResourceGroup "rg-myproject-mcp" `
-    -ContainerAppName "mcp-toolkit-xyz123" `
-    -RegistryName "mcpregistryabc456"
+.\scripts\Deploy-All.ps1 -ResourceGroup "rg-myproject-mcp"
 ```
 
 > 💡 **Tip:** Find your resource names in the Azure Portal or by running:
