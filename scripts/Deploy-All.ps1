@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     Complete deployment script for Azure Cosmos DB MCP Toolkit with AI Foundry integration
