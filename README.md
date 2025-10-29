@@ -23,40 +23,50 @@ This creates:
 
 **Note:** The Entra ID app will be created in Step 2 for better reliability.
 
-### Step 2: Configure Permissions (2 minutes)
+### Step 2: Deploy Everything (5 minutes)
 
-Run the automated setup script to create the Entra ID app and configure all permissions:
+Run the complete deployment script - it builds, deploys, and configures everything:
 
 ```powershell
-.\scripts\Setup-Permissions.ps1 -ResourceGroup "your-resource-group-name"
+.\scripts\Deploy-All.ps1 -ResourceGroup "your-resource-group-name"
 ```
 
 This automatically:
+- ✅ Builds and pushes the Docker image
 - ✅ Creates the Entra ID app with MCP Tool Executor role
-- ✅ Assigns you to the MCP role
-- ✅ Configures Cosmos DB read permissions
-- ✅ Configures AI Foundry permissions (for embeddings)
-
-### Step 3: Deploy Application (3 minutes)
-
-Build and deploy your application:
-
-```powershell
-# Replace with your actual resource group name from Step 1
-.\scripts\Deploy-All.ps1 -ResourceGroup "your-resource-group-name"
-```
+- ✅ Assigns you to the MCP role (you can use it immediately!)
+- ✅ Configures Cosmos DB and Azure Container Registry permissions
+- ✅ Deploys and configures the Container App
+- ✅ Displays all configuration values you need
 
 **Example:**
 ```powershell
 .\scripts\Deploy-All.ps1 -ResourceGroup "rg-myproject-mcp"
 ```
 
+**With AI Foundry integration:**
+```powershell
+.\scripts\Deploy-All.ps1 `
+    -ResourceGroup "rg-myproject-mcp" `
+    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account-name>"
+```
+
+**What Deploy-All.ps1 does for you:**
+- ✅ Builds and pushes Docker image to Azure Container Registry
+- ✅ Creates Entra App with authentication configuration
+- ✅ Creates Service Principal and configures redirect URIs
+- ✅ Assigns your user account to the MCP role (you can use it immediately!)
+- ✅ Configures all Azure permissions (Cosmos DB, ACR)
+- ✅ Deploys and configures the Container App
+
+> � **That's it!** One script does everything. No need to run multiple scripts or configure permissions separately.
+
 > 💡 **Tip:** Find your resource names in the Azure Portal or by running:
 > ```powershell
 > az containerapp list --resource-group "your-resource-group-name" --query "[].{Name:name, Registry:properties.configuration.registries[0].server}" --output table
 > ```
 
-### Step 4: Get Configuration Values (1 minute)
+### Step 3: Get Configuration Values (1 minute)
 
 After deployment, get the values you'll need for testing and configuration:
 
@@ -76,7 +86,11 @@ Write-Host "App URL: https://$appUrl" -ForegroundColor Green
 
 **Save these values** - you'll need them for testing and VS Code integration.
 
-### Step 5: Test Your Setup
+---
+
+## 🧪 Step 4: Test Your Deployment
+
+Now that everything is deployed, test that it works:
 
 #### Option A: Test via Web UI (Easiest)
 
@@ -118,6 +132,64 @@ Invoke-RestMethod -Uri "https://$appUrl/mcp" -Method Post -Headers $headers -Bod
     ]
   }
 }
+```
+
+---
+
+## 🤖 AI Foundry Integration
+
+To use the MCP Toolkit with Azure AI Foundry (for AI Agents):
+
+### Step 1: Create AI Foundry Connection
+
+1. Go to [AI Foundry Studio](https://ai.azure.com)
+2. Open your AI Foundry project
+3. Navigate to **Settings** → **Connections**
+4. Click **+ New connection** → **Model Context Protocol tool**
+5. Configure the connection:
+   - **Name**: Give it a descriptive name (e.g., `cosmosdb-mcp`)
+   - **Remote MCP Server endpoint**: Your Container App URL + `/mcp` (e.g., `https://mcp-toolkit-app.mangostone-b2cd48c2.eastus.azurecontainerapps.io/mcp`)
+   - **Authentication**: Select **Microsoft Entra**
+   - **Type**: Select **Project Managed Identity**
+   - **Audience**: Your Entra App Client ID (e.g., `8386065d-82c4-4103-987b-e64256e2de2f`)
+6. Click **Connect**
+
+### Step 2: Assign AI Foundry Managed Identity to MCP Role
+
+Run Deploy-All.ps1 with your AI Foundry project resource ID to automatically assign the role:
+
+```powershell
+.\scripts\Deploy-All.ps1 `
+    -ResourceGroup "your-resource-group-name" `
+    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account-name>"
+```
+
+**Or** run the standalone script:
+
+```powershell
+.\scripts\Setup-AIFoundry-RoleAssignment.ps1 `
+    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account-name>" `
+    -EntraAppClientId "your-client-id"
+```
+
+### ⚠️ Important: Token Propagation Delay
+
+After assigning the AI Foundry managed identity to the MCP role, **Entra ID tokens can take 15-60 minutes to include the new role claims**. 
+
+**If you get authentication errors immediately after setup:**
+- ✅ **Wait 15-60 minutes** for token cache to refresh with new role assignments
+- ✅ **Or recreate the AI Foundry connection** to force a fresh token
+- ✅ Verify the role assignment was successful in Azure Portal → Entra ID → App Registrations
+
+This is normal Entra ID behavior and not a bug in the toolkit.
+
+### Step 3: Test with Python Client
+
+Once the token has updated (15-60 minutes), test the integration:
+
+```powershell
+cd client
+python agents_cosmosdb_mcp.py
 ```
 
 ---
@@ -553,12 +625,14 @@ az ad app role assignment create --id "your-entra-app-client-id" --principal "us
 ### Common Issues
 
 **"403 Forbidden" when testing tools**
-- Run the permissions setup script: `.\scripts\Setup-Permissions.ps1 -ResourceGroup "your-rg"`
+- Verify your user is assigned to the MCP role: Run Deploy-All.ps1 which automatically assigns you
 - Make sure your Cosmos DB account exists and is accessible
+- Check the deployment output showed your user was assigned successfully
 
 **"401 Unauthorized" when testing**
 - Make sure you have the `Mcp.Tool.Executor` role assigned
 - Check that your access token is valid and not expired
+- Re-run Deploy-All.ps1 to ensure all permissions are configured
 
 **"App shows old version after deployment"**
 - The deployment script now uses `--no-cache` to force a fresh build
