@@ -35,7 +35,7 @@ This automatically:
 - ✅ Creates the Entra ID app with MCP Tool Executor role
 - ✅ Assigns you to the MCP role
 - ✅ Configures Cosmos DB read permissions
-- ✅ Configures Azure OpenAI permissions
+- ✅ Configures AI Foundry permissions (for embeddings)
 
 ### Step 3: Deploy Application (3 minutes)
 
@@ -133,15 +133,17 @@ Invoke-RestMethod -Uri "https://$appUrl/mcp" -Method Post -Headers $headers -Bod
 Before starting, make sure you have:
 - Azure subscription with Contributor access
 - Azure Cosmos DB account (existing)
-- Azure OpenAI service (for vector search, optional)
+- AI Foundry project with embedding model deployed (for vector search, optional)
 - Docker Desktop installed
 - Azure CLI installed and logged in (`az login`)
+
+> **Note**: This toolkit works with **AI Foundry** (Azure's modern AI platform). Legacy standalone Azure OpenAI resources are also supported but AI Foundry is recommended.
 
 ## What You Get
 
 ### Features
 - 🔍 **Document Operations** - Query documents, full-text search, schema discovery
-- 🧠 **AI-Powered Vector Search** - Semantic search using Azure OpenAI embeddings  
+- 🧠 **AI-Powered Vector Search** - Semantic search using AI Foundry embeddings  
 - 🔐 **Enterprise Security** - Azure Entra ID authentication with role-based access control
 - 🐳 **Production Ready** - Containerized deployment to Azure Container Apps
 
@@ -195,9 +197,9 @@ Invoke-RestMethod -Uri http://localhost:8080/mcp -Method Post -ContentType "appl
 ### Environment Variables
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `COSMOS_ENDPOINT` | Cosmos DB endpoint | `https://myaccount.documents.azure.com:443/` |
-| `OPENAI_ENDPOINT` | Azure OpenAI endpoint | `https://myopenai.openai.azure.com/` |
-| `OPENAI_EMBEDDING_DEPLOYMENT` | Embedding model deployment | `text-embedding-ada-002` |
+| `COSMOS_ENDPOINT` | Cosmos DB account endpoint | `https://myaccount.documents.azure.com:443/` |
+| `OPENAI_ENDPOINT` | AI Foundry project endpoint | `https://myproject.openai.azure.com/` |
+| `OPENAI_EMBEDDING_DEPLOYMENT` | Embedding model deployment name | `text-embedding-ada-002` |
 | `DEV_BYPASS_AUTH` | Bypass auth for development | `true` or `false` |
 
 ### VS Code Integration
@@ -245,8 +247,8 @@ cd scripts
 
 # Deploy with AI Foundry integration
 ./Deploy-All.ps1 `
-    -ResourceGroup "cosmos-mcp-toolkit-final" `
-    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<hub>/projects/<project>"
+    -ResourceGroup "<your-resource-group-name>" `
+    -AIFoundryProjectResourceId "/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.MachineLearningServices/workspaces/<hub-name>/projects/<project-name>"
 ```
 
 This script automatically:
@@ -327,20 +329,20 @@ The scripts will validate your deployment and provide the necessary configuratio
 
 ### Azure Resource Permissions
 
-The MCP Toolkit requires specific Azure roles for accessing Cosmos DB and OpenAI services:
+The MCP Toolkit requires specific Azure roles for accessing Cosmos DB and AI Foundry services:
 
 #### Cosmos DB Permissions (Choose One)
 
 **Option 1: Cosmos DB Built-in Data Reader (Recommended)**
 ```powershell
 # Get managed identity ID
-$managedIdentityId = az containerapp show --name "mcp-toolkit-app" --resource-group "your-rg" --query "identity.principalId" --output tsv
+$managedIdentityId = az containerapp show --name "<your-container-app-name>" --resource-group "<your-resource-group-name>" --query "identity.principalId" --output tsv
 
 # Assign to Cosmos DB
-az cosmosdb sql role assignment create --account-name "your-cosmos-account" --resource-group "cosmos-rg" --scope "/" --principal-id $managedIdentityId --role-definition-name "Cosmos DB Built-in Data Reader"
+az cosmosdb sql role assignment create --account-name "<your-cosmos-account-name>" --resource-group "<your-resource-group-name>" --scope "/" --principal-id $managedIdentityId --role-definition-name "Cosmos DB Built-in Data Reader"
 ```
 
-#### Azure OpenAI Permissions (For Vector Search)
+#### AI Foundry Permissions (For Vector Search)
 
 **Required Role: Cognitive Services OpenAI User**
 ```powershell
@@ -348,7 +350,7 @@ az cosmosdb sql role assignment create --account-name "your-cosmos-account" --re
 $subscriptionId = az account show --query "id" --output tsv
 
 # Assign to Managed Identity
-az role assignment create --assignee $managedIdentityId --role "Cognitive Services OpenAI User" --scope "/subscriptions/$subscriptionId/resourceGroups/openai-rg/providers/Microsoft.CognitiveServices/accounts/openai-account"
+az role assignment create --assignee $managedIdentityId --role "Cognitive Services OpenAI User" --scope "/subscriptions/$subscriptionId/resourceGroups/<your-resource-group-name>/providers/Microsoft.MachineLearningServices/workspaces/<hub-name>/projects/<project-name>"
 ```
 
 ### Manual Authentication Setup

@@ -4,7 +4,7 @@
     Complete deployment script for Azure Cosmos DB MCP Toolkit with AI Foundry integration
 .DESCRIPTION
     This script performs a complete end-to-end deployment:
-    1. Creates/updates Azure resources (Container App, Cosmos DB, OpenAI)
+    1. Creates/updates Azure resources (Container App, Cosmos DB, AI Foundry)
     2. Creates Entra app with proper roles for AI Foundry managed identity authentication
     3. Assigns necessary permissions (Cosmos DB, Entra app roles)
     4. Deploys the MCP server container

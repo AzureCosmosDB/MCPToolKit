@@ -21,11 +21,11 @@ param ownerTag string = 'mcp-toolkit-user'
 @description('Cosmos DB endpoint (external resource)')
 param cosmosEndpoint string
 
-@description('Azure OpenAI endpoint (external resource)')
-param openaiEndpoint string
+@description('AI Foundry project endpoint (for embeddings and AI models)')
+param aifProjectEndpoint string
 
-@description('Azure OpenAI embedding deployment name')
-param openaiEmbeddingDeployment string
+@description('Embedding deployment name in AI Foundry project')
+param embeddingDeploymentName string
 
 @description('Container app name')
 param containerAppName string = '${resourcePrefix}-app'
@@ -133,11 +133,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'OPENAI_ENDPOINT'
-              value: openaiEndpoint
+              value: aifProjectEndpoint
             }
             {
               name: 'OPENAI_EMBEDDING_DEPLOYMENT'
-              value: openaiEmbeddingDeployment
+              value: embeddingDeploymentName
             }
             {
               name: 'ASPNETCORE_ENVIRONMENT'
