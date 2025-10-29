@@ -20,10 +20,10 @@
     "cosmosEndpoint": {
       "value": ""
     },
-    "openaiEndpoint": {
+    "aifProjectEndpoint": {
       "value": ""
     },
-    "openaiEmbeddingDeployment": {
+    "embeddingDeploymentName": {
       "value": "text-embedding-ada-002"
     },
     "entraAppDisplayName": {

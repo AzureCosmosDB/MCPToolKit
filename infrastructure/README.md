@@ -15,7 +15,9 @@ The infrastructure templates create only the necessary resources for running the
 
 You must already have:
 - **Azure Cosmos DB** account with your data
-- **Azure OpenAI** service with text-embedding-ada-002 deployment
+- **AI Foundry project** with an embedding model deployment (e.g., text-embedding-ada-002 or text-embedding-3-small)
+
+> **Note**: The AI Foundry project endpoint follows the format: `https://<your-project-name>.<region>.api.azureml.ms/` or the inference endpoint from your AI Foundry project settings. You can find this in the AI Foundry portal under your project's Settings → Endpoints.
 
 ## Deployment Options
 
@@ -52,8 +54,8 @@ az deployment group create \
   --parameters \
     "principalId=$principalId" \
     "cosmosEndpoint=https://yourcosmosdb.documents.azure.com:443/" \
-    "openaiEndpoint=https://youropenai.openai.azure.com/" \
-    "openaiEmbeddingDeployment=text-embedding-ada-002"
+    "aifProjectEndpoint=https://your-aif-project.openai.azure.com/" \
+    "embeddingDeploymentName=text-embedding-ada-002"
 ```
 
 ## Post-Deployment Steps

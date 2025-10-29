@@ -7,9 +7,9 @@
     1. Creates or updates the Entra ID application with MCP Tool Executor role
     2. Assigns the current user (or specified user) to the MCP role
     3. Configures Cosmos DB "Built-in Data Reader" role for the managed identity
-    4. Configures Azure OpenAI "Cognitive Services OpenAI User" role for the managed identity
+    4. Configures AI Foundry "Cognitive Services OpenAI User" role for the managed identity (optional)
     
-    This script should be run AFTER deploying the infrastructure with main.bicep.
+    This script should be run AFTER deploying the infrastructure with deploy-all-resources.bicep.
     
 .PARAMETER ResourceGroup
     The Azure resource group name where the infrastructure was deployed
@@ -282,35 +282,85 @@ try {
     Write-Host "Note: Cosmos DB configuration may already exist or not available" -ForegroundColor Yellow
 }
 
-# Find and configure Azure OpenAI
-Write-Host "Configuring Azure OpenAI permissions..." -ForegroundColor Yellow
+# Find and configure AI Foundry or Azure OpenAI
+Write-Host "Configuring AI Foundry / Azure OpenAI permissions..." -ForegroundColor Yellow
 try {
-    $OpenAIAccountsJson = az cognitiveservices account list --query "[?kind=='OpenAI']" 2>$null
-    if ($OpenAIAccountsJson) {
-        $OpenAIAccounts = $OpenAIAccountsJson | ConvertFrom-Json
-        if ($OpenAIAccounts -and $OpenAIAccounts.Count -gt 0) {
-            $OpenAIAccount = $OpenAIAccounts[0]
+    # First try to find AI Foundry projects
+    $AIFoundryProjectsJson = az ml workspace list --resource-type project 2>$null
+    if ($AIFoundryProjectsJson) {
+        $AIFoundryProjects = $AIFoundryProjectsJson | ConvertFrom-Json
+        if ($AIFoundryProjects -and $AIFoundryProjects.Count -gt 0) {
+            $AIProject = $AIFoundryProjects[0]
             $SubscriptionId = az account show --query "id" --output tsv
-            $OpenAIScope = "/subscriptions/$SubscriptionId/resourceGroups/$($OpenAIAccount.resourceGroup)/providers/Microsoft.CognitiveServices/accounts/$($OpenAIAccount.name)"
+            $AIProjectScope = "/subscriptions/$SubscriptionId/resourceGroups/$($AIProject.resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/$($AIProject.name)"
             
             az role assignment create `
                 --assignee $ManagedIdentityId `
                 --role "Cognitive Services OpenAI User" `
-                --scope $OpenAIScope 2>$null | Out-Null
+                --scope $AIProjectScope 2>$null | Out-Null
             
             if ($LASTEXITCODE -eq 0) {
-                Write-Host "Azure OpenAI permissions configured for: $($OpenAIAccount.name)" -ForegroundColor Green
+                Write-Host "AI Foundry permissions configured for: $($AIProject.name)" -ForegroundColor Green
             } else {
-                Write-Host "Azure OpenAI permissions may already be configured" -ForegroundColor Yellow
+                Write-Host "AI Foundry permissions may already be configured" -ForegroundColor Yellow
             }
         } else {
-            Write-Host "No Azure OpenAI found - skip this step" -ForegroundColor Yellow
+            # Fallback to legacy Azure OpenAI
+            $OpenAIAccountsJson = az cognitiveservices account list --query "[?kind=='OpenAI']" 2>$null
+            if ($OpenAIAccountsJson) {
+                $OpenAIAccounts = $OpenAIAccountsJson | ConvertFrom-Json
+                if ($OpenAIAccounts -and $OpenAIAccounts.Count -gt 0) {
+                    $OpenAIAccount = $OpenAIAccounts[0]
+                    $SubscriptionId = az account show --query "id" --output tsv
+                    $OpenAIScope = "/subscriptions/$SubscriptionId/resourceGroups/$($OpenAIAccount.resourceGroup)/providers/Microsoft.CognitiveServices/accounts/$($OpenAIAccount.name)"
+                    
+                    az role assignment create `
+                        --assignee $ManagedIdentityId `
+                        --role "Cognitive Services OpenAI User" `
+                        --scope $OpenAIScope 2>$null | Out-Null
+                    
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "Azure OpenAI permissions configured for: $($OpenAIAccount.name)" -ForegroundColor Green
+                    } else {
+                        Write-Host "Azure OpenAI permissions may already be configured" -ForegroundColor Yellow
+                    }
+                } else {
+                    Write-Host "No AI Foundry or Azure OpenAI found - skip this step" -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "No AI Foundry or Azure OpenAI found - skip this step" -ForegroundColor Yellow
+            }
         }
     } else {
-        Write-Host "No Azure OpenAI found - skip this step" -ForegroundColor Yellow
+        Write-Host "No AI Foundry found - checking for legacy Azure OpenAI..." -ForegroundColor Yellow
+        # Fallback to legacy Azure OpenAI
+        $OpenAIAccountsJson = az cognitiveservices account list --query "[?kind=='OpenAI']" 2>$null
+        if ($OpenAIAccountsJson) {
+            $OpenAIAccounts = $OpenAIAccountsJson | ConvertFrom-Json
+            if ($OpenAIAccounts -and $OpenAIAccounts.Count -gt 0) {
+                $OpenAIAccount = $OpenAIAccounts[0]
+                $SubscriptionId = az account show --query "id" --output tsv
+                $OpenAIScope = "/subscriptions/$SubscriptionId/resourceGroups/$($OpenAIAccount.resourceGroup)/providers/Microsoft.CognitiveServices/accounts/$($OpenAIAccount.name)"
+                
+                az role assignment create `
+                    --assignee $ManagedIdentityId `
+                    --role "Cognitive Services OpenAI User" `
+                    --scope $OpenAIScope 2>$null | Out-Null
+                
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Azure OpenAI permissions configured for: $($OpenAIAccount.name)" -ForegroundColor Green
+                } else {
+                    Write-Host "Azure OpenAI permissions may already be configured" -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "No Azure OpenAI found - skip this step" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "No AI Foundry or Azure OpenAI found - skip this step" -ForegroundColor Yellow
+        }
     }
 } catch {
-    Write-Host "Note: Azure OpenAI configuration may already exist or not available" -ForegroundColor Yellow
+    Write-Host "Note: AI Foundry / Azure OpenAI configuration may already exist or not available" -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -318,7 +368,7 @@ Write-Host "Setup Complete!" -ForegroundColor Green
 Write-Host "Summary:" -ForegroundColor Cyan
 Write-Host "- User can now access MCP tools: $UserEmail" -ForegroundColor Gray
 Write-Host "- Managed identity has Cosmos DB read access" -ForegroundColor Gray
-Write-Host "- Managed identity has Azure OpenAI access" -ForegroundColor Gray
+Write-Host "- Managed identity has AI Foundry / Azure OpenAI access" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Test access:" -ForegroundColor Cyan
 Write-Host "az account get-access-token --resource api://$ClientId" -ForegroundColor Gray
