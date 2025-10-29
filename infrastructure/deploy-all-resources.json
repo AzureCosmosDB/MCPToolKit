@@ -54,16 +54,16 @@
         "description": "Cosmos DB endpoint (external resource)"
       }
     },
-    "openaiEndpoint": {
+    "aifProjectEndpoint": {
       "type": "string",
       "metadata": {
-        "description": "Azure OpenAI endpoint (external resource)"
+        "description": "AI Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Example: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/"
       }
     },
-    "openaiEmbeddingDeployment": {
+    "embeddingDeploymentName": {
       "type": "string",
       "metadata": {
-        "description": "Azure OpenAI embedding deployment name"
+        "description": "Embedding model deployment name in AI Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002"
       }
     },
     "containerAppName": {
@@ -163,11 +163,11 @@
                 },
                 {
                   "name": "OPENAI_ENDPOINT",
-                  "value": "[parameters('openaiEndpoint')]"
+                  "value": "[parameters('aifProjectEndpoint')]"
                 },
                 {
                   "name": "OPENAI_EMBEDDING_DEPLOYMENT",
-                  "value": "[parameters('openaiEmbeddingDeployment')]"
+                  "value": "[parameters('embeddingDeploymentName')]"
                 },
                 {
                   "name": "ASPNETCORE_ENVIRONMENT",
