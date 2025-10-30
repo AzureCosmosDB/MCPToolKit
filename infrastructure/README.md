@@ -41,9 +41,6 @@ cd scripts
 ### Option 3: Manual Bicep Deployment
 
 ```powershell
-# Get your user object ID
-$principalId = az ad signed-in-user show --query id -o tsv
-
 # Create resource group
 az group create --name "mcp-toolkit-rg" --location "East US"
 
@@ -52,7 +49,6 @@ az deployment group create \
   --resource-group "mcp-toolkit-rg" \
   --template-file "deploy-all-resources.bicep" \
   --parameters \
-    "principalId=$principalId" \
     "cosmosEndpoint=https://yourcosmosdb.documents.azure.com:443/" \
     "aifProjectEndpoint=https://your-aif-project.openai.azure.com/" \
     "embeddingDeploymentName=text-embedding-ada-002"

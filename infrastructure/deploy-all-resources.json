@@ -23,24 +23,6 @@
         "description": "Location for all resources"
       }
     },
-    "principalId": {
-      "type": "string",
-      "metadata": {
-        "description": "The Azure AD Object ID of the user/service principal that will have access to the external resources (for manual RBAC assignment)"
-      }
-    },
-    "principalType": {
-      "type": "string",
-      "defaultValue": "User",
-      "allowedValues": [
-        "User",
-        "ServicePrincipal",
-        "Group"
-      ],
-      "metadata": {
-        "description": "The type of principal (User, ServicePrincipal, or Group) for external resource access"
-      }
-    },
     "cosmosEndpoint": {
       "type": "string",
       "metadata": {
