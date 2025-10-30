@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "16160672601455077248"
+      "templateHash": "18069607232906123109"
     }
   },
   "parameters": {
@@ -103,9 +103,6 @@
         "description": "Azure OpenAI embedding deployment name"
       }
     }
-  },
-  "variables": {
-    "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
   },
   "resources": [
     {
@@ -253,21 +250,6 @@
       "tags": "[parameters('commonTags')]",
       "dependsOn": [
         "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
-        "[resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "apiVersion": "2022-04-01",
-      "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', parameters('containerRegistryName'))]",
-      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), resourceId('Microsoft.App/containerApps', parameters('containerAppName')), variables('acrPullRoleId'))]",
-      "properties": {
-        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPullRoleId'))]",
-        "principalId": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-03-01', 'full').identity.principalId]",
-        "principalType": "ServicePrincipal"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.App/containerApps', parameters('containerAppName'))]",
         "[resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName'))]"
       ]
     }
