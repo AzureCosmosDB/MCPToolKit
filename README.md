@@ -88,19 +88,21 @@ Or call the health endpoint:
 curl https://YOUR-CONTAINER-APP.azurecontainerapps.io/health
 ```
 
-### Step 4: Get Connection Details
+All connection details are saved in `deployment-info.json` for reference.
 
-All connection details are saved in `deployment-info.json`:
-
-```powershell
-Get-Content deployment-info.json | ConvertFrom-Json | Format-List
-```
-
-Use these values to configure your AI agent or application.
-
-## AI Foundry Integration (Optional)
+## AI Foundry Integration  
 
 To connect your MCP server to an Azure AI Foundry project:
+
+**Option 1: Using Resource ID**
+
+```powershell
+.\scripts\Setup-AIFoundry-Connection.ps1 `
+  -AIFoundryProjectResourceId "/subscriptions/xxx/resourceGroups/my-rg/providers/Microsoft.CognitiveServices/accounts/my-hub/projects/my-project" `
+  -ConnectionName "cosmos-mcp-connection"
+```
+
+**Option 2: Using Project Name**
 
 ```powershell
 .\scripts\Setup-AIFoundry-Connection.ps1 `
@@ -109,6 +111,53 @@ To connect your MCP server to an Azure AI Foundry project:
 ```
 
 This assigns the necessary roles for AI Foundry to call your MCP server.
+
+### Use Azure Cosmos DB MCP in AI Foundry
+
+**Via Azure AI Foundry UI:**
+
+1. Navigate to your Azure AI Foundry project
+2. Go to **Build** → **Create agent**  
+3. Select the **+ Add** in the tools section
+4. Select the **Catalog** tab 
+5. Choose **Azure Cosmos DB** as the tool and click **Create**
+6. Select **Microsoft Entra** → **Project Managed Identity** as the authentication method
+7. Enter your `<entra-app-client-id>` as the audience. This is the value from the deployment output.
+   > [!TIP]
+   > Find the `ENTRA_APP_CLIENT_ID` value in your `deployment-info.json` file or run:
+   > ```powershell
+   > Get-Content deployment-info.json | ConvertFrom-Json | Select-Object -ExpandProperty entraAppClientId
+   > ```
+8. Add instructions to your agent:
+
+    ```
+    You are a helpful agent that can use MCP tools to assist users. Use the available MCP tools to answer questions and perform tasks.
+    "parameters":      
+      {
+            "databaseId": "<DATABASE_NAME>",
+            "containerId": "<CONTAINER_NAME>"
+      },
+    "learn": true
+    ```
+
+9. Test MCP server in AI Foundry Playground using natural language queries:
+    ```
+    List all databases in my Cosmos DB account
+    ```
+
+    ```
+    Show me the latest 10 documents from the products container
+    ```
+
+    ```
+    What's the schema of the customers container?
+    ```
+
+    ```
+    Search for documents where the name contains "Azure"
+    ```
+
+> **Note**: The MCP server provides secure access to Azure Cosmos DB data through conversational AI interfaces.
 
 **Python Test Client:**
 
