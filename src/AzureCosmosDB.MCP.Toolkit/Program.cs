@@ -91,10 +91,21 @@ if (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(c
                     // Check for custom header as fallback
                     if (string.IsNullOrEmpty(context.Token))
                     {
+                        // Try multiple header names since Azure Container Apps may strip some
                         if (context.Request.Headers.TryGetValue("X-MS-TOKEN-AAD-ACCESS-TOKEN", out var tokenValue))
                         {
                             context.Token = tokenValue;
-                            logger.LogInformation("Token retrieved from X-MS-TOKEN-AAD-ACCESS-TOKEN header (Authorization header was stripped by ingress)");
+                            logger.LogInformation("Token retrieved from X-MS-TOKEN-AAD-ACCESS-TOKEN header");
+                        }
+                        else if (context.Request.Headers.TryGetValue("X-Access-Token", out var customTokenValue))
+                        {
+                            context.Token = customTokenValue;
+                            logger.LogInformation("Token retrieved from X-Access-Token header");
+                        }
+                        else if (context.Request.Headers.TryGetValue("X-Auth-Token", out var authTokenValue))
+                        {
+                            context.Token = authTokenValue;
+                            logger.LogInformation("Token retrieved from X-Auth-Token header");
                         }
                     }
                     

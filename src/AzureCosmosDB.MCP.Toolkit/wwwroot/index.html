@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -273,7 +273,7 @@
             <h3>Configuration</h3>
             <div class="form-group">
                 <label for="serverUrl">Azure Cosmos DB MCP Server URL:</label>
-                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-toolkit-app.mangotree-61c958ec.eastus.azurecontainerapps.io" oninput="updateCurlExamples()">
+                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-demo-app.jollycliff-9d2fd006.eastus.azurecontainerapps.io" oninput="updateCurlExamples()">
             </div>
         </div>
 
@@ -633,7 +633,7 @@
                     toolParams = { databaseId: database };
                 }
                 
-                const testToolCurl = `curl -s -X POST "${serverUrl}/mcp" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "Authorization: Bearer ${accessToken}" -d '{"jsonrpc":"2.0","id":"test-tool-123","method":"tools/call","params":{"name":"mcp_mcp-toolkit-t_${tool}","arguments":${JSON.stringify(toolParams)}}}'`;
+                const testToolCurl = `curl -s -X POST "${serverUrl}/mcp" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "Authorization: Bearer ${accessToken}" -d '{"jsonrpc":"2.0","id":"test-tool-123","method":"tools/call","params":{"name":"${tool}","arguments":${JSON.stringify(toolParams)}}}'`;
 
                 if (document.getElementById('listToolsCurl')) {
                     document.getElementById('listToolsCurl').textContent = listToolsCurl;
@@ -709,7 +709,9 @@
                         'Content-Type': 'application/json',
                         'Accept': 'application/json, text/event-stream',
                         'Authorization': `Bearer ${token}`,
-                        'X-MS-TOKEN-AAD-ACCESS-TOKEN': token  // Workaround for Azure Container Apps stripping Authorization header
+                        'X-MS-TOKEN-AAD-ACCESS-TOKEN': token,  // First fallback
+                        'X-Access-Token': token,  // Second fallback (less likely to be stripped)
+                        'X-Auth-Token': token  // Third fallback
                     },
                     body: JSON.stringify(payload),
                     mode: 'cors'
@@ -769,7 +771,7 @@
                 id: "test-" + Date.now(),
                 method: "tools/call",
                 params: {
-                    name: "mcp_mcp-toolkit-t_list_databases",
+                    name: "list_databases",
                     arguments: {}
                 }
             };
@@ -874,7 +876,7 @@
                 id: "test-cosmos-" + Date.now(),
                 method: "tools/call",
                 params: {
-                    name: `mcp_mcp-toolkit-t_${tool}`,
+                    name: tool,
                     arguments: toolParams
                 }
             };

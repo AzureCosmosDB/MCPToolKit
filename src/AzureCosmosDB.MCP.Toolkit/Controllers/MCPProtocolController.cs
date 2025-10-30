@@ -377,6 +377,31 @@ public class MCPProtocolController : ControllerBase
         }
         return defaultValue;
     }
+    
+    [HttpGet("debug")]
+    [AllowAnonymous]
+    public IActionResult DebugHeaders()
+    {
+        var headers = new Dictionary<string, string>();
+        foreach (var header in Request.Headers)
+        {
+            headers[header.Key] = header.Value.ToString();
+        }
+        
+        var query = new Dictionary<string, string>();
+        foreach (var q in Request.Query)
+        {
+            query[q.Key] = q.Value.ToString();
+        }
+        
+        return Ok(new {
+            headers = headers,
+            query = query,
+            user = User?.Identity?.Name,
+            authenticated = User?.Identity?.IsAuthenticated,
+            roles = User?.Claims.Where(c => c.Type == "roles" || c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role").Select(c => c.Value).ToList()
+        });
+    }
 }
 
 public class MCPRequest
