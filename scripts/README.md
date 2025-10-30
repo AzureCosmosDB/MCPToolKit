@@ -336,11 +336,9 @@ Contains:
 
 ### Entra App creation fails
 
-- Ensure you have permissions to create Azure AD applications   - Deploy Container Apps, Cosmos DB**Optional script** that adds AI Foundry integration to an existing MCP deployment.- ✅ Displays all configuration values```
-
+- Ensure you have permissions to create Microsoft Entra applications
 - Check that service management API is not blocked by policy
-
-   - Create Entra ID applications
+- Verify you have permission to create Entra ID applications
 
 ### Container App unhealthy
 

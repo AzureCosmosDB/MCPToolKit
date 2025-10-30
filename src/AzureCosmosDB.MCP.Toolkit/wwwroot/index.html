@@ -230,7 +230,7 @@
         <h1>Azure Cosmos DB MCP Server Test</h1>
         
         <div class="auth-section">
-            <h3>🔐 Azure AD Authentication</h3>
+            <h3>🔐 Microsoft Entra Authentication</h3>
             
             <!-- Auth Error Display -->
             <div id="authError" style="display: none; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
@@ -251,7 +251,7 @@
                 
                 <div class="form-group">
                     <label for="tenantId">Tenant ID (required):</label>
-                    <input type="text" id="tenantId" placeholder="Enter your Azure AD Tenant ID" value="">
+                    <input type="text" id="tenantId" placeholder="Enter your Microsoft Entra Tenant ID" value="">
                     <small style="color: #666;">Run: az account show --query "tenantId" -o tsv</small>
                 </div>
             </div>
@@ -263,7 +263,7 @@
             </div>
             
             <div class="button-group">
-                <button id="loginBtn" class="login-btn" onclick="login()">🔑 Sign In with Azure AD</button>
+                <button id="loginBtn" class="login-btn" onclick="login()">🔑 Sign In with Microsoft Entra</button>
                 <button id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none;">🚪 Sign Out</button>
                 <button id="getTokenBtn" onclick="getTokenSilently()" style="display: none;">🔄 Refresh Token</button>
             </div>
@@ -440,7 +440,7 @@
             };
 
             try {
-                showLoading('Redirecting to Azure AD login...');
+                showLoading('Redirecting to Microsoft Entra login...');
                 const response = await msalInstance.loginPopup(loginRequest);
                 
                 currentAccount = response.account;
@@ -653,7 +653,7 @@
             }
             
             if (!currentAccessToken) {
-                showError('Please login with Azure AD first');
+                showError('Please login with Microsoft Entra first');
                 return false;
             }
             

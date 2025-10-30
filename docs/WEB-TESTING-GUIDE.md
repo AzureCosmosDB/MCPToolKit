@@ -1,12 +1,12 @@
 # Azure Cosmos DB MCP Server - Web Testing Guide
 
-This guide shows you how to test your Azure Cosmos DB MCP Server using the secure web interface with enterprise-grade Azure AD authentication.
+This guide shows you how to test your Azure Cosmos DB MCP Server using the secure web interface with enterprise-grade Microsoft Entra authentication.
 
 ## 🌐 Web Interface Overview
 
 The Azure Cosmos DB MCP Toolkit includes an enhanced web interface that provides:
 
-- ✅ **Secure Azure AD Authentication** - No token copy/paste required
+- ✅ **Secure Microsoft Entra Authentication** - No token copy/paste required
 - ✅ **Interactive MCP Tool Testing** - Forms for all Cosmos DB operations  
 - ✅ **Real-time JSON-RPC Calls** - Direct protocol testing
 - ✅ **Auto-generated cURL Examples** - For automation and scripting
@@ -64,7 +64,7 @@ Your Client ID is created automatically during deployment. Find it in:
 
 ### Secure Login Process
 
-1. **Click "🔑 Sign In with Azure AD"**
+1. **Click "🔑 Sign In with Microsoft Entra"**
 2. **Microsoft login popup appears** - standard OAuth flow
 3. **Use your corporate/personal Microsoft account**
 4. **Grant permissions** if prompted
@@ -156,7 +156,7 @@ Your Client ID is created automatically during deployment. Find it in:
 ### Security Validation
 
 The interface automatically validates:
-- ✅ Valid Azure AD token
+- ✅ Valid Microsoft Entra token
 - ✅ Correct audience (`api://your-client-id`)
 - ✅ Required role claims (`Mcp.Tool.Executor`)
 - ✅ Token expiration and refresh
@@ -186,13 +186,13 @@ After successful web testing:
 1. **Integrate with AI Foundry** - Connect as MCP server
 2. **Automate with scripts** - Use generated cURL commands
 3. **Deploy to production** - Scale your MCP server
-4. **Monitor usage** - Check Azure AD logs and Container App metrics
+4. **Monitor usage** - Check Microsoft Entra logs and Container App metrics
 
 ## 📞 Support
 
 - **Health Endpoint**: `GET /health` - Check server status
 - **GitHub Issues**: Report problems with detailed logs
 - **Azure Logs**: Check Container App logs for server-side issues
-- **Authentication Logs**: Review Azure AD sign-in logs
+- **Authentication Logs**: Review Microsoft Entra sign-in logs
 
 The web interface provides the same professional testing experience as the PostgreSQL MCP demo, with enterprise-grade security that your IT team will approve! 🛡️

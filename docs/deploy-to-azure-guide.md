@@ -11,7 +11,7 @@ This guide explains how to deploy the Azure Cosmos DB MCP Toolkit Container App 
 ### Required Information for One-Click Deployment
 - **Resource Group** - Create new or select existing
 - **Resource Prefix** - Unique name for your resources (e.g., "mcp-demo")
-- **Principal ID** - Your Azure AD Object ID ([How to get this](#getting-your-principal-id))
+- **Principal ID** - Your Microsoft Entra Object ID ([How to get this](#getting-your-principal-id))
 - **Location** - Azure region for deployment
 - **Cosmos Endpoint** - Your existing Cosmos DB URL (e.g., `https://mycosmosdb.documents.azure.com:443/`)
 - **OpenAI Endpoint** - Your Azure OpenAI service URL (e.g., `https://myopenai.openai.azure.com/`)
