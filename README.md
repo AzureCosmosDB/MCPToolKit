@@ -140,7 +140,7 @@ To use with GitHub Copilot or other VS Code MCP clients:
 
 ### Authentication
 
-- **JWT Bearer Tokens**: All requests require valid Azure Entra ID tokens
+- **JWT Bearer Tokens**: All requests require valid Microsoft Entra ID tokens
 - **Audience Validation**: Tokens must be issued for your Entra App
 - **Managed Identity**: Container App uses managed identity for Cosmos DB access
 - **RBAC**: Least-privilege role assignments
