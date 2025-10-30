@@ -41,13 +41,6 @@
         "description": "The type of principal (User, ServicePrincipal, or Group) for external resource access"
       }
     },
-    "ownerTag": {
-      "type": "string",
-      "defaultValue": "mcp-toolkit-user",
-      "metadata": {
-        "description": "Owner tag value (optional)"
-      }
-    },
     "cosmosEndpoint": {
       "type": "string",
       "metadata": {
@@ -86,8 +79,7 @@
     "containerAppEnvName": "[format('{0}-env', parameters('resourcePrefix'))]",
     "commonTags": {
       "Environment": "Production",
-      "Application": "MCP-Toolkit",
-      "owner": "[parameters('ownerTag')]"
+      "Application": "MCP-Toolkit"
     },
     "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
   },

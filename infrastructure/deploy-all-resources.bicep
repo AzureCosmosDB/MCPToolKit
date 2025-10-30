@@ -4,9 +4,6 @@ param resourcePrefix string = 'mcp-toolkit'
 @description('Location for all resources')
 param location string = resourceGroup().location
 
-@description('Owner tag value (optional)')
-param ownerTag string = 'mcp-toolkit-user'
-
 @description('Cosmos DB endpoint (external resource)')
 param cosmosEndpoint string
 
@@ -37,7 +34,6 @@ var entraAppUniqueName = '${replace(toLower(entraAppDisplayName), ' ', '-')}-${u
 var commonTags = {
   Environment: 'Production'
   Application: 'MCP-Toolkit'
-  owner: ownerTag
 }
 
 // Built-in role definition IDs
