@@ -367,11 +367,35 @@ function Update-Container-App {
     # Get Container App to extract existing environment variables
     $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
     
-    # Verify system-assigned managed identity exists
+    # Enable system-assigned managed identity if not already enabled
+    $identityJustCreated = $false
     if ($containerApp.identity.type -ne "SystemAssigned") {
-        Write-Warn "Container App is not using SystemAssigned identity. This may cause authentication issues."
+        Write-Info "Enabling SystemAssigned managed identity on Container App..."
+        az containerapp identity assign --name $ContainerAppName --resource-group $ResourceGroup --system-assigned
+        Write-Info "SystemAssigned managed identity enabled successfully"
+        
+        # Wait for the identity to propagate
+        Write-Info "Waiting 15 seconds for identity to propagate..."
+        Start-Sleep -Seconds 15
+        
+        # Refresh container app info
+        $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
+        $identityJustCreated = $true
     } else {
-        Write-Info "Container App is using SystemAssigned managed identity"
+        Write-Info "Container App is already using SystemAssigned managed identity"
+    }
+    
+    # Always verify/assign ACR permissions before updating the image
+    Write-Info "Verifying ACR permissions..."
+    Assign-ACR-Permissions
+    
+    # Wait for role assignments to propagate
+    if ($identityJustCreated) {
+        Write-Info "Waiting 60 seconds for new identity's ACR role assignment to propagate..."
+        Start-Sleep -Seconds 60
+    } else {
+        Write-Info "Waiting 30 seconds for ACR role assignment to propagate..."
+        Start-Sleep -Seconds 30
     }
 
     # Get existing environment variables to extract AI Foundry and embedding settings
@@ -399,6 +423,8 @@ function Update-Container-App {
         "AzureAd__TenantId=$CURRENT_TENANT_ID"
         "AzureAd__Audience=$script:ENTRA_APP_CLIENT_ID"
         "COSMOS_ENDPOINT=$cosmosEndpoint"
+        "ASPNETCORE_ENVIRONMENT=Production"
+        "ASPNETCORE_URLS=http://+:8080"
     )
     
     if ($aifProjectEndpoint) {
@@ -409,12 +435,37 @@ function Update-Container-App {
         $envVars += "OPENAI_EMBEDDING_DEPLOYMENT=$embeddingDeployment"
     }
 
+    # First, ensure ingress is configured correctly for port 8080
+    Write-Info "Configuring ingress to use target port 8080..."
+    try {
+        az containerapp ingress update --name $ContainerAppName --resource-group $ResourceGroup --target-port 8080 | Out-Null
+        Write-Info "Ingress updated successfully"
+    }
+    catch {
+        Write-Warn "Failed to update ingress configuration: $_"
+    }
+    
     # Update container app with new image and all environment variables
     Write-Info "Updating container app with image: $script:IMAGE_TAG"
-    az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars $envVars
+    
+    try {
+        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars $envVars --output none
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Container app update failed with exit code $LASTEXITCODE"
+        }
+        
+        Write-Info "Container app updated successfully!"
+    }
+    catch {
+        $errorMessage = $_.Exception.Message
+        Write-Error "Container app update failed: $errorMessage"
+        Write-Error "Check the container app logs for more details:"
+        Write-Info "az containerapp logs show --name $ContainerAppName --resource-group $ResourceGroup --follow"
+        exit 1
+    }
 
     $script:CURRENT_TENANT_ID = $CURRENT_TENANT_ID
-    Write-Info "Azure Container App updated successfully with all environment variables!"
 }
 
 function Assign-ACR-Permissions {
@@ -569,16 +620,26 @@ function Show-Container-Logs {
 
 function Test-MCP-Server-Health {
     Write-Info "Verifying MCP server deployment and health..."
+    Write-Info "Note: Initial container startup can take 1-3 minutes..."
     
-    $maxRetries = 12  # 2 minutes total (10 seconds * 12)
+    # First check if the revision is provisioned
+    Write-Info "Checking container app revision status..."
+    $revision = az containerapp revision list --name $ContainerAppName --resource-group $ResourceGroup --query "[0]" | ConvertFrom-Json
+    if ($revision.properties.provisioningState -ne "Provisioned") {
+        Write-Warn "Container revision is not yet provisioned. Current state: $($revision.properties.provisioningState)"
+        Write-Info "Waiting 30 seconds for revision to provision..."
+        Start-Sleep -Seconds 30
+    }
+    
+    $maxRetries = 18  # 3 minutes total (10 seconds * 18)
     $retryDelay = 10
     
     for ($i = 1; $i -le $maxRetries; $i++) {
         Write-Info "Health check attempt $i of $maxRetries..."
         
         try {
-            # Test basic connectivity
-            $response = Invoke-WebRequest -Uri "$($script:CONTAINER_APP_URL)/" -UseBasicParsing -TimeoutSec 15
+            # Test basic connectivity with longer timeout
+            $response = Invoke-WebRequest -Uri "$($script:CONTAINER_APP_URL)/" -UseBasicParsing -TimeoutSec 30
             Write-Info "[OK] MCP server is responding! Status: $($response.StatusCode)"
             
             # Test health endpoint if available
