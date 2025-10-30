@@ -26,7 +26,6 @@ param entraAppDisplayName string = '${resourcePrefix}-entra-app'
 param aifProjectResourceId string = ''
 
 // Variables
-var managedIdentityName = '${containerAppName}-identity'
 var containerAppEnvName = '${resourcePrefix}-env'
 var entraAppUniqueName = '${replace(toLower(entraAppDisplayName), ' ', '-')}-${uniqueString(deployment().name, resourceGroup().id)}'
 
@@ -61,13 +60,6 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
   tags: commonTags
 }
 
-// Create user-assigned managed identity
-resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: managedIdentityName
-  location: location
-  tags: commonTags
-}
-
 // Create Container App Environment (without Log Analytics)
 resource containerAppEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: containerAppEnvName
@@ -83,10 +75,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName
   location: location
   identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${managedIdentity.id}': {}
-    }
+    type: 'SystemAssigned'
   }
   properties: {
     managedEnvironmentId: containerAppEnvironment.id
@@ -137,12 +126,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'ASPNETCORE_URLS'
               value: 'http://+:8080'
             }
-            // Managed Identity configuration
-            {
-              name: 'AZURE_CLIENT_ID'
-              value: managedIdentity.properties.clientId
-            }
-            // Entra App (Azure AD) authentication configuration
+            // Entra App authentication configuration
             {
               name: 'AzureAd__TenantId'
               value: tenant().tenantId
@@ -211,13 +195,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
 
 // RBAC Assignments
 
-// Assign ACR Pull role to managed identity
+// Assign ACR Pull role to container app's system-assigned managed identity
 resource acrRoleAssignmentMI 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: containerRegistry
-  name: guid(containerRegistry.id, managedIdentity.id, acrPullRoleId)
+  name: guid(containerRegistry.id, containerApp.id, acrPullRoleId)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleId)
-    principalId: managedIdentity.properties.principalId
+    principalId: containerApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -236,8 +220,7 @@ module aifRoleAssignment 'modules/aif-role-assignment-entraapp.bicep' = if (!emp
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output containerRegistryName string = containerRegistry.name
 output containerRegistryLoginServer string = containerRegistry.properties.loginServer
-output managedIdentityPrincipalId string = managedIdentity.properties.principalId
-output managedIdentityClientId string = managedIdentity.properties.clientId
+output managedIdentityPrincipalId string = containerApp.identity.principalId
 output containerAppEnvironmentId string = containerAppEnvironment.id
 output containerAppId string = containerApp.id
 output resourceGroupName string = resourceGroup().name
@@ -254,7 +237,7 @@ output entraAppRoleValue string = entraApp.outputs.entraAppRoleValue
 output postDeploymentInfo object = {
   containerRegistry: containerRegistryName
   containerApp: containerAppName
-  managedIdentityPrincipalId: managedIdentity.properties.principalId
+  managedIdentityPrincipalId: containerApp.identity.principalId
   mcpServerUri: 'https://${containerApp.properties.configuration.ingress.fqdn}'
   entraAppClientId: entraApp.outputs.entraAppClientId
   entraAppRoleValue: entraApp.outputs.entraAppRoleValue
