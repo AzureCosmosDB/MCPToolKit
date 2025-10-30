@@ -455,35 +455,6 @@ function Update-Container-App {
     $script:CURRENT_TENANT_ID = $CURRENT_TENANT_ID
 }
 
-function Assign-ACR-Permissions {
-    Write-Info "Verifying ACR permissions for Container App Managed Identity..."
-    
-    # Get Container App System-Assigned Managed Identity Principal ID
-    $ACA_MI_PRINCIPAL_ID = az containerapp show --resource-group $ResourceGroup --name $ContainerAppName --query "identity.principalId" --output tsv
-    
-    if (-not $ACA_MI_PRINCIPAL_ID -or $ACA_MI_PRINCIPAL_ID -eq "null") {
-        Write-Error "Failed to get Container App managed identity principal ID"
-        exit 1
-    }
-    
-    Write-Info "Container App MI Principal ID: $ACA_MI_PRINCIPAL_ID"
-    
-    # Verify ACR role assignment exists (should be created by Bicep)
-    $acrName = az acr list --resource-group $ResourceGroup --query "[0].name" -o tsv
-    $acrResourceId = "/subscriptions/$((az account show --query id -o tsv))/resourceGroups/$ResourceGroup/providers/Microsoft.ContainerRegistry/registries/$acrName"
-    
-    $roleCheck = az role assignment list --assignee $ACA_MI_PRINCIPAL_ID --scope $acrResourceId --role "AcrPull" --query "[0]" | ConvertFrom-Json
-    if ($roleCheck) {
-        Write-Info "ACR permissions verified - AcrPull role assignment exists"
-    } else {
-        Write-Warning "ACR role assignment not found - this should have been created by Bicep template"
-        Write-Info "Creating ACR role assignment as fallback..."
-        az role assignment create --assignee $ACA_MI_PRINCIPAL_ID --role "AcrPull" --scope $acrResourceId
-        Write-Info "Waiting 30 seconds for role assignment to propagate..."
-        Start-Sleep -Seconds 30
-    }
-}
-
 function Configure-Entra-App-RedirectURIs {
     Write-Info "Configuring redirect URIs for Entra App as Single-Page Application..."
     

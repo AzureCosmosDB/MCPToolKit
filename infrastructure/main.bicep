@@ -40,9 +40,6 @@ param openAIEndpoint string = ''
 @description('Azure OpenAI embedding deployment name')
 param embeddingDeploymentName string = ''
 
-// Built-in role definition IDs
-var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
-
 // NOTE: Entra App creation has been moved to the Setup-Permissions.ps1 script
 // for better reliability. The script will create the app if it doesn't exist.
 
@@ -54,7 +51,7 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
     name: 'Basic'
   }
   properties: {
-    adminUserEnabled: true  // Keep enabled for initial deployment, but Container App will prefer managed identity
+    adminUserEnabled: true
   }
   tags: commonTags
 }
@@ -190,19 +187,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
     }
   }
   tags: commonTags
-}
-
-// Assign ACR Pull role to container app's system-assigned managed identity
-// This allows the container app to pull images using managed identity (more secure than admin credentials)
-// Admin credentials remain enabled as fallback during initial deployment
-resource acrRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: containerRegistry
-  name: guid(containerRegistry.id, containerApp.id, acrPullRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleId)
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
 }
 
 // Outputs for azd and other consumers
