@@ -198,29 +198,6 @@ To use with GitHub Copilot or other VS Code MCP clients:
 
 For local development, set `DEV_BYPASS_AUTH=true` to bypass authentication. See [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md) for details.
 
-## Troubleshooting
-
-### Common Issues
-
-**401 Unauthorized**
-- Verify your JWT token is valid and not expired
-- Check token audience matches your Entra App Client ID
-- Wait 15-60 minutes after deployment for token propagation
-
-**Connection Errors**
-- Verify Container App is running: `az containerapp show --name YOUR-APP --resource-group YOUR-RG`
-- Check health endpoint: `https://YOUR-APP.azurecontainerapps.io/health`
-
-**Vector Search Fails**
-- Ensure `OPENAI_ENDPOINT` and `OPENAI_EMBEDDING_DEPLOYMENT` are set
-- Verify Azure OpenAI deployment exists and is accessible
-
-### Getting Help
-
-- Check [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for detailed solutions
-- View Container App logs: `az containerapp logs show --name YOUR-APP --resource-group YOUR-RG --tail 100`
-- Review `deployment-info.json` for configuration details
-
 ## Additional Resources
 
 - [Local Development Guide](LOCAL_DEVELOPMENT.md) - Setup, testing, and debugging locally
