@@ -9,14 +9,16 @@ This client demonstrates how to use Azure AI Foundry agents with the Cosmos DB M
    cp .env.example .env
    ```
 
-2. **Update the `.env` file** with your values:
+2. **Update the `.env` file** with your values from `deployment-info.json`:
    ```bash
-   PROJECT_ENDPOINT=https://cosmos-mcp-toolkit-test.services.ai.azure.com/api/projects/cosmos-mcp-toolkit-test-project
-   MODEL_DEPLOYMENT_NAME=gpt-4o
-   CONNECTION_NAME=mcp-toolkit-connection
-   MCP_SERVER_URL=https://<your-container-app-url>/mcp
+   PROJECT_ENDPOINT=<YOUR-AI-FOUNDRY-PROJECT-ENDPOINT>
+   MODEL_DEPLOYMENT_NAME=<YOUR-MODEL-DEPLOYMENT-NAME>
+   CONNECTION_NAME=<YOUR-MCP-CONNECTION-NAME>
+   MCP_SERVER_URL=https://<YOUR-CONTAINER-APP-URL>/mcp
    MCP_SERVER_LABEL=cosmosdb
    ```
+   
+   > Get these values from your `deployment-info.json` file or Azure portal.
 
 3. **Install dependencies**:
    ```bash
@@ -24,9 +26,9 @@ This client demonstrates how to use Azure AI Foundry agents with the Cosmos DB M
    ```
 
 4. **Make sure you have the MCP connection configured in AI Foundry**:
-   - Connection Name: `mcp-toolkit-connection`
-   - Target URL: `https://<your-container-app-url>/mcp`
-   - Audience: `21d81067-43f7-40e6-8c90-b21fcfb75af2`
+   - Connection Name: `<YOUR-MCP-CONNECTION-NAME>`
+   - Target URL: `https://<YOUR-CONTAINER-APP-URL>/mcp`
+   - Audience: `<YOUR-ENTRA-APP-CLIENT-ID>`
    - Authentication: Project Managed Identity
 
 ## Run
@@ -64,11 +66,11 @@ Change `content=input_text[0]` to test different questions (e.g., `input_text[1]
 ## Troubleshooting
 
 If you see "network error":
-1. Check container app logs: `az containerapp logs show --name <your-container-app-name> --resource-group <your-resource-group-name> --tail 50`
+1. Check container app logs: `az containerapp logs show --name <YOUR-CONTAINER-APP-NAME> --resource-group <YOUR-RESOURCE-GROUP> --tail 50`
 2. Verify the MCP connection in AI Foundry has the correct audience
 3. Make sure the agent has access to the connection
 
 If authentication fails:
-1. Verify the Entra App Client ID: `21d81067-43f7-40e6-8c90-b21fcfb75af2`
-2. Check role assignments are in place
+1. Verify the Entra App Client ID matches your `deployment-info.json`
+2. Check role assignments are in place (run `Setup-AIFoundry-RoleAssignment.ps1` if needed)
 3. Ensure the container app has the correct environment variables
