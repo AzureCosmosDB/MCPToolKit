@@ -432,7 +432,27 @@ function Update-Container-App {
         Write-Warn "Failed to update ingress configuration: $_"
     }
     
-    # Update container app with new image and all environment variables
+    # Get ACR credentials and configure registry
+    Write-Info "Configuring ACR credentials for container app..."
+    $acrName = az acr list --resource-group $ResourceGroup --query "[0].name" -o tsv
+    $acrLoginServer = az acr show --name $acrName --resource-group $ResourceGroup --query "loginServer" -o tsv
+    $acrUsername = az acr credential show --name $acrName --query "username" -o tsv
+    $acrPassword = az acr credential show --name $acrName --query "passwords[0].value" -o tsv
+    
+    Write-Info "ACR Login Server: $acrLoginServer"
+    Write-Info "ACR Username: $acrUsername"
+    
+    # Set ACR credentials on the container app
+    Write-Info "Setting ACR registry credentials..."
+    try {
+        az containerapp registry set --name $ContainerAppName --resource-group $ResourceGroup --server $acrLoginServer --username $acrUsername --password $acrPassword --output none
+        Write-Info "ACR credentials configured successfully"
+    }
+    catch {
+        Write-Warn "Failed to set ACR credentials: $_"
+    }
+    
+    # Update container app with new image and environment variables
     Write-Info "Updating container app with image: $script:IMAGE_TAG"
     
     try {
@@ -443,6 +463,26 @@ function Update-Container-App {
         }
         
         Write-Info "Container app updated successfully!"
+        
+        # Configure CORS to allow web UI access
+        Write-Info "Configuring CORS settings..."
+        $containerAppFqdn = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "properties.configuration.ingress.fqdn" -o tsv
+        $allowedOrigins = "https://$containerAppFqdn"
+        
+        az containerapp ingress cors enable --name $ContainerAppName --resource-group $ResourceGroup --allowed-origins $allowedOrigins --allowed-methods "GET" "POST" "PUT" "DELETE" "OPTIONS" --allowed-headers "*" --expose-headers "*" --max-age 3600
+        Write-Info "CORS configured to allow access from: $allowedOrigins"
+        
+        # Force a new revision by deactivating old and activating the updated one
+        Write-Info "Activating new revision to ensure environment variables are loaded..."
+        $latestRevision = az containerapp revision list --name $ContainerAppName --resource-group $ResourceGroup --query "[0].name" -o tsv
+        Write-Info "Activating revision: $latestRevision"
+        az containerapp revision activate --name $ContainerAppName --resource-group $ResourceGroup --revision $latestRevision
+        
+        # Wait a moment for the revision to become active
+        Write-Info "Waiting 10 seconds for new revision to start..."
+        Start-Sleep -Seconds 10
+        
+        Write-Info "New revision activated successfully"
     }
     catch {
         $errorMessage = $_.Exception.Message
