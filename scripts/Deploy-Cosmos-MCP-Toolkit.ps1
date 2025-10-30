@@ -385,19 +385,6 @@ function Update-Container-App {
         Write-Info "Container App is already using SystemAssigned managed identity"
     }
     
-    # Always verify/assign ACR permissions before updating the image
-    Write-Info "Verifying ACR permissions..."
-    Assign-ACR-Permissions
-    
-    # Wait for role assignments to propagate
-    if ($identityJustCreated) {
-        Write-Info "Waiting 60 seconds for new identity's ACR role assignment to propagate..."
-        Start-Sleep -Seconds 60
-    } else {
-        Write-Info "Waiting 30 seconds for ACR role assignment to propagate..."
-        Start-Sleep -Seconds 30
-    }
-
     # Get existing environment variables to extract AI Foundry and embedding settings
     $existingEnvVars = $containerApp.properties.template.containers[0].env
     $aifProjectEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value

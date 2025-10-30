@@ -1,0 +1,317 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "16160672601455077248"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for all resources"
+      }
+    },
+    "containerAppName": {
+      "type": "string",
+      "defaultValue": "mcp-demo-app",
+      "metadata": {
+        "description": "Name for the Azure Container App"
+      }
+    },
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "mcp-toolkit-env",
+      "metadata": {
+        "description": "Environment name for the Container Apps Environment"
+      }
+    },
+    "containerRegistryName": {
+      "type": "string",
+      "defaultValue": "[format('mcpdemo{0}', uniqueString(resourceGroup().id))]",
+      "metadata": {
+        "description": "Container registry name"
+      }
+    },
+    "containerImage": {
+      "type": "string",
+      "defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+      "metadata": {
+        "description": "Container image name"
+      }
+    },
+    "cpuCores": {
+      "type": "string",
+      "defaultValue": "0.5",
+      "metadata": {
+        "description": "Number of CPU cores allocated to the container"
+      }
+    },
+    "memorySize": {
+      "type": "string",
+      "defaultValue": "1Gi",
+      "metadata": {
+        "description": "Amount of memory allocated to the container"
+      }
+    },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 1,
+      "metadata": {
+        "description": "Minimum number of replicas"
+      }
+    },
+    "maxReplicas": {
+      "type": "int",
+      "defaultValue": 3,
+      "metadata": {
+        "description": "Maximum number of replicas"
+      }
+    },
+    "commonTags": {
+      "type": "object",
+      "defaultValue": {
+        "Environment": "Production",
+        "Application": "MCP-Toolkit"
+      },
+      "metadata": {
+        "description": "Common tags for all resources"
+      }
+    },
+    "cosmosEndpoint": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Azure Cosmos DB endpoint URL"
+      }
+    },
+    "openAIEndpoint": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Azure OpenAI endpoint URL"
+      }
+    },
+    "embeddingDeploymentName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Azure OpenAI embedding deployment name"
+      }
+    }
+  },
+  "variables": {
+    "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2023-07-01",
+      "name": "[parameters('containerRegistryName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Basic"
+      },
+      "properties": {
+        "adminUserEnabled": true
+      },
+      "tags": "[parameters('commonTags')]"
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('environmentName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "zoneRedundant": false
+      },
+      "tags": "[parameters('commonTags')]"
+    },
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('containerAppName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": true,
+            "targetPort": 8080,
+            "allowInsecure": false,
+            "transport": "http",
+            "traffic": [
+              {
+                "weight": 100,
+                "latestRevision": true
+              }
+            ]
+          },
+          "registries": [
+            {
+              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer]",
+              "username": "[parameters('containerRegistryName')]",
+              "passwordSecretRef": "registry-password"
+            }
+          ],
+          "secrets": [
+            {
+              "name": "registry-password",
+              "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').passwords[0].value]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "image": "[parameters('containerImage')]",
+              "name": "[parameters('containerAppName')]",
+              "resources": {
+                "cpu": "[json(parameters('cpuCores'))]",
+                "memory": "[parameters('memorySize')]"
+              },
+              "env": [
+                {
+                  "name": "ASPNETCORE_ENVIRONMENT",
+                  "value": "Production"
+                },
+                {
+                  "name": "ASPNETCORE_URLS",
+                  "value": "http://+:8080"
+                },
+                {
+                  "name": "AzureAd__TenantId",
+                  "value": "[tenant().tenantId]"
+                },
+                {
+                  "name": "COSMOS_ENDPOINT",
+                  "value": "[parameters('cosmosEndpoint')]"
+                },
+                {
+                  "name": "OPENAI_ENDPOINT",
+                  "value": "[parameters('openAIEndpoint')]"
+                },
+                {
+                  "name": "OPENAI_EMBEDDING_DEPLOYMENT",
+                  "value": "[parameters('embeddingDeploymentName')]"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8080,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "successThreshold": 1,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8080,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 30,
+                  "periodSeconds": 30,
+                  "timeoutSeconds": 5,
+                  "successThreshold": 1,
+                  "failureThreshold": 3
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": "[parameters('minReplicas')]",
+            "maxReplicas": "[parameters('maxReplicas')]",
+            "rules": [
+              {
+                "name": "http-requests",
+                "http": {
+                  "metadata": {
+                    "concurrentRequests": "10"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "tags": "[parameters('commonTags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', parameters('containerRegistryName'))]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), resourceId('Microsoft.App/containerApps', parameters('containerAppName')), variables('acrPullRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPullRoleId'))]",
+        "principalId": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-03-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.App/containerApps', parameters('containerAppName'))]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "AZURE_LOCATION": {
+      "type": "string",
+      "value": "[parameters('location')]"
+    },
+    "AZURE_TENANT_ID": {
+      "type": "string",
+      "value": "[tenant().tenantId]"
+    },
+    "AZURE_SUBSCRIPTION_ID": {
+      "type": "string",
+      "value": "[subscription().subscriptionId]"
+    },
+    "RESOURCE_GROUP_NAME": {
+      "type": "string",
+      "value": "[resourceGroup().name]"
+    },
+    "CONTAINER_REGISTRY_LOGIN_SERVER": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer]"
+    },
+    "CONTAINER_REGISTRY_NAME": {
+      "type": "string",
+      "value": "[parameters('containerRegistryName')]"
+    },
+    "CONTAINER_APP_NAME": {
+      "type": "string",
+      "value": "[parameters('containerAppName')]"
+    },
+    "CONTAINER_APP_URL": {
+      "type": "string",
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-03-01').configuration.ingress.fqdn)]"
+    },
+    "CONTAINER_APP_PRINCIPAL_ID": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-03-01', 'full').identity.principalId]"
+    },
+    "AZURE_CONTAINER_APP_ENVIRONMENT_ID": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]"
+    }
+  }
+}
