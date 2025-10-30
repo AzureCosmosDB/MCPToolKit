@@ -31,6 +31,15 @@ param commonTags object = {
   Application: 'MCP-Toolkit'
 }
 
+@description('Azure Cosmos DB endpoint URL')
+param cosmosEndpoint string = ''
+
+@description('Azure OpenAI endpoint URL')
+param openAIEndpoint string = ''
+
+@description('Azure OpenAI embedding deployment name')
+param embeddingDeploymentName string = ''
+
 // NOTE: Entra App creation has been moved to the Setup-Permissions.ps1 script
 // for better reliability. The script will create the app if it doesn't exist.
 
@@ -44,13 +53,6 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
   properties: {
     adminUserEnabled: true
   }
-  tags: commonTags
-}
-
-// Create user-assigned managed identity
-resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: '${containerAppName}-identity'
-  location: location
   tags: commonTags
 }
 
@@ -69,10 +71,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName
   location: location
   identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${managedIdentity.id}': {}
-    }
+    type: 'SystemAssigned'
   }
   properties: {
     managedEnvironmentId: containerAppEnvironment.id
@@ -93,10 +92,16 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: containerRegistry.properties.loginServer
-          identity: managedIdentity.id
+          username: containerRegistry.name
+          passwordSecretRef: 'registry-password'
         }
       ]
-      secrets: []
+      secrets: [
+        {
+          name: 'registry-password'
+          value: containerRegistry.listCredentials().passwords[0].value
+        }
+      ]
     }
     template: {
       containers: [
@@ -117,14 +122,22 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: 'http://+:8080'
             }
             {
-              name: 'AZURE_CLIENT_ID'
-              value: managedIdentity.properties.clientId
-            }
-            {
               name: 'AzureAd__TenantId'
               value: tenant().tenantId
             }
-            // NOTE: AzureAd__ClientId will be set by Setup-Permissions.ps1 script
+            {
+              name: 'COSMOS_ENDPOINT'
+              value: cosmosEndpoint
+            }
+            {
+              name: 'OPENAI_ENDPOINT'
+              value: openAIEndpoint
+            }
+            {
+              name: 'OPENAI_EMBEDDING_DEPLOYMENT'
+              value: embeddingDeploymentName
+            }
+            // NOTE: AzureAd__ClientId and AzureAd__Audience will be set by deployment script
             // after the Entra app is created
           ]
           probes: [
@@ -187,7 +200,7 @@ output CONTAINER_REGISTRY_LOGIN_SERVER string = containerRegistry.properties.log
 output CONTAINER_REGISTRY_NAME string = containerRegistry.name
 output CONTAINER_APP_NAME string = containerApp.name
 output CONTAINER_APP_URL string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
-output CONTAINER_APP_PRINCIPAL_ID string = managedIdentity.properties.principalId
+output CONTAINER_APP_PRINCIPAL_ID string = containerApp.identity.principalId
 output AZURE_CONTAINER_APP_ENVIRONMENT_ID string = containerAppEnvironment.id
 
 // Note: Entra app outputs will be displayed by Setup-Permissions.ps1 script

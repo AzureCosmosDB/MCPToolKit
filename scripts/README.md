@@ -1,135 +1,664 @@
-# Scripts Directory# Azure Cosmos DB MCP Toolkit - Deployment Scripts# Azure Cosmos DB MCP Toolkit - Deployment Scripts# Azure Cosmos DB MCP Toolkit - Deployment Scripts# Azure Cosmos DB MCP Toolkit - Deployment Scripts# Azure Cosmos DB MCP Toolkit - Deployment Scripts# Scripts Directory
+# Azure Cosmos DB MCP Toolkit - Deployment Scripts# Azure Cosmos DB MCP Toolkit - Deployment Scripts
 
 
 
-This directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit.
+This directory contains deployment and configuration scripts for the Azure Cosmos DB MCP Toolkit.This directory contains deployment and configuration scripts for the Azure Cosmos DB MCP Toolkit.
 
 
 
-## 🚀 Quick StartThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit with AI Foundry integration.
+## 📋 Prerequisites## � Prerequisites
 
 
 
-### One-Step Deployment (Recommended)
+Before running any scripts, ensure you have:Before running any scripts, ensure you have:
 
 
 
-```powershell## Quick StartThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit with AI Foundry integration.
+1. **Azure CLI** installed and authenticated (`az login`)1. **Azure CLI** installed and authenticated (`az login`)
 
-.\scripts\Deploy-All.ps1 -ResourceGroup "<your-resource-group>"
+2. **Docker** installed and running2. **Docker** installed and running
 
-```
+3. **.NET 9.0 SDK** installed3. **.NET 9.0 SDK** installed
 
+4. **PowerShell 7+** (or Windows PowerShell 5.1)4. **PowerShell 7+** (or Windows PowerShell 5.1)
 
+5. **Azure Subscription** with permissions to:5. **Azure Subscription** with permissions to:
 
-This single script handles **everything**:### Use Deploy-All.ps1 ⭐ **RECOMMENDED**
+   - Create/manage resource groups   - Create/manage resource groups
 
-- ✅ Builds the .NET application
+   - Deploy Container Apps, Cosmos DB   - Deploy Container Apps, Cosmos DB
 
-- ✅ Builds and pushes Docker image to ACR
+   - Create Entra ID applications   - Create Entra ID applications
 
-- ✅ Creates Entra ID application with authentication
+   - Assign roles and permissions   - Assign roles and permissions
 
-- ✅ Creates Service Principal and configures redirect URIs```powershell## PrerequisitesThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit with AI Foundry integration.
-
-- ✅ Assigns your user to the MCP role
-
-- ✅ Configures all Azure permissions (Cosmos DB, ACR).\scripts\Deploy-All.ps1 -ResourceGroup "<your-resource-group>"
-
-- ✅ Deploys and configures Container App
-
-- ✅ Displays all configuration values```
+6. **Existing Resource Group** with Cosmos DB account already created6. **Existing Resource Group** with Cosmos DB account already created
 
 
 
-**That's it!** One script, complete deployment. ✨
+## 🚀 Quick Start## 🚀 Available Scripts
 
 
 
----This script handles everything in one step:Before running the deployment, ensure you have:
+### Step 1: Deploy the MCP Toolkit### `Deploy-Cosmos-MCP-Toolkit.ps1` - Main Deployment ⭐ **RECOMMENDED**
 
 
-
-## 📋 Available Scripts- ✅ Builds the .NET application  
-
-
-
-### `Deploy-All.ps1` - Complete Deployment ⭐- ✅ Pushes Docker image to ACR  
-
-
-
-**Complete end-to-end deployment script.** Use this for all deployments.- ✅ Creates Entra ID application  
-
-
-
-**Usage:**- ✅ Configures all permissions  1. **Azure CLI** installed and authenticated (`az login`)## PrerequisitesThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit with AI Foundry integration.
 
 ```powershell
 
-.\scripts\Deploy-All.ps1 -ResourceGroup "rg-myproject-mcp"- ✅ Updates Container App  
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP-NAME"
+
+```**Complete deployment script** that sets up the MCP Toolkit infrastructure and application after Bicep deployment.## Available ScriptsThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit.
+
+
+
+This single script handles everything:
+
+- ✅ Builds and pushes Docker image to ACR
+
+- ✅ Creates Entra App with MCP Tool Executor role**What it does:**
+
+- ✅ Assigns Cosmos DB permissions
+
+- ✅ Deploys and configures Container App- ✅ Builds and pushes Docker image to Azure Container Registry
+
+- ✅ Verifies deployment health
+
+- ✅ Creates `deployment-info.json` for AI Foundry integration- ✅ Creates Entra App with MCP Tool Executor role and authentication configuration  ### `Deploy-MCP-Core.ps1` - Core MCP Deployment
+
+
+
+### Step 2: Connect to AI Foundry (Optional)- ✅ Creates Service Principal and configures redirect URIs for web UI
+
+
+
+```powershell- ✅ Assigns your user account to the MCP role (you can use it immediately!)
+
+.\scripts\Setup-AIFoundry-Connection.ps1 `
+
+    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>/projects/<project>" `- ✅ Sets up managed identity and configures all Azure permissions (Cosmos DB, ACR)
+
+    -ConnectionName "cosmos-mcp-connection"
+
+```- ✅ Deploys and configures the Container App with authentication**Main deployment script** that sets up the complete MCP Toolkit infrastructure and application.## 🚀 Quick StartThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit with AI Foundry integration.
+
+
+
+This script:- ✅ Displays all configuration values
+
+- ✅ Reads deployment info from `deployment-info.json`
+
+- ✅ Creates MCP connection in AI Foundry
+
+- ✅ Assigns Entra App role to AI Foundry MI
+
+- ✅ Configures authentication automatically**Usage:**
+
+
+
+## 📚 Available Scripts```powershell**Usage:**
+
+
+
+### `Deploy-Cosmos-MCP-Toolkit.ps1` - Main Deployment ⭐.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP-NAME"
+
+
+
+**Complete deployment script** that sets up the MCP Toolkit infrastructure and application.``````powershell
+
+
+
+**What it does:**
+
+- Builds Docker image and pushes to Azure Container Registry
+
+- Creates Entra App Registration with MCP Tool Executor role**Optional Parameters:**.\scripts\Deploy-MCP-Core.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP-NAME"### One-Step Deployment (Recommended)
+
+- Configures Service Principal and redirect URIs
+
+- Assigns Cosmos DB Data Reader role to Container App managed identity- `-Location` - Azure region (default: eastus)
+
+- Deploys and updates Container App with authentication
+
+- Verifies deployment health automatically- `-CosmosAccountName` - Cosmos DB account name (default: auto-detected)```
+
+- Creates `deployment-info.json` with all configuration values
+
+- `-ContainerAppName` - Container app name (default: auto-detected)
+
+**Usage:**
+
+```powershell
+
+.\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP-NAME"
+
+```**Example:**
+
+
+
+**Optional Parameters:**```powershell**Optional Parameters:**
+
+- `-Location` - Azure region (default: eastus)
+
+- `-CosmosAccountName` - Cosmos DB account name (default: auto-detected).\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 `
+
+- `-ContainerAppName` - Container app name (default: auto-detected)
+
+    -ResourceGroup "my-mcp-toolkit" `- `-Location` - Azure region (default: eastus)```powershell## Quick StartThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit with AI Foundry integration.
+
+**Example:**
+
+```powershell    -Location "westus2" `
+
+.\Deploy-Cosmos-MCP-Toolkit.ps1 `
+
+    -ResourceGroup "my-mcp-toolkit" `    -CosmosAccountName "mycosmosdb"- `-CosmosAccountName` - Cosmos DB account name (default: cosmosmcpkit)
+
+    -Location "westus2" `
+
+    -CosmosAccountName "mycosmosdb"```
 
 ```
 
+- `-ContainerAppName` - Container app name (default: mcp-toolkit-app).\scripts\Deploy-All.ps1 -ResourceGroup "<your-resource-group>"
+
+---
+
+---
+
+### `Setup-AIFoundry-Connection.ps1` - AI Foundry Integration
+
+
+
+**Creates AI Foundry MCP connection** and configures authentication for the deployed MCP server.
+
+### `Setup-AIFoundry-Integration.ps1` - AI Foundry Integration
+
+**Prerequisites:**
+
+- Run `Deploy-Cosmos-MCP-Toolkit.ps1` first**What it does:**```
+
+- `deployment-info.json` must exist in scripts directory
+
+- AI Foundry project must exist**Optional script** that adds AI Foundry integration to an existing MCP deployment.
+
+
+
+**What it does:**- ✅ Builds and pushes Docker image to Azure Container Registry
+
+- Retrieves AI Foundry project managed identity
+
+- Creates MCP connection in AI Foundry with correct audience and target**Prerequisites:** Run `Deploy-Cosmos-MCP-Toolkit.ps1` first.
+
+- Assigns the `Mcp.Tool.Executor` role to AI Foundry MI
+
+- Validates connection configuration- ✅ Creates Entra App with MCP Tool Executor role and authentication configuration
+
+
+
+**Usage:****Usage:**
+
+```powershell
+
+.\Setup-AIFoundry-Connection.ps1 ````powershell- ✅ Creates Service Principal and configures redirect URIs for web UI
+
+    -AIFoundryProjectResourceId "YOUR-AI-FOUNDRY-RESOURCE-ID" `
+
+    -ConnectionName "cosmos-mcp-connection".\scripts\Setup-AIFoundry-Integration.ps1 `
+
+```
+
+    -ResourceGroup "YOUR-RESOURCE-GROUP-NAME" `- ✅ Assigns your user account to the MCP role (you can use it immediately!)This single script handles **everything**:### Use Deploy-All.ps1 ⭐ **RECOMMENDED**
+
+**Finding Your AI Foundry Resource ID:**
+
+```powershell    -AIFoundryProjectResourceId "YOUR-AI-FOUNDRY-RESOURCE-ID"
+
+# List all AI Foundry projects
+
+az cognitiveservices account list --query "[?kind=='AIServices' || kind=='CognitiveServices'].{Name:name, ResourceGroup:resourceGroup, Id:id}" -o table```- ✅ Sets up managed identity and configures all Azure permissions (Cosmos DB, ACR)
+
+
+
+# Get specific resource ID
+
+az cognitiveservices account show `
+
+    --name "YOUR-PROJECT-NAME" `**Optional Parameters:**- ✅ Deploys and configures the Container App with authentication- ✅ Builds the .NET application
+
+    --resource-group "YOUR-AI-RG" `
+
+    --query "id" -o tsv- `-EntraAppClientId` - Entra App Client ID (auto-discovered if not provided)
+
+```
+
+
+
+**Expected Format:**
+
+```**What it does:**
+
+/subscriptions/{subscription-id}/resourceGroups/{resource-group}/providers/Microsoft.CognitiveServices/accounts/{account}/projects/{project}
+
+```- ✅ Discovers your existing MCP deployment automatically**Example:**- ✅ Builds and pushes Docker image to ACR
+
+
+
+**Example:**- ✅ Gets the AI Foundry project's managed identity
+
+```powershell
+
+.\Setup-AIFoundry-Connection.ps1 `- ✅ Assigns the `Mcp.Tool.Executor` role to the AI Foundry managed identity```powershell
+
+    -AIFoundryProjectResourceId "/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-ai-rg/providers/Microsoft.CognitiveServices/accounts/my-ai-account/projects/my-project" `
+
+    -ConnectionName "cosmos-mcp-connection"- ✅ Provides the exact configuration values for AI Foundry connection setup
+
+```
+
+.\scripts\Deploy-MCP-Core.ps1 `- ✅ Creates Entra ID application with authentication
+
+---
+
+**Example:**
+
+## 📄 Generated Files
+
+```powershell    -ResourceGroup "my-mcp-toolkit" `
+
+### `deployment-info.json`
+
+.\scripts\Setup-AIFoundry-Integration.ps1 `
+
+Created by `Deploy-Cosmos-MCP-Toolkit.ps1` and used by `Setup-AIFoundry-Connection.ps1`.
+
+    -ResourceGroup "my-mcp-toolkit" `    -Location "westus2" `- ✅ Creates Service Principal and configures redirect URIs```powershell## PrerequisitesThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit with AI Foundry integration.
+
+Contains:
+
+```json    -AIFoundryProjectResourceId "/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-ai-rg/providers/Microsoft.CognitiveServices/accounts/my-ai-foundry"
+
+{
+
+  "MCP_SERVER_URI": "https://your-app.azurecontainerapps.io",```    -CosmosAccountName "mycosmosdb"
+
+  "ENTRA_APP_CLIENT_ID": "guid",
+
+  "ENTRA_APP_OBJECT_ID": "guid",
+
+  "ENTRA_APP_SP_OBJECT_ID": "guid",
+
+  "ENTRA_APP_ROLE_VALUE": "Mcp.Tool.Executor",---```- ✅ Assigns your user to the MCP role
+
+  "ENTRA_APP_ROLE_ID_BY_VALUE": "guid",
+
+  "ACA_MI_PRINCIPAL_ID": "guid",
+
+  "ACA_MI_DISPLAY_NAME": "app-name",
+
+  "RESOURCE_GROUP": "your-rg",## 📋 Prerequisites
+
+  "SUBSCRIPTION_ID": "guid",
+
+  "COSMOS_ACCOUNT_NAME": "your-cosmos",
+
+  "LOCATION": "eastus"
+
+}Before running any scripts, ensure you have:---- ✅ Configures all Azure permissions (Cosmos DB, ACR).\scripts\Deploy-All.ps1 -ResourceGroup "<your-resource-group>"
+
+```
+
+
+
+---
+
+1. **Azure CLI** installed and authenticated (`az login`)
+
+## 🔧 Common Issues
+
 2. **Docker** installed and running
 
-**With AI Foundry integration:**
+### Docker build fails
 
-```powershell---
+- Ensure Docker Desktop is running3. **.NET 9.0 SDK** installed### `Setup-AIFoundry-Integration.ps1` - AI Foundry Integration- ✅ Deploys and configures Container App
 
-.\scripts\Deploy-All.ps1 `
+- Make sure you're in the MCPToolKit root directory
 
-    -ResourceGroup "rg-myproject-mcp" `3. **.NET 9.0 SDK** installed
+4. **PowerShell 7+** (or Windows PowerShell 5.1)
 
-    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<project>"
+### ACR authentication fails
 
-```## Available Scripts
+- The script automatically handles ACR admin authentication5. **Azure Subscription** with permissions to:
+
+- Verify the ACR exists in your resource group
+
+   - Create/manage resource groups
+
+### Entra App creation fails
+
+- Ensure you have permissions to create Azure AD applications   - Deploy Container Apps, Cosmos DB**Optional script** that adds AI Foundry integration to an existing MCP deployment.- ✅ Displays all configuration values```
+
+- Check that service management API is not blocked by policy
+
+   - Create Entra ID applications
+
+### Container App unhealthy
+
+- Check container logs: `az containerapp logs show --name <app-name> --resource-group <rg> --follow`   - Assign roles and permissions
+
+- Verify Cosmos DB connection string is configured
+
+- Ensure managed identity has Cosmos DB Data Reader role6. **AI Foundry project** (optional, for AI Foundry integration)
 
 
 
-**Parameters:**4. **PowerShell 7+** (or Windows PowerShell 5.1)
+### AI Foundry connection fails**Prerequisites:** Run `Deploy-MCP-Core.ps1` first.
+
+- Verify AI Foundry project resource ID is correct
+
+- Ensure `deployment-info.json` exists with all required fields---
+
+- Wait 5-10 minutes for role assignments to propagate
+
+
+
+---
+
+## 🔧 Quick Start
+
+## 📚 Additional Resources
+
+**Usage:****That's it!** One script, complete deployment. ✨
+
+- [Main README](../README.md) - Full documentation
+
+- [Authentication Setup Guide](../docs/AUTHENTICATION-SETUP.md) - Authentication details### Step 1: Deploy Infrastructure
+
+- [Troubleshooting Guide](../docs/TROUBLESHOOTING.md) - Detailed troubleshooting
+
+- [Testing Guide](../TESTING_GUIDE.md) - Testing instructions```powershell
+
+
+
+---First, deploy the Azure resources using Bicep (see main README.md for details):
+
+
+
+## ⚡ Tips.\scripts\Setup-AIFoundry-Integration.ps1 `
+
+
+
+- **Find your resource names:** ```powershell
+
+  ```powershell
+
+  az resource list --resource-group "<your-rg>" --query "[].{Name:name, Type:type}" -o tablecd infrastructure    -ResourceGroup "YOUR-RESOURCE-GROUP-NAME" `
+
+  ```
+
+
+
+- **Check deployment status:**
+
+  ```powershell# Create resource group    -AIFoundryProjectResourceId "YOUR-AI-FOUNDRY-RESOURCE-ID"---This script handles everything in one step:Before running the deployment, ensure you have:
+
+  az containerapp show --name "<container-app>" --resource-group "<your-rg>" --query "properties.{Status:runningStatus, Health:latestRevisionFqdn}" -o table
+
+  ```az group create --name "<your-resource-group-name>" --location "eastus"
+
+
+
+- **View logs:**```
+
+  ```powershell
+
+  az containerapp logs show --name "<container-app>" --resource-group "<your-rg>" --tail 50 --follow# Deploy all resources
+
+  ```
+
+az deployment group create `
+
+- **Role propagation:** Azure role assignments can take 5-10 minutes to propagate. If you see authentication errors immediately after deployment, wait a few minutes and try again.
+
+    --resource-group "<your-resource-group-name>" `
+
+    --template-file deploy-all-resources.bicep `**Optional Parameters:**
+
+    --parameters deploy-all-resources.parameters.json
+
+```- `-EntraAppClientId` - Entra App Client ID (auto-discovered if not provided)## 📋 Available Scripts- ✅ Builds the .NET application  
+
+
+
+### Step 2: Deploy MCP Server and Configure Authentication
+
+
+
+Run the main deployment script:**What it does:**
+
+
+
+```powershell- ✅ Discovers your existing MCP deployment automatically
+
+cd ../scripts
+
+- ✅ Gets the AI Foundry project's managed identity### `Deploy-All.ps1` - Complete Deployment ⭐- ✅ Pushes Docker image to ACR  
+
+# Basic deployment
+
+.\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "my-mcp-toolkit"- ✅ Assigns the `Mcp.Tool.Executor` role to the AI Foundry managed identity
+
+```
+
+- ✅ Provides the exact configuration values for AI Foundry connection setup
+
+### Step 3: Add AI Foundry Integration (Optional)
+
+
+
+If you want to use the MCP server with AI Foundry agents:
+
+**Example:****Complete end-to-end deployment script.** Use this for all deployments.- ✅ Creates Entra ID application  
+
+```powershell
+
+.\Setup-AIFoundry-Integration.ps1 ````powershell
+
+    -ResourceGroup "my-mcp-toolkit" `
+
+    -AIFoundryProjectResourceId "YOUR-AI-FOUNDRY-RESOURCE-ID".\scripts\Setup-AIFoundry-Integration.ps1 `
+
+```
+
+    -ResourceGroup "my-mcp-toolkit" `
+
+---
+
+    -AIFoundryProjectResourceId "/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-ai-rg/providers/Microsoft.CognitiveServices/accounts/my-ai-foundry"**Usage:**- ✅ Configures all permissions  1. **Azure CLI** installed and authenticated (`az login`)## PrerequisitesThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit with AI Foundry integration.
+
+## 🔧 Common Issues
+
+```
+
+### Docker build fails
+
+- Ensure Docker Desktop is running```powershell
+
+- Make sure you're in the MCPToolKit root directory
+
+---
+
+### ACR authentication fails
+
+- The script automatically runs `az acr login`, but ensure you have permissions.\scripts\Deploy-All.ps1 -ResourceGroup "rg-myproject-mcp"- ✅ Updates Container App  
+
+- Check that the ACR exists in your resource group
+
+## Quick Start
+
+### Entra App creation fails
+
+- Ensure you have permissions to create Azure AD applications```
+
+- Check the service management reference is not blocked by policy
+
+### Step 1: Deploy Core MCP Toolkit
+
+### Container App deployment fails
+
+- Verify infrastructure was deployed successfully (Cosmos DB, Container App, ACR should exist)2. **Docker** installed and running
+
+- Check that the managed identity has required permissions
+
+```powershell
+
+### Image not pulling from ACR
+
+- The script now automatically configures ACR authentication# Deploy the core MCP server (works standalone)**With AI Foundry integration:**
+
+- Verify the managed identity has AcrPull role on the registry
+
+.\scripts\Deploy-MCP-Core.ps1 -ResourceGroup "my-mcp-toolkit"
+
+---
+
+``````powershell---
+
+## 📚 Additional Resources
+
+
+
+- [Main README](../README.md) - Full documentation
+
+- [Authentication Setup Guide](../docs/AUTHENTICATION-SETUP.md) - Authentication details### Step 2: Add AI Foundry Integration (Optional).\scripts\Deploy-All.ps1 `
+
+- [Troubleshooting Guide](../docs/TROUBLESHOOTING.md) - Detailed troubleshooting
+
+
+
+---
+
+```powershell    -ResourceGroup "rg-myproject-mcp" `3. **.NET 9.0 SDK** installed
+
+## ⚡ Tips
+
+# Add AI Foundry integration
+
+- **Find your resource names:** Use Azure Portal or run:
+
+  ```powershell.\scripts\Setup-AIFoundry-Integration.ps1 `    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<project>"
+
+  az resource list --resource-group "<your-rg>" --query "[].{Name:name, Type:type}" -o table
+
+  ```    -ResourceGroup "my-mcp-toolkit" `
+
+
+
+- **Check deployment status:**    -AIFoundryProjectResourceId "YOUR-AI-FOUNDRY-RESOURCE-ID"```## Available Scripts
+
+  ```powershell
+
+  az containerapp show --name "<container-app>" --resource-group "<your-rg>" --query "properties.{Status:runningStatus, Health:latestRevisionFqdn}" -o table```
+
+  ```
+
+
+
+- **View logs:**
+
+  ```powershell## Prerequisites
+
+  az containerapp logs show --name "<container-app>" --resource-group "<your-rg>" --tail 50
+
+  ```**Parameters:**4. **PowerShell 7+** (or Windows PowerShell 5.1)
+
+
+
+- **15-second timeouts:** Scripts have automatic timeout protection for slow Azure CLI commandsBefore running these scripts, ensure you have:
 
 - `-ResourceGroup` (required): Azure resource group name
 
-- `-ContainerAppName` (optional): Container app name (default: auto-detected)### `Deploy-All.ps1` - Complete Deployment
+1. **Azure CLI** installed and logged in (`az login`)
 
-- `-CosmosAccountName` (optional): Cosmos DB account name (default: auto-detected)
+2. **Docker Desktop** installed and running- `-ContainerAppName` (optional): Container app name (default: auto-detected)### `Deploy-All.ps1` - Complete Deployment
+
+3. **Azure subscription** with Contributor access
+
+4. **Resource group** created via "Deploy to Azure" button (see main README)- `-CosmosAccountName` (optional): Cosmos DB account name (default: auto-detected)
+
+5. **AI Foundry project** (optional, for AI Foundry integration)
 
 - `-AIFoundryProjectResourceId` (optional): AI Foundry project resource ID for automatic role assignment5. **Azure Subscription** with permissions to:Before running the deployment, ensure you have:
 
+## Getting AI Foundry Resource ID
 
+
+
+To get your AI Foundry resource ID for the integration script:
 
 **What it does:****Usage:**
 
-1. Validates resource group exists
+```powershell
+
+# List AI Foundry resources1. Validates resource group exists
+
+az cognitiveservices account list --query "[?kind=='AIServices' || kind=='OpenAI'].{Name:name, ResourceGroup:resourceGroup, Id:id}" --output table
 
 2. Authenticates to Azure Container Registry```powershell   - Create/manage resource groups
 
-3. Builds .NET application and Docker image
+# Get specific resource ID
+
+az cognitiveservices account show --name "YOUR-AI-FOUNDRY-NAME" --resource-group "YOUR-AI-FOUNDRY-RG" --query "id" --output tsv3. Builds .NET application and Docker image
+
+```
 
 4. Pushes image to ACR with validation.\scripts\Deploy-All.ps1 -ResourceGroup "rg-myproject-mcp"
 
+## Troubleshooting
+
 5. Creates Entra App with MCP Tool Executor role
+
+### Common Issues
 
 6. Creates Service Principal```   - Deploy Container Apps, Cosmos DB
 
-7. Configures redirect URIs for web UI
+**"No Azure Container Registry found"**
+
+- Make sure you deployed the infrastructure first using the "Deploy to Azure" button7. Configures redirect URIs for web UI
+
+- Verify the resource group name is correct
 
 8. Assigns current user to MCP role
 
-9. Gets managed identity from Container App
+**"Error creating Entra App"**
+
+- Ensure you have permissions to create Azure AD applications9. Gets managed identity from Container App
+
+- You need Application Administrator or Global Administrator role
 
 10. Assigns Cosmos DB Data Reader role to managed identity### `Setup-Permissions.ps1` - Permissions Only   - Create Entra ID applications
 
-11. Assigns AcrPull role to managed identity
+**"Could not get AI Foundry managed identity"**
 
-12. Configures Container App with ACR authentication
+- Verify the AI Foundry resource ID is correct11. Assigns AcrPull role to managed identity
 
-13. Updates Container App with new image and Entra App configuration
+- Ensure the AI Foundry resource has a managed identity enabled
 
-14. (Optional) Assigns AI Foundry managed identity to MCP role**Usage:**   - Assign roles and permissions1. **Azure CLI** installed and authenticated (`az login`)## PrerequisitesThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit with AI Foundry integration.This directory contains deployment and testing scripts for the Azure Cosmos DB MCP Toolkit.
+- Check you have permissions to read the AI Foundry resource12. Configures Container App with ACR authentication
 
-15. Displays all configuration values and AI Foundry setup instructions
 
+
+### Getting Help13. Updates Container App with new image and Entra App configuration
+
+
+
+For more troubleshooting information, see:14. (Optional) Assigns AI Foundry managed identity to MCP role**Usage:**   - Assign roles and permissions1. **Azure CLI** installed and authenticated (`az login`)## PrerequisitesThis directory contains deployment scripts for the Azure Cosmos DB MCP Toolkit with AI Foundry integration.This directory contains deployment and testing scripts for the Azure Cosmos DB MCP Toolkit.
+
+- [Main README](../README.md)
+
+- [Authentication Setup Guide](../docs/AUTHENTICATION-SETUP.md)15. Displays all configuration values and AI Foundry setup instructions
+
+- [Troubleshooting Guide](../docs/TROUBLESHOOTING.md)
 ```powershell
 
 ---

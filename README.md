@@ -2,10 +2,19 @@
 
 A Model Context Protocol (MCP) server that enables AI agents to interact with Azure Cosmos DB through natural language queries. Features enterprise-grade security with Azure Entra ID authentication, document operations, vector search, and schema discovery.
 
+> **📝 IMPORTANT NOTICE**  
+> This documentation uses placeholder values like `YOUR-RESOURCE-GROUP-NAME`, `YOUR-CLIENT-ID`, etc. **You must replace ALL placeholder values with your actual Azure resource names and IDs**. The deployment scripts require you to provide your specific parameters - no defaults are assumed.
+
 > **✨ NEW: Simplified AI Foundry Integration**  
 > For AI Foundry projects, use the new **one-step deployment** with `scripts/Deploy-All.ps1` which automatically configures authentication and permissions. See [AI Foundry Integration](#ai-foundry-integration) below.
 
 ## 🚀 Quick Start Guide
+
+> ⚠️ **IMPORTANT**: This guide uses placeholder values like `YOUR-RESOURCE-GROUP-NAME`. You must replace these with your actual Azure resource names throughout all commands.
+
+The MCP Toolkit deployment is now split into two clear steps:
+1. **Core MCP Deployment** - Deploy the essential MCP server (works standalone)
+2. **AI Foundry Integration** - Optional integration with AI Foundry projects
 
 Follow these steps to get your MCP Toolkit running:
 
@@ -23,54 +32,213 @@ This creates:
 
 **Note:** The Entra ID app will be created in Step 2 for better reliability.
 
-### Step 2: Deploy Everything (5 minutes)
+### Step 2: Deploy Core MCP Toolkit (5 minutes)
 
-Run the complete deployment script - it builds, deploys, and configures everything:
+Run the core deployment script with **YOUR** resource group name - it builds, deploys, and configures the essential MCP server:
 
 ```powershell
-.\scripts\Deploy-All.ps1 -ResourceGroup "your-resource-group-name"
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP-NAME"
 ```
 
-This automatically:
-- ✅ Builds and pushes the Docker image
-- ✅ Creates the Entra ID app with MCP Tool Executor role
-- ✅ Assigns you to the MCP role (you can use it immediately!)
-- ✅ Configures Cosmos DB and Azure Container Registry permissions
-- ✅ Deploys and configures the Container App
-- ✅ Displays all configuration values you need
+> ⚠️ **IMPORTANT**: Replace `YOUR-RESOURCE-GROUP-NAME` with your actual resource group name. The script requires you to specify your parameters - no defaults are assumed.
+
+**Required Parameters:**
+- `-ResourceGroup`: Your Azure resource group name (created in Step 1)
+
+**Optional Parameters:**
+- `-Location`: Azure region (default: `eastus`)
+- `-CosmosAccountName`: Cosmos DB account name (default: `cosmosmcpkit`)
+- `-ContainerAppName`: Container app name (default: `mcp-toolkit-app`)
+
+**Example with basic deployment:**
+```powershell
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "my-cosmos-mcp-toolkit"
+```
+
+**Example with custom parameters:**
+```powershell
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 `
+    -ResourceGroup "my-cosmos-project" `
+    -Location "westus2" `
+    -CosmosAccountName "mycosmosdb" `
+    -ContainerAppName "my-mcp-app"
+```
+
+> 💡 **Tip**: If you deployed using the "Deploy to Azure" button in Step 1, use the same resource group name you specified there.
+
+**What Deploy-Cosmos-MCP-Toolkit.ps1 does for you:**
+- ✅ Builds and pushes Docker image to Azure Container Registry
+- ✅ Creates Entra App with MCP Tool Executor role and authentication configuration
+- ✅ Creates Service Principal and configures redirect URIs for web UI
+- ✅ Assigns your user account to the MCP role (you can use it immediately!)
+- ✅ Sets up managed identity and configures all Azure permissions (Cosmos DB, ACR)
+- ✅ Deploys and configures the Container App with authentication
+
+> 🎯 **Your MCP Toolkit is now ready to use!** You can test it immediately or optionally add AI Foundry integration in the next step.
+
+---
+
+## � Getting AI Foundry Resource ID (For AI Foundry Integration)
+
+If you want to integrate with AI Foundry, you need to provide the AI Foundry project resource ID. Here's how to get it:
+
+### Option A: Using Azure Portal
+1. Go to [Azure Portal](https://portal.azure.com)
+2. Navigate to your AI Foundry resource (or Azure OpenAI resource)
+3. Go to **Properties** or **Overview**
+4. Copy the **Resource ID**
+
+### Option B: Using Azure CLI
+
+```powershell
+# List AI Foundry resources (CognitiveServices accounts)
+az cognitiveservices account list --query "[?kind=='AIServices' || kind=='OpenAI'].{Name:name, ResourceGroup:resourceGroup, Id:id}" --output table
+
+# Or list by specific resource group
+az cognitiveservices account list --resource-group "YOUR-AI-FOUNDRY-RG" --query "[].{Name:name, Id:id}" --output table
+
+# Get specific resource ID by name
+az cognitiveservices account show --name "YOUR-AI-FOUNDRY-NAME" --resource-group "YOUR-AI-FOUNDRY-RG" --query "id" --output tsv
+```
+
+### Option C: List Machine Learning Workspaces (Alternative)
+
+```powershell
+# If your AI Foundry is a Machine Learning workspace
+az ml workspace list --query "[].{Name:name, ResourceGroup:resource_group, Id:id}" --output table
+
+# Get specific workspace resource ID
+az ml workspace show --name "YOUR-WORKSPACE-NAME" --resource-group "YOUR-AI-FOUNDRY-RG" --query "id" --output tsv
+```
+
+**Example Resource ID formats:**
+- CognitiveServices: `/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-rg/providers/Microsoft.CognitiveServices/accounts/my-ai-foundry`
+- ML Workspace: `/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-rg/providers/Microsoft.MachineLearningServices/workspaces/my-workspace`
+
+### Running Deploy-All with AI Foundry Integration
+
+Once you have your AI Foundry resource ID:
+
+```powershell
+.\scripts\Deploy-All.ps1 `
+    -ResourceGroup "YOUR-RESOURCE-GROUP-NAME" `
+    -AIFoundryProjectResourceId "/subscriptions/YOUR-SUB-ID/resourceGroups/YOUR-AI-FOUNDRY-RG/providers/Microsoft.CognitiveServices/accounts/YOUR-AI-FOUNDRY-NAME"
+```
+
+> ⚠️ **IMPORTANT**: Replace all placeholder values with your actual resource information.
+
+---
+
+## 📋 Getting AI Foundry Resource ID (For AI Foundry Integration)
+
+If you want to integrate with AI Foundry, you need to provide the AI Foundry project resource ID. Here's how to get it:
+
+### Option A: Using Azure Portal
+1. Go to [Azure Portal](https://portal.azure.com)
+2. Navigate to your AI Foundry resource (or Azure OpenAI resource)
+3. Go to **Properties** or **Overview**
+4. Copy the **Resource ID**
+
+### Option B: Using Azure CLI
+
+```powershell
+# List AI Foundry resources (CognitiveServices accounts)
+az cognitiveservices account list --query "[?kind=='AIServices' || kind=='OpenAI'].{Name:name, ResourceGroup:resourceGroup, Id:id}" --output table
+
+# Or list by specific resource group
+az cognitiveservices account list --resource-group "YOUR-AI-FOUNDRY-RG" --query "[].{Name:name, Id:id}" --output table
+
+# Get specific resource ID by name
+az cognitiveservices account show --name "YOUR-AI-FOUNDRY-NAME" --resource-group "YOUR-AI-FOUNDRY-RG" --query "id" --output tsv
+```
+
+### Option C: List Machine Learning Workspaces (Alternative)
+
+```powershell
+# If your AI Foundry is a Machine Learning workspace
+az ml workspace list --query "[].{Name:name, ResourceGroup:resource_group, Id:id}" --output table
+
+# Get specific workspace resource ID
+az ml workspace show --name "YOUR-WORKSPACE-NAME" --resource-group "YOUR-AI-FOUNDRY-RG" --query "id" --output tsv
+```
+
+**Example Resource ID formats:**
+- CognitiveServices: `/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-rg/providers/Microsoft.CognitiveServices/accounts/my-ai-foundry`
+- ML Workspace: `/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-rg/providers/Microsoft.MachineLearningServices/workspaces/my-workspace`
+
+---
+
+### Step 3: Add AI Foundry Integration (Optional - 3 minutes)
+
+If you want to use the MCP Toolkit with AI Foundry projects, run the AI Foundry connection script:
+
+```powershell
+.\scripts\Setup-AIFoundry-Connection.ps1 `
+    -AIFoundryProjectResourceId "YOUR-AI-FOUNDRY-RESOURCE-ID" `
+    -ConnectionName "cosmos-mcp-connection"
+```
 
 **Example:**
 ```powershell
-.\scripts\Deploy-All.ps1 -ResourceGroup "rg-myproject-mcp"
+.\scripts\Setup-AIFoundry-Connection.ps1 `
+    -AIFoundryProjectResourceId "/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-ai-rg/providers/Microsoft.CognitiveServices/accounts/my-account/projects/my-project" `
+    -ConnectionName "cosmos-mcp-connection"
 ```
 
-**With AI Foundry integration:**
+> ⚠️ **IMPORTANT**: Replace `YOUR-AI-FOUNDRY-RESOURCE-ID` with your actual AI Foundry project resource ID (see section below for how to get it).
+
+**What Setup-AIFoundry-Connection.ps1 does:**
+- ✅ Reads deployment info from `deployment-info.json` (created in Step 2)
+- ✅ Retrieves AI Foundry project's managed identity
+- ✅ Creates MCP connection in AI Foundry with correct authentication
+- ✅ Assigns the `Mcp.Tool.Executor` role to the AI Foundry managed identity
+- ✅ Validates the connection configuration
+
+**After the script completes**, your AI Foundry project can immediately use the MCP Toolkit tools in agents and workflows.
+
+---
+
+## 📋 Getting AI Foundry Resource ID
+
+If you want to integrate with AI Foundry (Step 3), you need your AI Foundry project resource ID:
+
+### Option A: Using Azure Portal
+1. Go to [Azure Portal](https://portal.azure.com)
+2. Navigate to your AI Foundry project
+3. Go to **Properties** or **Overview**
+4. Copy the **Resource ID**
+
+### Option B: Using Azure CLI
+
 ```powershell
-.\scripts\Deploy-All.ps1 `
-    -ResourceGroup "rg-myproject-mcp" `
-    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account-name>"
+# List all AI Foundry projects
+az cognitiveservices account list --query "[?kind=='AIServices'].{Name:name, ResourceGroup:resourceGroup, Id:id}" --output table
+
+# Get specific project resource ID
+az cognitiveservices account show --name "YOUR-PROJECT-NAME" --resource-group "YOUR-AI-RG" --query "id" --output tsv
 ```
 
-**What Deploy-All.ps1 does for you:**
-- ✅ Builds and pushes Docker image to Azure Container Registry
-- ✅ Creates Entra App with authentication configuration
-- ✅ Creates Service Principal and configures redirect URIs
-- ✅ Assigns your user account to the MCP role (you can use it immediately!)
-- ✅ Configures all Azure permissions (Cosmos DB, ACR)
-- ✅ Deploys and configures the Container App
+**Expected Format:**
+```
+/subscriptions/{subscription-id}/resourceGroups/{resource-group}/providers/Microsoft.CognitiveServices/accounts/{account}/projects/{project}
+```
 
-> � **That's it!** One script does everything. No need to run multiple scripts or configure permissions separately.
+**Example:**
+```
+/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-ai-rg/providers/Microsoft.CognitiveServices/accounts/my-account/projects/my-project
+```
 
-> 💡 **Tip:** Find your resource names in the Azure Portal or by running:
-> ```powershell
-> az containerapp list --resource-group "your-resource-group-name" --query "[].{Name:name, Registry:properties.configuration.registries[0].server}" --output table
-> ```
+---
 
-### Step 3: Get Configuration Values (1 minute)
+### Step 4: Get Configuration Values (1 minute)
 
 After deployment, get the values you'll need for testing and configuration:
 
 ```powershell
+# Replace with YOUR actual resource group and container app names
+$resourceGroup = "YOUR-RESOURCE-GROUP-NAME"
+$containerAppName = "YOUR-CONTAINER-APP-NAME"  # Usually "mcp-toolkit-app" unless you changed it
+
 # Get your Tenant ID
 $tenantId = az account show --query "tenantId" --output tsv
 Write-Host "Tenant ID: $tenantId" -ForegroundColor Green
@@ -80,15 +248,17 @@ $clientId = az ad app list --display-name "*Azure Cosmos DB MCP Toolkit API*" --
 Write-Host "App Client ID: $clientId" -ForegroundColor Green
 
 # Get your Container App URL
-$appUrl = az containerapp show --name "your-container-app-name" --resource-group "your-resource-group-name" --query "properties.configuration.ingress.fqdn" --output tsv
+$appUrl = az containerapp show --name $containerAppName --resource-group $resourceGroup --query "properties.configuration.ingress.fqdn" --output tsv
 Write-Host "App URL: https://$appUrl" -ForegroundColor Green
 ```
+
+> ⚠️ **IMPORTANT**: Replace `YOUR-RESOURCE-GROUP-NAME` and `YOUR-CONTAINER-APP-NAME` with your actual values before running these commands.
 
 **Save these values** - you'll need them for testing and VS Code integration.
 
 ---
 
-## 🧪 Step 4: Test Your Deployment
+## 🧪 Step 5: Test Your Deployment
 
 Now that everything is deployed, test that it works:
 
@@ -102,9 +272,9 @@ Now that everything is deployed, test that it works:
 #### Option B: Test via PowerShell
 
 ```powershell
-# Replace with your actual resource names
-$resourceGroup = "your-resource-group-name"
-$containerAppName = "your-container-app-name"
+# Replace with YOUR actual resource names
+$resourceGroup = "YOUR-RESOURCE-GROUP-NAME"
+$containerAppName = "YOUR-CONTAINER-APP-NAME"  # Usually "mcp-toolkit-app"
 
 # Get App Client ID and URL
 $clientId = az ad app list --display-name "*Azure Cosmos DB MCP Toolkit API*" --query "[0].appId" --output tsv
@@ -118,6 +288,8 @@ $headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/j
 $body = '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 Invoke-RestMethod -Uri "https://$appUrl/mcp" -Method Post -Headers $headers -Body $body
 ```
+
+> ⚠️ **IMPORTANT**: Replace `YOUR-RESOURCE-GROUP-NAME` and `YOUR-CONTAINER-APP-NAME` with your actual values before running these commands.
 
 **Expected result:** You should see a JSON response with a list of available MCP tools like:
 ```json
@@ -138,7 +310,12 @@ Invoke-RestMethod -Uri "https://$appUrl/mcp" -Method Post -Headers $headers -Bod
 
 ## 🤖 AI Foundry Integration
 
-To use the MCP Toolkit with Azure AI Foundry (for AI Agents):
+The MCP Toolkit now has **separate, clean integration** with Azure AI Foundry. This is completely optional - the core MCP Toolkit works perfectly standalone.
+
+### Two-Step Process:
+
+1. **Core MCP Deployment** (required): Deploy the MCP server using `Deploy-Cosmos-MCP-Toolkit.ps1`
+2. **AI Foundry Integration** (optional): Add AI Foundry integration using `Setup-AIFoundry-Integration.ps1`
 
 ### Step 1: Create AI Foundry Connection
 
@@ -148,29 +325,33 @@ To use the MCP Toolkit with Azure AI Foundry (for AI Agents):
 4. Click **+ New connection** → **Model Context Protocol tool**
 5. Configure the connection:
    - **Name**: Give it a descriptive name (e.g., `cosmosdb-mcp`)
-   - **Remote MCP Server endpoint**: Your Container App URL + `/mcp` (e.g., `https://mcp-toolkit-app.mangostone-b2cd48c2.eastus.azurecontainerapps.io/mcp`)
+   - **Remote MCP Server endpoint**: Your Container App URL + `/mcp` (from Step 4 configuration values)
    - **Authentication**: Select **Microsoft Entra**
    - **Type**: Select **Project Managed Identity**
-   - **Audience**: Your Entra App Client ID (e.g., `8386065d-82c4-4103-987b-e64256e2de2f`)
+   - **Audience**: Your Entra App Client ID (from Step 4 configuration values)
 6. Click **Connect**
 
-### Step 2: Assign AI Foundry Managed Identity to MCP Role
+### Step 2: Run AI Foundry Integration Script
 
-Run Deploy-All.ps1 with your AI Foundry project resource ID to automatically assign the role:
+**First, get your AI Foundry resource ID** (see [Getting AI Foundry Resource ID](#-getting-ai-foundry-resource-id-for-ai-foundry-integration) section above).
 
-```powershell
-.\scripts\Deploy-All.ps1 `
-    -ResourceGroup "your-resource-group-name" `
-    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account-name>"
-```
-
-**Or** run the standalone script:
+Then run the integration script:
 
 ```powershell
-.\scripts\Setup-AIFoundry-RoleAssignment.ps1 `
-    -AIFoundryProjectResourceId "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account-name>" `
-    -EntraAppClientId "your-client-id"
+.\scripts\Setup-AIFoundry-Integration.ps1 `
+    -ResourceGroup "YOUR-RESOURCE-GROUP-NAME" `
+    -AIFoundryProjectResourceId "YOUR-AI-FOUNDRY-RESOURCE-ID"
 ```
+
+> ⚠️ **IMPORTANT**: Replace with your actual values:
+> - `YOUR-RESOURCE-GROUP-NAME`: Your MCP resource group name
+> - `YOUR-AI-FOUNDRY-RESOURCE-ID`: Your AI Foundry resource ID
+
+The script will automatically:
+- ✅ Discover your existing MCP deployment
+- ✅ Get the AI Foundry managed identity
+- ✅ Assign the `Mcp.Tool.Executor` role
+- ✅ Provide connection configuration values
 
 ### ⚠️ Important: Token Propagation Delay
 
@@ -204,8 +385,8 @@ After deployment, you'll need these values for testing and AI Foundry integratio
 # Navigate to your project directory
 cd C:\Cosmos\MCPToolKit
 
-# Set your resource group name
-$resourceGroup = "your-resource-group-name"
+# Set YOUR resource group name
+$resourceGroup = "YOUR-RESOURCE-GROUP-NAME"
 
 # Get all configuration values
 Write-Host "`n=== MCP Toolkit Configuration Values ===" -ForegroundColor Cyan
@@ -235,6 +416,8 @@ Write-Host "  $principalId" -ForegroundColor Green
 Write-Host "`n========================================" -ForegroundColor Cyan
 ```
 
+> ⚠️ **IMPORTANT**: Replace `YOUR-RESOURCE-GROUP-NAME` with your actual resource group name before running this script.
+
 ### Individual Commands
 
 #### 1. Get MCP Server Endpoint
@@ -242,13 +425,15 @@ Write-Host "`n========================================" -ForegroundColor Cyan
 ```powershell
 # Get your Container App URL
 $appUrl = az containerapp show `
-    --name "your-container-app-name" `
-    --resource-group "your-resource-group-name" `
+    --name "YOUR-CONTAINER-APP-NAME" `
+    --resource-group "YOUR-RESOURCE-GROUP-NAME" `
     --query "properties.configuration.ingress.fqdn" `
     --output tsv
 
 Write-Host "MCP Server Endpoint: https://$appUrl/mcp" -ForegroundColor Green
 ```
+
+> ⚠️ **IMPORTANT**: Replace `YOUR-CONTAINER-APP-NAME` and `YOUR-RESOURCE-GROUP-NAME` with your actual values.
 
 **Example output:** `https://mcp-toolkit-app.mangostone-b2cd48c2.eastus.azurecontainerapps.io/mcp`
 
@@ -287,14 +472,16 @@ Write-Host "Tenant ID: $tenantId" -ForegroundColor Green
 ```powershell
 # Get Container App Managed Identity (for AI Foundry role assignments)
 $containerApp = az containerapp show `
-    --name "your-container-app-name" `
-    --resource-group "your-resource-group-name" | ConvertFrom-Json
+    --name "YOUR-CONTAINER-APP-NAME" `
+    --resource-group "YOUR-RESOURCE-GROUP-NAME" | ConvertFrom-Json
 
 $identityId = ($containerApp.identity.userAssignedIdentities.PSObject.Properties.Name)[0]
 $identity = az identity show --ids $identityId | ConvertFrom-Json
 
 Write-Host "Managed Identity Principal ID: $($identity.principalId)" -ForegroundColor Green
 ```
+
+> ⚠️ **IMPORTANT**: Replace `YOUR-CONTAINER-APP-NAME` and `YOUR-RESOURCE-GROUP-NAME` with your actual values.
 
 **Example output:** `12345678-90ab-cdef-1234-567890abcdef`
 
@@ -319,9 +506,11 @@ After deployment, configure your AI Foundry project to use the MCP Toolkit:
 | Field | Value | How to Get |
 |-------|-------|------------|
 | **Connection Name** | `cosmos-mcp-toolkit` | Your choice (any name) |
-| **MCP Server URL** | `https://your-app.azurecontainerapps.io/mcp` | Run command above to get endpoint |
+| **MCP Server URL** | `https://YOUR-APP.azurecontainerapps.io/mcp` | Replace YOUR-APP with your container app URL |
 | **Authentication Method** | **Connection (Managed Identity)** | Select from dropdown |
-| **Audience / Client ID** | `a1b2c3d4-e5f6-...` | Run command above to get Client ID |
+| **Audience / Client ID** | `YOUR-CLIENT-ID` | Replace with your actual Client ID |
+
+> ⚠️ **IMPORTANT**: Replace `YOUR-APP` and `YOUR-CLIENT-ID` with your actual values from the configuration commands above.
 
 ### Step 3: Test the Connection
 
@@ -357,11 +546,12 @@ $aifMI = az ml workspace show --ids $aifProject --query "identity.principalId" -
 az rest --method GET --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$aifMI/appRoleAssignments"
 ```
 
-2. **Assign the role manually if needed:**
+2. **Check AI Foundry integration:**
 ```powershell
-.\scripts\Setup-AIFoundry-RoleAssignment.ps1 `
-    -AIFoundryProjectResourceId "<your-aif-project-resource-id>" `
-    -EntraAppClientId "<your-client-id>"
+# Verify the AI Foundry integration was completed
+.\scripts\Setup-AIFoundry-Integration.ps1 `
+    -ResourceGroup "YOUR-RESOURCE-GROUP-NAME" `
+    -AIFoundryProjectResourceId "YOUR-AI-FOUNDRY-RESOURCE-ID"
 ```
 
 3. **Verify the MCP endpoint is accessible:**
@@ -469,33 +659,60 @@ To use your deployed MCP server with VS Code, you need to configure it with your
      "servers": {
        "azure-cosmos-db-mcp": {
          "type": "http",
-         "url": "https://your-app-url.azurecontainerapps.io",
+         "url": "https://YOUR-APP-URL.azurecontainerapps.io",
          "auth": {
            "type": "oauth2",
-           "tenantId": "your-tenant-id",
-           "clientId": "your-client-id"
+           "tenantId": "YOUR-TENANT-ID",
+           "clientId": "YOUR-CLIENT-ID"
          }
        }
      }
    }
    ```
 
+   > ⚠️ **IMPORTANT**: Replace `YOUR-APP-URL`, `YOUR-TENANT-ID`, and `YOUR-CLIENT-ID` with your actual values from Step 4.
+
 3. **Reload VS Code** and test with Copilot.
 
 ### Azure AI Foundry Integration
 
-#### One-Step Deployment (RECOMMENDED)
+#### Two-Step Deployment (RECOMMENDED)
 
-The new `Deploy-All.ps1` script handles everything automatically:
+The new approach separates core MCP deployment from AI Foundry integration:
 
 ```powershell
-cd scripts
+# Step 1: Deploy core MCP toolkit
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP-NAME"
 
+# Step 2: Add AI Foundry integration (optional)
+.\scripts\Setup-AIFoundry-Integration.ps1 `
+    -ResourceGroup "YOUR-RESOURCE-GROUP-NAME" `
+    -AIFoundryProjectResourceId "YOUR-AI-FOUNDRY-RESOURCE-ID"
+```
+
+This approach provides:
+- ✅ Clean separation of concerns
+- ✅ Core MCP works standalone
+- ✅ Optional AI Foundry integration
+- ✅ Better error handling and troubleshooting
+
+#### Legacy One-Step Deployment (Alternative)
+
+The original `Deploy-All.ps1` script still works for backward compatibility:
+
+```powershell
 # Deploy with AI Foundry integration
 ./Deploy-All.ps1 `
-    -ResourceGroup "<your-resource-group-name>" `
-    -AIFoundryProjectResourceId "/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.MachineLearningServices/workspaces/<hub-name>/projects/<project-name>"
+    -ResourceGroup "YOUR-RESOURCE-GROUP-NAME" `
+    -AIFoundryProjectResourceId "/subscriptions/YOUR-SUBSCRIPTION-ID/resourceGroups/YOUR-RESOURCE-GROUP/providers/Microsoft.MachineLearningServices/workspaces/YOUR-HUB-NAME/projects/YOUR-PROJECT-NAME"
 ```
+
+> ⚠️ **IMPORTANT**: Replace all placeholder values:
+> - `YOUR-RESOURCE-GROUP-NAME`: Your resource group name
+> - `YOUR-SUBSCRIPTION-ID`: Your Azure subscription ID
+> - `YOUR-RESOURCE-GROUP`: Your AI Foundry resource group
+> - `YOUR-HUB-NAME`: Your AI Foundry hub name  
+> - `YOUR-PROJECT-NAME`: Your AI Foundry project name
 
 This script automatically:
 - ✅ Builds and deploys the MCP server
