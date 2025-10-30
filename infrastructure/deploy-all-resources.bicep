@@ -4,17 +4,6 @@ param resourcePrefix string = 'mcp-toolkit'
 @description('Location for all resources')
 param location string = resourceGroup().location
 
-@description('The Azure AD Object ID of the user/service principal that will have access to the external resources (for manual RBAC assignment)')
-param principalId string
-
-@description('The type of principal (User, ServicePrincipal, or Group) for external resource access')
-@allowed([
-  'User'
-  'ServicePrincipal'
-  'Group'
-])
-param principalType string = 'User'
-
 @description('Owner tag value (optional)')
 param ownerTag string = 'mcp-toolkit-user'
 
