@@ -68,14 +68,9 @@ After deployment, you need to:
 
 See the [Deploy to Azure Guide](../docs/deploy-to-azure-guide.md) for detailed post-deployment instructions.
 
-## Azure Policy Owner Tag Support
-
-The Bicep template includes an `ownerTag` parameter for organizations that require owner tags on all resources. If you encounter policy errors, make sure to provide the `ownerTag` parameter during deployment.
-
 ## Files
 
 - `deploy-all-resources.bicep` - Main Bicep template for all resources
 - `deploy-all-resources.json` - ARM template (auto-generated from Bicep)
 - `deploy-all-resources.parameters.template.json` - Parameter template file
 - `main.bicep` - Simplified template for existing deployments
-- `deploy-with-owner-tag.ps1` - PowerShell script for organizations with owner tag policies

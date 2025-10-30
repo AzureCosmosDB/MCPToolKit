@@ -8,15 +8,6 @@
     "location": {
       "value": "[resourceGroup().location]"
     },
-    "principalId": {
-      "value": ""
-    },
-    "principalType": {
-      "value": "User"
-    },
-    "ownerTag": {
-      "value": "mcp-toolkit-user"
-    },
     "cosmosEndpoint": {
       "value": "",
       "metadata": {
