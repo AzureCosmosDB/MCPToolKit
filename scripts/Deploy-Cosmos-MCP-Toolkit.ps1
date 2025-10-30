@@ -360,12 +360,70 @@ function Update-Container-App {
     $CURRENT_TENANT_ID = az account show --query "tenantId" --output tsv
     Write-Info "Current Tenant ID: $CURRENT_TENANT_ID"
 
-    # Update container app with new image and authentication
+    # Get Cosmos DB endpoint
+    $cosmosEndpoint = az cosmosdb show --name $CosmosAccountName --resource-group $ResourceGroup --query "documentEndpoint" --output tsv
+    Write-Info "Cosmos DB Endpoint: $cosmosEndpoint"
+    
+    # Get Container App managed identity client ID
+    $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
+    $managedIdentityClientId = $null
+    
+    if ($containerApp.identity.userAssignedIdentities) {
+        $identityKey = ($containerApp.identity.userAssignedIdentities | Get-Member -MemberType NoteProperty)[0].Name
+        $managedIdentityClientId = $containerApp.identity.userAssignedIdentities.$identityKey.clientId
+    }
+    
+    if ($managedIdentityClientId) {
+        Write-Info "Managed Identity Client ID: $managedIdentityClientId"
+    } else {
+        Write-Warn "No managed identity found - COSMOS_ENDPOINT may not work without managed identity"
+    }
+
+    # Get existing environment variables to extract AI Foundry and embedding settings
+    $existingEnvVars = $containerApp.properties.template.containers[0].env
+    $aifProjectEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value
+    $embeddingDeployment = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_EMBEDDING_DEPLOYMENT" }).value
+    
+    if (-not $aifProjectEndpoint) {
+        Write-Warn "OPENAI_ENDPOINT not found in existing container app configuration"
+        Write-Warn "Please set this manually using: az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars 'OPENAI_ENDPOINT=<your-endpoint>'"
+    } else {
+        Write-Info "AI Foundry Endpoint: $aifProjectEndpoint"
+    }
+    
+    if (-not $embeddingDeployment) {
+        Write-Warn "OPENAI_EMBEDDING_DEPLOYMENT not found in existing container app configuration"
+        Write-Warn "Please set this manually using: az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars 'OPENAI_EMBEDDING_DEPLOYMENT=<your-deployment>'"
+    } else {
+        Write-Info "Embedding Deployment: $embeddingDeployment"
+    }
+
+    # Build environment variables list
+    $envVars = @(
+        "AzureAd__ClientId=$script:ENTRA_APP_CLIENT_ID"
+        "AzureAd__TenantId=$CURRENT_TENANT_ID"
+        "AzureAd__Audience=$script:ENTRA_APP_CLIENT_ID"
+        "COSMOS_ENDPOINT=$cosmosEndpoint"
+    )
+    
+    if ($managedIdentityClientId) {
+        $envVars += "AZURE_CLIENT_ID=$managedIdentityClientId"
+    }
+    
+    if ($aifProjectEndpoint) {
+        $envVars += "OPENAI_ENDPOINT=$aifProjectEndpoint"
+    }
+    
+    if ($embeddingDeployment) {
+        $envVars += "OPENAI_EMBEDDING_DEPLOYMENT=$embeddingDeployment"
+    }
+
+    # Update container app with new image and all environment variables
     Write-Info "Updating container app with image: $script:IMAGE_TAG"
-    az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars "AzureAd__ClientId=$script:ENTRA_APP_CLIENT_ID" "AzureAd__TenantId=$CURRENT_TENANT_ID" "AzureAd__Audience=$script:ENTRA_APP_CLIENT_ID"
+    az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars $envVars
 
     $script:CURRENT_TENANT_ID = $CURRENT_TENANT_ID
-    Write-Info "Azure Container App updated successfully!"
+    Write-Info "Azure Container App updated successfully with all environment variables!"
 }
 
 function Assign-ACR-Permissions {
