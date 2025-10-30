@@ -28,14 +28,7 @@ You must already have:
 cd scripts
 
 # Run the deployment script
-.\Deploy-CosmosMcpServer.ps1 -ResourceGroup "mcp-toolkit-rg"
-```
-
-### Option 2: Bash Script
-
-```bash
-# Run deployment script
-./scripts/deploy-cosmos-mcp-server.sh --resource-group "mcp-toolkit-rg"
+.\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "mcp-toolkit-rg"
 ```
 
 ### Option 3: Manual Bicep Deployment

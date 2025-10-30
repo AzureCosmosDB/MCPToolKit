@@ -46,8 +46,8 @@ MCPToolKit/
 │   ├── deploy-all-resources.bicep    # Main infrastructure
 │   └── modules/                       # Entra App & role assignments
 ├── scripts/                           # Deployment automation
-│   ├── Deploy-All.ps1                # One-step deployment (recommended)
-│   └── Setup-AIFoundry-RoleAssignment.ps1
+│   ├── Deploy-Cosmos-MCP-Toolkit.ps1 # One-step deployment (recommended)
+│   └── Setup-AIFoundry-Connection.ps1
 ├── client/                            # Python AI Foundry client example
 └── docs/                              # Additional documentation
 ```
@@ -69,7 +69,7 @@ This creates: Container App, Container Registry, Managed Identity, Cosmos DB acc
 Run the one-step deployment script:
 
 ```powershell
-.\scripts\Deploy-All.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP"
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP"
 ```
 
 This script:
@@ -103,7 +103,7 @@ Use these values to configure your AI agent or application.
 To connect your MCP server to an Azure AI Foundry project:
 
 ```powershell
-.\scripts\Setup-AIFoundry-RoleAssignment.ps1 `
+.\scripts\Setup-AIFoundry-Connection.ps1 `
   -AIFoundryProjectName "YOUR-PROJECT-NAME" `
   -ResourceGroup "YOUR-RESOURCE-GROUP"
 ```
