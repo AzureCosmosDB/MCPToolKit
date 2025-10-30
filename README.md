@@ -54,6 +54,8 @@ MCPToolKit/
 
 ## Quick Start
 
+> **IMPORTANT**: For best results, ensure all resources (Azure Cosmos DB, AI Foundry Project, Container App) are created in the **same resource group**. This simplifies permissions, networking, and role assignments.
+
 ### Step 1: Deploy Infrastructure
 
 Click the Deploy to Azure button to create all required Azure resources:
