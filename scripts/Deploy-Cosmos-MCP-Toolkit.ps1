@@ -364,19 +364,14 @@ function Update-Container-App {
     $cosmosEndpoint = az cosmosdb show --name $CosmosAccountName --resource-group $ResourceGroup --query "documentEndpoint" --output tsv
     Write-Info "Cosmos DB Endpoint: $cosmosEndpoint"
     
-    # Get Container App managed identity client ID
+    # Get Container App to extract existing environment variables
     $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
-    $managedIdentityClientId = $null
     
-    if ($containerApp.identity.userAssignedIdentities) {
-        $identityKey = ($containerApp.identity.userAssignedIdentities | Get-Member -MemberType NoteProperty)[0].Name
-        $managedIdentityClientId = $containerApp.identity.userAssignedIdentities.$identityKey.clientId
-    }
-    
-    if ($managedIdentityClientId) {
-        Write-Info "Managed Identity Client ID: $managedIdentityClientId"
+    # Verify system-assigned managed identity exists
+    if ($containerApp.identity.type -ne "SystemAssigned") {
+        Write-Warn "Container App is not using SystemAssigned identity. This may cause authentication issues."
     } else {
-        Write-Warn "No managed identity found - COSMOS_ENDPOINT may not work without managed identity"
+        Write-Info "Container App is using SystemAssigned managed identity"
     }
 
     # Get existing environment variables to extract AI Foundry and embedding settings
@@ -398,17 +393,13 @@ function Update-Container-App {
         Write-Info "Embedding Deployment: $embeddingDeployment"
     }
 
-    # Build environment variables list
+    # Build environment variables list (no AZURE_CLIENT_ID needed for system-assigned identity)
     $envVars = @(
         "AzureAd__ClientId=$script:ENTRA_APP_CLIENT_ID"
         "AzureAd__TenantId=$CURRENT_TENANT_ID"
         "AzureAd__Audience=$script:ENTRA_APP_CLIENT_ID"
         "COSMOS_ENDPOINT=$cosmosEndpoint"
     )
-    
-    if ($managedIdentityClientId) {
-        $envVars += "AZURE_CLIENT_ID=$managedIdentityClientId"
-    }
     
     if ($aifProjectEndpoint) {
         $envVars += "OPENAI_ENDPOINT=$aifProjectEndpoint"
@@ -429,20 +420,10 @@ function Update-Container-App {
 function Assign-ACR-Permissions {
     Write-Info "Verifying ACR permissions for Container App Managed Identity..."
     
-    # Get Container App Managed Identity Principal ID (user-assigned identity)
-    $identity = az containerapp show --resource-group $ResourceGroup --name $ContainerAppName --query "identity" | ConvertFrom-Json
+    # Get Container App System-Assigned Managed Identity Principal ID
+    $ACA_MI_PRINCIPAL_ID = az containerapp show --resource-group $ResourceGroup --name $ContainerAppName --query "identity.principalId" --output tsv
     
-    $ACA_MI_PRINCIPAL_ID = $null
-    if ($identity.userAssignedIdentities) {
-        # Get the first user-assigned identity's principal ID
-        $identityKey = ($identity.userAssignedIdentities | Get-Member -MemberType NoteProperty)[0].Name
-        $ACA_MI_PRINCIPAL_ID = $identity.userAssignedIdentities.$identityKey.principalId
-    } elseif ($identity.principalId) {
-        # Fallback to system-assigned identity
-        $ACA_MI_PRINCIPAL_ID = $identity.principalId
-    }
-    
-    if (-not $ACA_MI_PRINCIPAL_ID) {
+    if (-not $ACA_MI_PRINCIPAL_ID -or $ACA_MI_PRINCIPAL_ID -eq "null") {
         Write-Error "Failed to get Container App managed identity principal ID"
         exit 1
     }
