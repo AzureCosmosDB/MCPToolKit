@@ -422,6 +422,24 @@ function Update-Container-App {
         $envVars += "OPENAI_EMBEDDING_DEPLOYMENT=$embeddingDeployment"
     }
 
+    # Debug: Display environment variables that will be set
+    Write-Info "Environment variables to be set:"
+    foreach ($envVar in $envVars) {
+        if ($envVar -like "COSMOS_ENDPOINT=*") {
+            Write-Info "  ✅ $envVar"
+        } elseif ($envVar -like "*ENDPOINT=*" -or $envVar -like "*ClientId=*") {
+            $name = $envVar.Split('=')[0]
+            $value = $envVar.Split('=')[1]
+            if ($value.Length -gt 30) {
+                Write-Info "  $name=$($value.Substring(0, 30))..."
+            } else {
+                Write-Info "  $envVar"
+            }
+        } else {
+            Write-Info "  $envVar"
+        }
+    }
+
     # First, ensure ingress is configured correctly for port 8080
     Write-Info "Configuring ingress to use target port 8080..."
     try {
@@ -456,15 +474,42 @@ function Update-Container-App {
     Write-Info "Updating container app with image: $script:IMAGE_TAG"
     
     try {
-        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars $envVars --output none
+        # Step 1: Update the image first
+        Write-Info "Updating container image..."
+        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --output none
         
         if ($LASTEXITCODE -ne 0) {
-            throw "Container app update failed with exit code $LASTEXITCODE"
+            throw "Container app image update failed with exit code $LASTEXITCODE"
+        }
+        
+        # Step 2: Update environment variables separately to ensure they persist
+        Write-Info "Setting environment variables..."
+        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars $envVars --output none
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Container app environment variables update failed with exit code $LASTEXITCODE"
         }
         
         Write-Info "Container app updated successfully!"
         
-        # Configure CORS to allow web UI access
+        # Step 3: Verify environment variables are set correctly
+        Write-Info "Verifying environment variables..."
+        $updatedApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
+        $currentEnvVars = $updatedApp.properties.template.containers[0].env
+        $cosmosEnvVar = $currentEnvVars | Where-Object { $_.name -eq "COSMOS_ENDPOINT" }
+        
+        if ($cosmosEnvVar) {
+            Write-Info "✅ COSMOS_ENDPOINT confirmed: $($cosmosEnvVar.value)"
+        } else {
+            Write-Warn "⚠️ COSMOS_ENDPOINT not found in current configuration. Retrying..."
+            
+            # Retry setting environment variables with explicit COSMOS_ENDPOINT
+            $retryEnvVars = $envVars + @("COSMOS_ENDPOINT=$cosmosEndpoint")
+            az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars $retryEnvVars --output none
+            Write-Info "Environment variables retry completed"
+        }
+        
+        # Step 4: Configure CORS to allow web UI access
         Write-Info "Configuring CORS settings..."
         $containerAppFqdn = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "properties.configuration.ingress.fqdn" -o tsv
         $allowedOrigins = "https://$containerAppFqdn"
@@ -472,17 +517,20 @@ function Update-Container-App {
         az containerapp ingress cors enable --name $ContainerAppName --resource-group $ResourceGroup --allowed-origins $allowedOrigins --allowed-methods "GET" "POST" "PUT" "DELETE" "OPTIONS" --allowed-headers "*" --expose-headers "*" --max-age 3600
         Write-Info "CORS configured to allow access from: $allowedOrigins"
         
-        # Force a new revision by deactivating old and activating the updated one
-        Write-Info "Activating new revision to ensure environment variables are loaded..."
-        $latestRevision = az containerapp revision list --name $ContainerAppName --resource-group $ResourceGroup --query "[0].name" -o tsv
-        Write-Info "Activating revision: $latestRevision"
-        az containerapp revision activate --name $ContainerAppName --resource-group $ResourceGroup --revision $latestRevision
+        # Step 5: Force creation of a new revision to ensure changes take effect
+        Write-Info "Creating new revision to ensure environment variables are loaded..."
         
-        # Wait a moment for the revision to become active
-        Write-Info "Waiting 10 seconds for new revision to start..."
-        Start-Sleep -Seconds 10
+        # Get current revision and force a new one by updating a dummy environment variable
+        $dummyVar = "DEPLOYMENT_TIMESTAMP=" + (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars $dummyVar --output none
         
-        Write-Info "New revision activated successfully"
+        # Wait for the new revision to be created and become active
+        Write-Info "Waiting 15 seconds for new revision to become active..."
+        Start-Sleep -Seconds 15
+        
+        # Verify the new revision is active
+        $activeRevision = az containerapp revision list --name $ContainerAppName --resource-group $ResourceGroup --query "[?properties.active == \`true\`].name" -o tsv
+        Write-Info "Active revision: $activeRevision"
     }
     catch {
         $errorMessage = $_.Exception.Message

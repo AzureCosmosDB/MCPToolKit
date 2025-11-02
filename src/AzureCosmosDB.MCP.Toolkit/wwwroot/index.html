@@ -3,26 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Azure Cosmos DB MCP Server Test Interface - Test and interact with your Model Context Protocol server">
+    <meta name="author" content="Azure Cosmos DB Team">
     <title>Azure Cosmos DB MCP Server Test</title>
-    <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js" as="script">
+    
+    <!-- Security headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    
+    <!-- Microsoft Fluent UI Design System -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js" defer></script>
     <style>
+        /* CSS Custom Properties for theming */
+        :root {
+            --primary-color: #0078d4;
+            --primary-hover: #106ebe;
+            --primary-active: #005a9e;
+            --secondary-color: #323130;
+            --success-color: #107c10;
+            --success-hover: #0e700e;
+            --warning-color: #ff8c00;
+            --error-color: #d13438;
+            --error-hover: #b52d32;
+            --background-color: #faf9f8;
+            --surface-color: #ffffff;
+            --border-color: #e1dfdd;
+            --text-primary: #323130;
+            --text-secondary: #605e5c;
+            --text-disabled: #a19f9d;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
+            --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.14);
+            --border-radius: 4px;
+            --border-radius-lg: 8px;
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+        }
+
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --background-color: #1e1e1e;
+                --surface-color: #2d2d30;
+                --border-color: #3e3e42;
+                --text-primary: #ffffff;
+                --text-secondary: #cccccc;
+                --text-disabled: #888888;
+                --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+                --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+                --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+            }
+        }
+
+        /* Reset and base styles */
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+            font-family: var(--font-family);
+            line-height: 1.6;
+            color: var(--text-primary);
+            background-color: var(--background-color);
+            margin: 0;
+            padding: 1rem;
+            min-height: 100vh;
+            font-size: 14px;
         }
         .container {
-            background: white;
-            border-radius: 8px;
+            background: var(--surface-color);
+            border-radius: var(--border-radius);
             padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-md);
+            transition: var(--transition);
         }
         h1 {
-            color: #0078d4;
+            color: var(--primary-color);
             text-align: center;
             margin-bottom: 30px;
+            font-weight: 600;
         }
         .auth-section {
             background: #e8f4fd;
@@ -47,17 +113,20 @@
             font-weight: 600;
             color: #323130;
         }
-        input[type="text"], input[type="url"], select, textarea {
+        input[type="text"], input[type="url"], input[type="number"], select, textarea {
             width: 100%;
             padding: 12px;
-            border: 1px solid #d1d1d1;
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             font-size: 14px;
             box-sizing: border-box;
+            background-color: var(--surface-color);
+            color: var(--text-primary);
+            transition: var(--transition);
         }
-        input[type="text"]:focus, input[type="url"]:focus, select:focus, textarea:focus {
+        input[type="text"]:focus, input[type="url"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
             outline: none;
-            border-color: #0078d4;
+            border-color: var(--primary-color);
             box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
         }
         .button-group {
@@ -67,7 +136,7 @@
             flex-wrap: wrap;
         }
         button {
-            background-color: #0078d4;
+            background-color: var(--primary-color);
             color: white;
             border: none;
             padding: 12px 24px;
@@ -75,14 +144,23 @@
             cursor: pointer;
             font-size: 14px;
             font-weight: 600;
-            transition: background-color 0.2s;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         button:hover:not(:disabled) {
-            background-color: #106ebe;
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
         }
         button:disabled {
             background-color: #a19f9d;
             cursor: not-allowed;
+            opacity: 0.6;
+        }
+        button:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
         }
         .login-btn {
             background-color: #107c10;
@@ -145,7 +223,53 @@
             border-color: #f1aeb5;
         }
         .success {
-            color: #107c10;
+            color: var(--success-color);
+        }
+        
+        /* Loading spinner */
+        .spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Responsive improvements */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                padding: 20px;
+            }
+            .button-group {
+                flex-direction: column;
+            }
+            button {
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+        }
+        
+        /* Accessibility improvements */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
         .info {
             margin-bottom: 20px;
@@ -227,10 +351,13 @@
 </head>
 <body>
     <div class="container">
-        <h1>Azure Cosmos DB MCP Server Test</h1>
+        <header>
+            <h1>🌌 Azure Cosmos DB MCP Server Test</h1>
+        </header>
+        <main>
         
         <div class="auth-section">
-            <h3>🔐 Microsoft Entra Authentication</h3>
+            <h2>🔐 Microsoft Entra Authentication</h2>
             
             <!-- Auth Error Display -->
             <div id="authError" style="display: none; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
@@ -263,9 +390,18 @@
             </div>
             
             <div class="button-group">
-                <button id="loginBtn" class="login-btn" onclick="login()">🔑 Sign In with Microsoft Entra</button>
-                <button id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none;">🚪 Sign Out</button>
-                <button id="getTokenBtn" onclick="getTokenSilently()" style="display: none;">🔄 Refresh Token</button>
+                <button id="loginBtn" class="login-btn" onclick="login()">
+                    <span aria-hidden="true">🔑</span>
+                    Sign In with Microsoft Entra
+                </button>
+                <button id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none;">
+                    <span aria-hidden="true">🚪</span>
+                    Sign Out
+                </button>
+                <button id="getTokenBtn" onclick="getTokenSilently()" style="display: none;">
+                    <span aria-hidden="true">🔄</span>
+                    Refresh Token
+                </button>
             </div>
         </div>
 
@@ -273,7 +409,7 @@
             <h3>Configuration</h3>
             <div class="form-group">
                 <label for="serverUrl">Azure Cosmos DB MCP Server URL:</label>
-                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-demo-app.jollycliff-9d2fd006.eastus.azurecontainerapps.io" oninput="updateCurlExamples()">
+                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-toolkit-app.purpleground-fd95b588.eastus.azurecontainerapps.io" oninput="updateCurlExamples()">
             </div>
         </div>
 
@@ -381,7 +517,7 @@
                     <button class="copy-btn" onclick="copyToClipboard('testToolCurl', this)">Copy</button>
                 </div>
             </div>
-        </div>
+        </main>
     </div>
 
     <script>
@@ -928,8 +1064,8 @@
         // Show loading message
         function showLoading(message) {
             const output = document.getElementById('output');
-            output.className = 'output';
-            output.textContent = '⏳ ' + message;
+            output.className = 'output loading';
+            output.innerHTML = '<span class="spinner"></span>' + message;
         }
 
         // Show success message

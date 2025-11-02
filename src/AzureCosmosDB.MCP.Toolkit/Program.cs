@@ -274,6 +274,23 @@ app.MapControllers();
 // Add a simple root endpoint as fallback
 app.MapGet("/", () => Results.Redirect("/index.html"));
 
+// Add debug endpoint to check environment variables (no auth required for debugging)
+app.MapGet("/debug/env", () =>
+{
+    var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
+    var openaiEndpoint = Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
+    var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+    
+    return Results.Json(new
+    {
+        cosmosEndpoint = string.IsNullOrEmpty(cosmosEndpoint) ? "NOT SET" : "SET: " + cosmosEndpoint,
+        openaiEndpoint = string.IsNullOrEmpty(openaiEndpoint) ? "NOT SET" : (openaiEndpoint.Length > 40 ? openaiEndpoint.Substring(0, 40) + "..." : openaiEndpoint),
+        environment = environment ?? "NOT SET",
+        allEnvVarsCount = Environment.GetEnvironmentVariables().Count,
+        timestamp = DateTime.UtcNow
+    });
+}).AllowAnonymous();
+
 app.Run();
 
 [McpServerToolType]
@@ -291,9 +308,35 @@ public static class CosmosDbTools
         try
         {
             var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
+            
+            // Enhanced logging for debugging environment variable issues
+            var allEnvVars = Environment.GetEnvironmentVariables();
+            var cosmosEnvVarExists = allEnvVars.Contains("COSMOS_ENDPOINT");
+            
+            Console.WriteLine($"[DEBUG] COSMOS_ENDPOINT environment variable exists: {cosmosEnvVarExists}");
+            Console.WriteLine($"[DEBUG] COSMOS_ENDPOINT value: {endpoint ?? "(null)"}");
+            Console.WriteLine($"[DEBUG] Total environment variables: {allEnvVars.Count}");
+            
             if (string.IsNullOrWhiteSpace(endpoint))
             {
-                return JsonSerializer.Serialize(new { error = "Missing required environment variable COSMOS_ENDPOINT." });
+                // Provide detailed debugging information
+                var debugInfo = new
+                {
+                    error = "Missing required environment variable COSMOS_ENDPOINT.",
+                    debug = new
+                    {
+                        environmentVariableExists = cosmosEnvVarExists,
+                        value = endpoint ?? "(null)",
+                        totalEnvVars = allEnvVars.Count,
+                        relevantEnvVars = allEnvVars.Keys.Cast<string>()
+                            .Where(k => k.Contains("COSMOS", StringComparison.OrdinalIgnoreCase) || 
+                                       k.Contains("AZURE", StringComparison.OrdinalIgnoreCase) ||
+                                       k.Contains("ASPNETCORE", StringComparison.OrdinalIgnoreCase))
+                            .ToList()
+                    },
+                    suggestion = "Environment variables may not have propagated to the container. Try restarting the container app or waiting a few minutes."
+                };
+                return JsonSerializer.Serialize(debugInfo);
             }
 
             var credential = new DefaultAzureCredential();
