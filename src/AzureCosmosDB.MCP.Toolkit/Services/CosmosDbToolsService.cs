@@ -20,9 +20,11 @@ public class CosmosDbToolsService
         try
         {
             var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
+            
             if (string.IsNullOrWhiteSpace(endpoint))
             {
-                return new { error = "Missing required environment variable COSMOS_ENDPOINT." };
+                _logger.LogWarning("COSMOS_ENDPOINT environment variable is not set. Returning empty database list.");
+                return new List<string>();
             }
 
             var credential = new DefaultAzureCredential();
