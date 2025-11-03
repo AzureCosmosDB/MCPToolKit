@@ -645,6 +645,66 @@ function Assign-Cosmos-RBAC {
     $script:ACA_MI_DISPLAY_NAME = $ACA_MI_DISPLAY_NAME
 }
 
+function Assign-OpenAI-RBAC {
+    Write-Info "Assigning Azure OpenAI permissions to Container App Managed Identity..."
+
+    if (-not $script:ACA_MI_PRINCIPAL_ID) {
+        Write-Info "Getting Container App Managed Identity Principal ID..."
+        $script:ACA_MI_PRINCIPAL_ID = az containerapp show --resource-group $ResourceGroup --name $ContainerAppName --query "identity.principalId" --output tsv
+        
+        if (-not $script:ACA_MI_PRINCIPAL_ID -or $script:ACA_MI_PRINCIPAL_ID -eq "null") {
+            Write-Error "Failed to get Container App Managed Identity Principal ID"
+            exit 1
+        }
+    }
+
+    Write-Info "Container App MI Principal ID: $script:ACA_MI_PRINCIPAL_ID"
+    
+    # Find Azure OpenAI or AI Services resource
+    Write-Info "Finding Azure OpenAI/AI Services resource..."
+    $openaiResources = az cognitiveservices account list --resource-group $ResourceGroup --query "[?kind=='OpenAI' || kind=='AIServices'].{name:name, id:id, kind:kind}" | ConvertFrom-Json
+    
+    if (-not $openaiResources -or $openaiResources.Count -eq 0) {
+        Write-Warn "No Azure OpenAI or AI Services resource found in resource group $ResourceGroup"
+        Write-Warn "Skipping OpenAI role assignment. Vector search will not work without this."
+        return
+    }
+    
+    $openaiResource = $openaiResources[0]
+    Write-Info "Found resource: $($openaiResource.name) (kind: $($openaiResource.kind))"
+    
+    # Assign Cognitive Services OpenAI User role
+    Write-Info "Assigning 'Cognitive Services OpenAI User' role..."
+    
+    # Check if role assignment already exists
+    $existingAssignment = az role assignment list --assignee $script:ACA_MI_PRINCIPAL_ID --scope $openaiResource.id --query "[?roleDefinitionName=='Cognitive Services OpenAI User']" | ConvertFrom-Json
+    
+    if ($existingAssignment.Count -eq 0) {
+        try {
+            az role assignment create --role "Cognitive Services OpenAI User" --assignee $script:ACA_MI_PRINCIPAL_ID --scope $openaiResource.id --output none
+            Write-Info "Successfully assigned 'Cognitive Services OpenAI User' role to Container App MI"
+        }
+        catch {
+            Write-Warn "Failed to assign OpenAI role: $_"
+            Write-Warn "You may need to assign this role manually for vector search to work"
+        }
+    } else {
+        Write-Info "'Cognitive Services OpenAI User' role assignment already exists"
+    }
+    
+    # Update OPENAI_ENDPOINT to use the correct Cognitive Services endpoint (not AI Foundry)
+    Write-Info "Updating OPENAI_ENDPOINT to Cognitive Services endpoint..."
+    $openaiEndpoint = az cognitiveservices account show --name $openaiResource.name --resource-group $ResourceGroup --query "properties.endpoint" -o tsv
+    
+    if ($openaiEndpoint) {
+        Write-Info "Setting OPENAI_ENDPOINT to: $openaiEndpoint"
+        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars "OPENAI_ENDPOINT=$openaiEndpoint" --output none
+        Write-Info "OPENAI_ENDPOINT updated successfully"
+    } else {
+        Write-Warn "Could not retrieve OpenAI endpoint"
+    }
+}
+
 function Show-Container-Logs {
     Write-Info "Waiting 10 seconds for Azure Container App to initialize then fetching logs..."
     Start-Sleep 10
@@ -833,6 +893,7 @@ function Main {
     Configure-Entra-App-RedirectURIs
     Update-Frontend-Config
     Assign-Cosmos-RBAC
+    Assign-OpenAI-RBAC
     Show-Container-Logs
 
     Write-Info "Deployment completed!"

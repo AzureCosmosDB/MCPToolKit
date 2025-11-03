@@ -336,13 +336,13 @@ public class MCPProtocolController : ControllerBase
             "get_recent_documents" => await _cosmosDbTools.GetRecentDocuments(
                 GetStringArg(args, "databaseId"),
                 GetStringArg(args, "containerId"),
-                GetIntArg(args, "n", 5)),
+                GetRequiredIntArg(args, "n")),
             "text_search" => await _cosmosDbTools.TextSearch(
                 GetStringArg(args, "databaseId"),
                 GetStringArg(args, "containerId"),
                 GetStringArg(args, "property"),
                 GetStringArg(args, "searchPhrase"),
-                GetIntArg(args, "n", 10)),
+                GetRequiredIntArg(args, "n")),
             "find_document_by_id" => await _cosmosDbTools.FindDocumentByID(
                 GetStringArg(args, "databaseId"),
                 GetStringArg(args, "containerId"),
@@ -356,7 +356,7 @@ public class MCPProtocolController : ControllerBase
                 GetStringArg(args, "searchText"),
                 GetStringArg(args, "vectorProperty"),
                 GetStringArg(args, "selectProperties"),
-                GetIntArg(args, "topN", 10)),
+                GetRequiredIntArg(args, "topN")),
             _ => throw new ArgumentException($"Unknown tool: {toolName}")
         };
     }
@@ -376,6 +376,21 @@ public class MCPProtocolController : ControllerBase
                 return parsedValue;
         }
         return defaultValue;
+    }
+
+    private static int GetRequiredIntArg(Dictionary<string, object> args, string key)
+    {
+        if (!args.TryGetValue(key, out var value))
+        {
+            throw new ArgumentException($"Required parameter '{key}' is missing");
+        }
+
+        if (value is JsonElement element && element.TryGetInt32(out var intValue))
+            return intValue;
+        if (int.TryParse(value?.ToString(), out var parsedValue))
+            return parsedValue;
+
+        throw new ArgumentException($"Parameter '{key}' must be a valid integer");
     }
     
     [HttpGet("debug")]

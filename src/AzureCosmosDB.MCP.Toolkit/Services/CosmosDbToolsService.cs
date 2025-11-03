@@ -127,18 +127,23 @@ public class CosmosDbToolsService
 
             var container = client.GetContainer(databaseId, containerId);
             var queryText = $"SELECT TOP {n} * FROM c ORDER BY c._ts DESC";
-            var iterator = container.GetItemQueryIterator<dynamic>(
+            
+            using var streamIterator = container.GetItemQueryStreamIterator(
                 new QueryDefinition(queryText),
                 requestOptions: new QueryRequestOptions { MaxItemCount = n }
             );
 
-            var results = new List<object>();
-            while (iterator.HasMoreResults && results.Count < n)
+            var results = new List<System.Text.Json.JsonElement>();
+            while (streamIterator.HasMoreResults && results.Count < n)
             {
-                var page = await iterator.ReadNextAsync();
-                foreach (var doc in page)
+                using var response = await streamIterator.ReadNextAsync();
+                using var stream = response.Content;
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream);
+                
+                var documents = document.RootElement.GetProperty("Documents");
+                foreach (var doc in documents.EnumerateArray())
                 {
-                    results.Add(doc);
+                    results.Add(doc.Clone());
                     if (results.Count >= n) break;
                 }
             }
@@ -183,14 +188,21 @@ public class CosmosDbToolsService
             var queryText = "SELECT * FROM c WHERE c.id = @id";
             var query = new QueryDefinition(queryText).WithParameter("@id", id);
 
-            var iterator = container.GetItemQueryIterator<dynamic>(query, requestOptions: new QueryRequestOptions { MaxItemCount = 1 });
+            using var streamIterator = container.GetItemQueryStreamIterator(
+                query,
+                requestOptions: new QueryRequestOptions { MaxItemCount = 1 }
+            );
 
-            while (iterator.HasMoreResults)
+            while (streamIterator.HasMoreResults)
             {
-                var page = await iterator.ReadNextAsync();
-                foreach (var doc in page)
+                using var response = await streamIterator.ReadNextAsync();
+                using var stream = response.Content;
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream);
+                
+                var documents = document.RootElement.GetProperty("Documents");
+                if (documents.GetArrayLength() > 0)
                 {
-                    return doc;
+                    return documents[0].Clone();
                 }
             }
 
@@ -244,15 +256,22 @@ public class CosmosDbToolsService
             var queryText = $"SELECT TOP {n} * FROM c WHERE FullTextContains(c.{property}, @searchPhrase) ";
             var query = new QueryDefinition(queryText).WithParameter("@searchPhrase", searchPhrase);
 
-            var iterator = container.GetItemQueryIterator<dynamic>(query, requestOptions: new QueryRequestOptions { MaxItemCount = n });
+            using var streamIterator = container.GetItemQueryStreamIterator(
+                query,
+                requestOptions: new QueryRequestOptions { MaxItemCount = n }
+            );
 
-            var results = new List<object>();
-            while (iterator.HasMoreResults && results.Count < n)
+            var results = new List<System.Text.Json.JsonElement>();
+            while (streamIterator.HasMoreResults && results.Count < n)
             {
-                var page = await iterator.ReadNextAsync();
-                foreach (var doc in page)
+                using var response = await streamIterator.ReadNextAsync();
+                using var stream = response.Content;
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream);
+                
+                var documents = document.RootElement.GetProperty("Documents");
+                foreach (var doc in documents.EnumerateArray())
                 {
-                    results.Add(doc);
+                    results.Add(doc.Clone());
                     if (results.Count >= n) break;
                 }
             }
@@ -370,18 +389,22 @@ public class CosmosDbToolsService
                 .WithParameter("@topN", topN)
                 .WithParameter("@embedding", embedding);
 
-            var iterator = container.GetItemQueryIterator<dynamic>(
+            using var streamIterator = container.GetItemQueryStreamIterator(
                 queryDefinition,
                 requestOptions: new QueryRequestOptions { MaxItemCount = topN }
             );
 
-            var results = new List<object>();
-            while (iterator.HasMoreResults && results.Count < topN)
+            var results = new List<System.Text.Json.JsonElement>();
+            while (streamIterator.HasMoreResults && results.Count < topN)
             {
-                var page = await iterator.ReadNextAsync();
-                foreach (var doc in page)
+                using var response = await streamIterator.ReadNextAsync();
+                using var stream = response.Content;
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream);
+                
+                var documents = document.RootElement.GetProperty("Documents");
+                foreach (var doc in documents.EnumerateArray())
                 {
-                    results.Add(doc);
+                    results.Add(doc.Clone());
                     if (results.Count >= topN) break;
                 }
             }
@@ -420,7 +443,7 @@ public class CosmosDbToolsService
 
             var container = client.GetContainer(databaseId, containerId);
             var queryText = "SELECT TOP 10 * FROM c";
-            var iterator = container.GetItemQueryIterator<dynamic>(
+            using var streamIterator = container.GetItemQueryStreamIterator(
                 new QueryDefinition(queryText),
                 requestOptions: new QueryRequestOptions { MaxItemCount = 10 }
             );
@@ -429,21 +452,19 @@ public class CosmosDbToolsService
             var countMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             int sampleCount = 0;
 
-            while (iterator.HasMoreResults && sampleCount < 10)
+            while (streamIterator.HasMoreResults && sampleCount < 10)
             {
-                var page = await iterator.ReadNextAsync();
-                foreach (var doc in page)
+                using var response = await streamIterator.ReadNextAsync();
+                using var stream = response.Content;
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream);
+                
+                var documents = document.RootElement.GetProperty("Documents");
+                foreach (var doc in documents.EnumerateArray())
                 {
-                    var json = doc?.ToString();
-                    if (string.IsNullOrWhiteSpace(json)) continue;
-
-                    try
-                    {
-                        using var parsed = JsonDocument.Parse(json);
-                        if (parsed.RootElement.ValueKind != JsonValueKind.Object) continue;
-                        sampleCount++;
+                    if (doc.ValueKind != JsonValueKind.Object) continue;
+                    sampleCount++;
                         
-                        foreach (var prop in parsed.RootElement.EnumerateObject())
+                    foreach (var prop in doc.EnumerateObject())
                         {
                             var name = prop.Name;
                             var kind = prop.Value.ValueKind;
@@ -469,11 +490,6 @@ public class CosmosDbToolsService
                             countMap.TryGetValue(name, out int current);
                             countMap[name] = current + 1;
                         }
-                    }
-                    catch
-                    {
-                        // Ignore malformed JSON rows
-                    }
 
                     if (sampleCount >= 10) break;
                 }

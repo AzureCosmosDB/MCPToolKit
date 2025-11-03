@@ -427,17 +427,7 @@
             
             <div class="collapsible-content collapsed">
                 <div class="info">
-                    <span style="font-size: 11px;">Configure your Cosmos DB parameters below. If you've run deployment scripts, you can find these values in the Azure portal under your Cosmos DB account.</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="cosmosDatabase">Database ID:</label>
-                    <input type="text" id="cosmosDatabase" placeholder="your-database-name">
-                </div>
-                
-                <div class="form-group">
-                    <label for="cosmosContainer">Container ID:</label>
-                    <input type="text" id="cosmosContainer" placeholder="your-container-name">
+                    <span style="font-size: 11px;">Select a tool and configure the required parameters below. If you've run deployment scripts, you can find these values in the Azure portal under your Cosmos DB account.</span>
                 </div>
 
                 <div class="form-group">
@@ -454,40 +444,68 @@
                     </select>
                 </div>
 
-                <div id="toolParameters" style="display: none;">
-                    <div class="form-group">
-                        <label for="docId">Document ID (for find_document_by_id):</label>
+                <div id="toolParameters">
+                    <!-- Common parameters -->
+                    <div class="form-group" id="param-database" style="display: none;">
+                        <label for="cosmosDatabase">Database ID: <span style="color: red;">*</span></label>
+                        <input type="text" id="cosmosDatabase" placeholder="your-database-name">
+                    </div>
+                    
+                    <div class="form-group" id="param-container" style="display: none;">
+                        <label for="cosmosContainer">Container ID: <span style="color: red;">*</span></label>
+                        <input type="text" id="cosmosContainer" placeholder="your-container-name">
+                    </div>
+                    
+                    <!-- find_document_by_id parameters -->
+                    <div class="form-group" id="param-docId" style="display: none;">
+                        <label for="docId">Document ID: <span style="color: red;">*</span></label>
                         <input type="text" id="docId" placeholder="document-id">
                     </div>
                     
-                    <div class="form-group">
-                        <label for="searchProperty">Property (for text_search):</label>
+                    <!-- text_search parameters -->
+                    <div class="form-group" id="param-searchProperty" style="display: none;">
+                        <label for="searchProperty">Property: <span style="color: red;">*</span></label>
                         <input type="text" id="searchProperty" placeholder="name or profile.description">
+                        <small style="color: #666;">The document property to search within</small>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="searchPhrase">Search Phrase (for text_search):</label>
+                    <div class="form-group" id="param-searchPhrase" style="display: none;">
+                        <label for="searchPhrase">Search Phrase: <span style="color: red;">*</span></label>
                         <input type="text" id="searchPhrase" placeholder="Azure">
+                        <small style="color: #666;">Text to search for within the property</small>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="vectorSearch">Search Text (for vector_search):</label>
+                    <!-- vector_search parameters -->
+                    <div class="form-group" id="param-vectorSearch" style="display: none;">
+                        <label for="vectorSearch">Search Text: <span style="color: red;">*</span></label>
                         <input type="text" id="vectorSearch" placeholder="machine learning algorithms">
+                        <small style="color: #666;">Natural language query for semantic search</small>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="vectorProperty">Vector Property (for vector_search):</label>
+                    <div class="form-group" id="param-vectorProperty" style="display: none;">
+                        <label for="vectorProperty">Vector Property: <span style="color: red;">*</span></label>
                         <input type="text" id="vectorProperty" placeholder="vector or embeddings">
+                        <small style="color: #666;">Name of the property containing vector embeddings</small>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="selectProperties">Select Properties (for vector_search):</label>
+                    <div class="form-group" id="param-selectProperties" style="display: none;">
+                        <label for="selectProperties">Select Properties: <span style="color: red;">*</span></label>
                         <input type="text" id="selectProperties" placeholder="id,title,content">
+                        <small style="color: #666;">Comma-separated list of properties to return</small>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="resultCount">Number of Results (1-50):</label>
-                        <input type="number" id="resultCount" min="1" max="50" value="5">
+                    <!-- Result count parameter for get_recent_documents and text_search -->
+                    <div class="form-group" id="param-resultCount" style="display: none;">
+                        <label for="resultCount">Number of Results (n): <span style="color: red;">*</span></label>
+                        <input type="number" id="resultCount" min="1" max="20" value="5" required>
+                        <small style="color: #666;">Required: Between 1 and 20 results</small>
+                    </div>
+                    
+                    <!-- Result count parameter for vector_search -->
+                    <div class="form-group" id="param-topN" style="display: none;">
+                        <label for="topN">Number of Results (topN): <span style="color: red;">*</span></label>
+                        <input type="number" id="topN" min="1" max="50" value="10" required>
+                        <small style="color: #666;">Required: Between 1 and 50 results</small>
                     </div>
                 </div>
                 
@@ -751,18 +769,18 @@
                 let toolParams = { databaseId: database, containerId: container };
                 
                 if (tool === 'get_recent_documents') {
-                    toolParams.n = 5;
+                    toolParams.n = parseInt(document.getElementById('resultCount')?.value) || 5;
                 } else if (tool === 'find_document_by_id') {
                     toolParams.id = document.getElementById('docId')?.value || 'sample-id';
                 } else if (tool === 'text_search') {
                     toolParams.property = document.getElementById('searchProperty')?.value || 'name';
                     toolParams.searchPhrase = document.getElementById('searchPhrase')?.value || 'Azure';
-                    toolParams.n = 5;
+                    toolParams.n = parseInt(document.getElementById('resultCount')?.value) || 5;
                 } else if (tool === 'vector_search') {
                     toolParams.searchText = document.getElementById('vectorSearch')?.value || 'machine learning';
                     toolParams.vectorProperty = document.getElementById('vectorProperty')?.value || 'vector';
                     toolParams.selectProperties = document.getElementById('selectProperties')?.value || 'id,title';
-                    toolParams.topN = 5;
+                    toolParams.topN = parseInt(document.getElementById('topN')?.value) || 10;
                 } else if (tool === 'list_databases') {
                     toolParams = {}; // No parameters needed
                 } else if (tool === 'list_collections') {
@@ -941,14 +959,19 @@
                     toolParams = { databaseId: database };
                     break;
                 case 'get_recent_documents':
+                    const recentDocsN = parseInt(document.getElementById('resultCount').value);
                     if (!database || !container) {
                         showError('Database ID and Container ID are required');
+                        return;
+                    }
+                    if (!recentDocsN || recentDocsN < 1 || recentDocsN > 20) {
+                        showError('Number of Results (n) must be between 1 and 20');
                         return;
                     }
                     toolParams = { 
                         databaseId: database, 
                         containerId: container,
-                        n: parseInt(document.getElementById('resultCount').value) || 5
+                        n: recentDocsN
                     };
                     break;
                 case 'find_document_by_id':
@@ -966,8 +989,13 @@
                 case 'text_search':
                     const property = document.getElementById('searchProperty').value.trim();
                     const phrase = document.getElementById('searchPhrase').value.trim();
+                    const textSearchN = parseInt(document.getElementById('resultCount').value);
                     if (!database || !container || !property || !phrase) {
                         showError('Database ID, Container ID, Property, and Search Phrase are required');
+                        return;
+                    }
+                    if (!textSearchN || textSearchN < 1 || textSearchN > 20) {
+                        showError('Number of Results (n) must be between 1 and 20');
                         return;
                     }
                     toolParams = { 
@@ -975,15 +1003,20 @@
                         containerId: container,
                         property: property,
                         searchPhrase: phrase,
-                        n: parseInt(document.getElementById('resultCount').value) || 5
+                        n: textSearchN
                     };
                     break;
                 case 'vector_search':
                     const searchText = document.getElementById('vectorSearch').value.trim();
                     const vectorProp = document.getElementById('vectorProperty').value.trim();
                     const selectProps = document.getElementById('selectProperties').value.trim();
+                    const topN = parseInt(document.getElementById('topN').value);
                     if (!database || !container || !searchText || !vectorProp || !selectProps) {
                         showError('Database ID, Container ID, Search Text, Vector Property, and Select Properties are required');
+                        return;
+                    }
+                    if (!topN || topN < 1 || topN > 50) {
+                        showError('Number of Results (topN) must be between 1 and 50');
                         return;
                     }
                     toolParams = { 
@@ -992,7 +1025,7 @@
                         searchText: searchText,
                         vectorProperty: vectorProp,
                         selectProperties: selectProps,
-                        topN: parseInt(document.getElementById('resultCount').value) || 5
+                        topN: topN
                     };
                     break;
                 case 'get_approximate_schema':
@@ -1018,6 +1051,64 @@
             };
             
             await makeRequest(payload, `Test ${tool}`);
+        }
+
+        function updateToolParameters() {
+            const tool = document.getElementById('toolSelect').value;
+            
+            // Hide all parameter fields first
+            document.getElementById('param-database').style.display = 'none';
+            document.getElementById('param-container').style.display = 'none';
+            document.getElementById('param-docId').style.display = 'none';
+            document.getElementById('param-searchProperty').style.display = 'none';
+            document.getElementById('param-searchPhrase').style.display = 'none';
+            document.getElementById('param-vectorSearch').style.display = 'none';
+            document.getElementById('param-vectorProperty').style.display = 'none';
+            document.getElementById('param-selectProperties').style.display = 'none';
+            document.getElementById('param-resultCount').style.display = 'none';
+            document.getElementById('param-topN').style.display = 'none';
+            
+            // Show relevant parameters based on selected tool
+            switch (tool) {
+                case 'list_databases':
+                    // No parameters needed
+                    break;
+                case 'list_collections':
+                    document.getElementById('param-database').style.display = 'block';
+                    break;
+                case 'get_recent_documents':
+                    document.getElementById('param-database').style.display = 'block';
+                    document.getElementById('param-container').style.display = 'block';
+                    document.getElementById('param-resultCount').style.display = 'block';
+                    break;
+                case 'find_document_by_id':
+                    document.getElementById('param-database').style.display = 'block';
+                    document.getElementById('param-container').style.display = 'block';
+                    document.getElementById('param-docId').style.display = 'block';
+                    break;
+                case 'text_search':
+                    document.getElementById('param-database').style.display = 'block';
+                    document.getElementById('param-container').style.display = 'block';
+                    document.getElementById('param-searchProperty').style.display = 'block';
+                    document.getElementById('param-searchPhrase').style.display = 'block';
+                    document.getElementById('param-resultCount').style.display = 'block';
+                    break;
+                case 'vector_search':
+                    document.getElementById('param-database').style.display = 'block';
+                    document.getElementById('param-container').style.display = 'block';
+                    document.getElementById('param-vectorSearch').style.display = 'block';
+                    document.getElementById('param-vectorProperty').style.display = 'block';
+                    document.getElementById('param-selectProperties').style.display = 'block';
+                    document.getElementById('param-topN').style.display = 'block';
+                    break;
+                case 'get_approximate_schema':
+                    document.getElementById('param-database').style.display = 'block';
+                    document.getElementById('param-container').style.display = 'block';
+                    break;
+            }
+            
+            // Update curl examples
+            updateCurlExamples();
         }
 
         function clearOutput() {
@@ -1079,7 +1170,24 @@
         function showResponse(data) {
             const output = document.getElementById('output');
             output.className = 'output';
-            if (typeof data === 'object') {
+            
+            // Check if this is an MCP protocol response with nested content
+            if (typeof data === 'object' && data.result && data.result.content && Array.isArray(data.result.content)) {
+                // Extract the actual data from MCP response
+                const content = data.result.content[0];
+                if (content && content.type === 'text' && content.text) {
+                    try {
+                        // Try to parse the text as JSON
+                        const actualData = JSON.parse(content.text);
+                        output.textContent = JSON.stringify(actualData, null, 2);
+                    } catch (e) {
+                        // If not JSON, show as plain text
+                        output.textContent = content.text;
+                    }
+                } else {
+                    output.textContent = JSON.stringify(data, null, 2);
+                }
+            } else if (typeof data === 'object') {
                 output.textContent = JSON.stringify(data, null, 2);
             } else {
                 output.textContent = data;
