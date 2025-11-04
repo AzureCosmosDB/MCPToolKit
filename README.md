@@ -56,13 +56,44 @@ MCPToolKit/
 
 > **IMPORTANT**: For best results, ensure all resources (Azure Cosmos DB, AI Foundry Project, Container App) are created in the **same resource group**. This simplifies permissions, networking, and role assignments.
 
+
 ### Step 1: Deploy Infrastructure
 
 Click the Deploy to Azure button to create all required Azure resources:
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
 
-This creates: Container App, Container Registry, Managed Identity, Cosmos DB account, and networking.
+#### Deploy via Azure Developer CLI (azd up) 
+
+Deploy the complete infrastructure and application with a single command:
+
+```bash
+# Clone the repository
+git clone https://github.com/AzureCosmosDB/MCPToolKit.git
+cd MCPToolKit
+
+# Set the environment variables to match the Cosmos DB you want to access
+azd env set COSMOS_ENDPOINT "https://<your-cosmos-account>.documents.azure.com:443/"
+
+# Set the environment variables to match the AI Foundry resource you want to use
+azd env set AIF_PROJECT_ENDPOINT "https://<aifoundry-project-name>.<region>.api.azureml.ms/"
+azd env set EMBEDDING_DEPLOYMENT_NAME "text-embedding-ada-002"
+
+# Optional: Set AI Foundry project resource ID for automatic RBAC setup
+azd env set AIF_PROJECT_RESOURCE_ID "/subscriptions/<subscription-id>/resourceGroups/<aifoundry-resource-group>/providers/Microsoft.MachineLearningServices/workspaces/<aifoundry-project-name>"
+
+# Then deploy
+azd up
+```
+
+**What gets deployed:**
+- Azure Container Apps (MCP Server)
+- Azure Container Registry
+- Managed Identity with RBAC assignments
+- Entra ID App Registration for authentication
+- All networking and security configurations
+
+**Configuration saved to:** `deployment-info.json` for AI Foundry integration
 
 ### Step 2: Deploy MCP Server
 
@@ -121,14 +152,22 @@ This assigns the necessary roles for AI Foundry to call your MCP server.
 3. Select the **+ Add** in the tools section
 4. Select the **Catalog** tab 
 5. Choose **Azure Cosmos DB** as the tool and click **Create**
+
+   ![Add Tool from Catalog](images/ai_foundry_ui_mcp_connect.png)
+
 6. Select **Microsoft Entra** → **Project Managed Identity** as the authentication method
 7. Enter your `<entra-app-client-id>` as the audience. This is the value from the deployment output.
+
+   ![MCP Connection Configuration](images/ai_foundry_ui_add_tool.png)
    > [!TIP]
    > Find the `ENTRA_APP_CLIENT_ID` value in your `deployment-info.json` file or run:
    > ```powershell
    > Get-Content deployment-info.json | ConvertFrom-Json | Select-Object -ExpandProperty entraAppClientId
    > ```
+
 8. Add instructions to your agent:
+
+   ![Agent Instructions](images/ai_foundry_instructions.png)
 
     ```
     You are a helpful agent that can use MCP tools to assist users. Use the available MCP tools to answer questions and perform tasks.
