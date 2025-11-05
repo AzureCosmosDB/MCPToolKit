@@ -8,124 +8,116 @@ namespace AzureCosmosDB.MCP.Toolkit.Services;
 
 public class CosmosDbToolsService
 {
+    private readonly CosmosClient _cosmosClient;
     private readonly ILogger<CosmosDbToolsService> _logger;
+    private readonly IConfiguration _configuration;
 
-    public CosmosDbToolsService(ILogger<CosmosDbToolsService> logger)
+    public CosmosDbToolsService(
+        CosmosClient cosmosClient, 
+        ILogger<CosmosDbToolsService> logger,
+        IConfiguration configuration)
     {
-        _logger = logger;
+        _cosmosClient = cosmosClient ?? throw new ArgumentNullException(nameof(cosmosClient));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+    }
+    
+    // Helper method to validate required parameter
+    private void ValidateRequiredParameter(string value, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException($"Parameter '{paramName}' is required.", paramName);
+        }
     }
 
-    public async Task<object> ListDatabases()
+    public async Task<object> ListDatabases(CancellationToken cancellationToken = default)
     {
         try
         {
-            var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-            
-            if (string.IsNullOrWhiteSpace(endpoint))
-            {
-                _logger.LogWarning("COSMOS_ENDPOINT environment variable is not set. Returning empty database list.");
-                return new List<string>();
-            }
-
-            var credential = new DefaultAzureCredential();
-            using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
-            {
-                ApplicationName = "AzureCosmosDBMCP"
-            });
+            _logger.LogInformation("Listing databases from Cosmos DB");
 
             var results = new List<string>();
-            var iterator = client.GetDatabaseQueryIterator<DatabaseProperties>();
+            var iterator = _cosmosClient.GetDatabaseQueryIterator<DatabaseProperties>();
             while (iterator.HasMoreResults)
             {
-                var page = await iterator.ReadNextAsync();
+                var page = await iterator.ReadNextAsync(cancellationToken);
                 foreach (var db in page)
                 {
                     results.Add(db.Id);
                 }
             }
 
+            _logger.LogInformation("Successfully retrieved {Count} databases", results.Count);
             return results;
         }
         catch (CosmosException cex)
         {
+            _logger.LogError(cex, "Cosmos DB error listing databases: {StatusCode}", cex.StatusCode);
             return new { error = cex.Message, statusCode = (int)cex.StatusCode };
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error listing databases");
             return new { error = ex.Message };
         }
     }
 
-    public async Task<object> ListCollections(string databaseId)
+    public async Task<object> ListCollections(string databaseId, CancellationToken cancellationToken = default)
     {
         try
         {
-            var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-            if (string.IsNullOrWhiteSpace(endpoint))
-            {
-                return new { error = "Missing required environment variable COSMOS_ENDPOINT." };
-            }
+            ValidateRequiredParameter(databaseId, nameof(databaseId));
 
-            if (string.IsNullOrWhiteSpace(databaseId))
-            {
-                return new { error = "Parameter 'databaseId' is required." };
-            }
+            _logger.LogInformation("Listing collections for database: {DatabaseId}", databaseId);
 
-            var credential = new DefaultAzureCredential();
-            using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
-            {
-                ApplicationName = "AzureCosmosDBMCP"
-            });
-
-            var db = client.GetDatabase(databaseId);
+            var db = _cosmosClient.GetDatabase(databaseId);
             var results = new List<string>();
             var iterator = db.GetContainerQueryIterator<ContainerProperties>();
             while (iterator.HasMoreResults)
             {
-                var page = await iterator.ReadNextAsync();
+                var page = await iterator.ReadNextAsync(cancellationToken);
                 foreach (var c in page)
                 {
                     results.Add(c.Id);
                 }
             }
 
+            _logger.LogInformation("Successfully retrieved {Count} collections from database {DatabaseId}", results.Count, databaseId);
             return results;
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid parameter: {Message}", ex.Message);
+            return new { error = ex.Message };
         }
         catch (CosmosException cex)
         {
+            _logger.LogError(cex, "Cosmos DB error listing collections for database {DatabaseId}: {StatusCode}", databaseId, cex.StatusCode);
             return new { error = cex.Message, statusCode = (int)cex.StatusCode };
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error listing collections for database {DatabaseId}", databaseId);
             return new { error = ex.Message };
         }
     }
 
-    public async Task<object> GetRecentDocuments(string databaseId, string containerId, int n)
+    public async Task<object> GetRecentDocuments(string databaseId, string containerId, int n, CancellationToken cancellationToken = default)
     {
         try
         {
-            var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-            if (string.IsNullOrWhiteSpace(endpoint))
-            {
-                return new { error = "Missing required environment variable COSMOS_ENDPOINT." };
-            }
-            if (string.IsNullOrWhiteSpace(databaseId) || string.IsNullOrWhiteSpace(containerId))
-            {
-                return new { error = "Parameters 'databaseId' and 'containerId' are required." };
-            }
+            ValidateRequiredParameter(databaseId, nameof(databaseId));
+            ValidateRequiredParameter(containerId, nameof(containerId));
+            
             if (n < 1 || n > 20)
             {
                 return new { error = "Parameter 'n' must be a whole number between 1 and 20." };
             }
 
-            var credential = new DefaultAzureCredential();
-            using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
-            {
-                ApplicationName = "AzureCosmosDBMCP"
-            });
+            _logger.LogInformation("Getting {Count} recent documents from {DatabaseId}/{ContainerId}", n, databaseId, containerId);
 
-            var container = client.GetContainer(databaseId, containerId);
+            var container = _cosmosClient.GetContainer(databaseId, containerId);
             var queryText = $"SELECT TOP {n} * FROM c ORDER BY c._ts DESC";
             
             using var streamIterator = container.GetItemQueryStreamIterator(
@@ -136,9 +128,9 @@ public class CosmosDbToolsService
             var results = new List<System.Text.Json.JsonElement>();
             while (streamIterator.HasMoreResults && results.Count < n)
             {
-                using var response = await streamIterator.ReadNextAsync();
+                using var response = await streamIterator.ReadNextAsync(cancellationToken);
                 using var stream = response.Content;
-                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream);
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
                 
                 var documents = document.RootElement.GetProperty("Documents");
                 foreach (var doc in documents.EnumerateArray())
@@ -148,43 +140,37 @@ public class CosmosDbToolsService
                 }
             }
 
+            _logger.LogInformation("Successfully retrieved {Count} recent documents", results.Count);
             return results;
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid parameter: {Message}", ex.Message);
+            return new { error = ex.Message };
         }
         catch (CosmosException cex)
         {
+            _logger.LogError(cex, "Cosmos DB error getting recent documents: {StatusCode}", cex.StatusCode);
             return new { error = cex.Message, statusCode = (int)cex.StatusCode };
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error getting recent documents");
             return new { error = ex.Message };
         }
     }
 
-    public async Task<object> FindDocumentByID(string databaseId, string containerId, string id)
+    public async Task<object> FindDocumentByID(string databaseId, string containerId, string id, CancellationToken cancellationToken = default)
     {
         try
         {
-            var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-            if (string.IsNullOrWhiteSpace(endpoint))
-            {
-                return new { error = "Missing required environment variable COSMOS_ENDPOINT." };
-            }
-            if (string.IsNullOrWhiteSpace(databaseId) || string.IsNullOrWhiteSpace(containerId))
-            {
-                return new { error = "Parameters 'databaseId' and 'containerId' are required." };
-            }
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                return new { error = "Parameter 'id' is required." };
-            }
+            ValidateRequiredParameter(databaseId, nameof(databaseId));
+            ValidateRequiredParameter(containerId, nameof(containerId));
+            ValidateRequiredParameter(id, nameof(id));
 
-            var credential = new DefaultAzureCredential();
-            using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
-            {
-                ApplicationName = "AzureCosmosDBMCP"
-            });
+            _logger.LogInformation("Finding document by ID {Id} in {DatabaseId}/{ContainerId}", id, databaseId, containerId);
 
-            var container = client.GetContainer(databaseId, containerId);
+            var container = _cosmosClient.GetContainer(databaseId, containerId);
             var queryText = "SELECT * FROM c WHERE c.id = @id";
             var query = new QueryDefinition(queryText).WithParameter("@id", id);
 
@@ -195,46 +181,46 @@ public class CosmosDbToolsService
 
             while (streamIterator.HasMoreResults)
             {
-                using var response = await streamIterator.ReadNextAsync();
+                using var response = await streamIterator.ReadNextAsync(cancellationToken);
                 using var stream = response.Content;
-                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream);
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
                 
                 var documents = document.RootElement.GetProperty("Documents");
                 if (documents.GetArrayLength() > 0)
                 {
+                    _logger.LogInformation("Document found with ID {Id}", id);
                     return documents[0].Clone();
                 }
             }
 
+            _logger.LogInformation("No document found with ID {Id}", id);
             return new { message = "No document found with the specified id." };
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid parameter: {Message}", ex.Message);
+            return new { error = ex.Message };
         }
         catch (CosmosException cex)
         {
+            _logger.LogError(cex, "Cosmos DB error finding document: {StatusCode}", cex.StatusCode);
             return new { error = cex.Message, statusCode = (int)cex.StatusCode };
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error finding document");
             return new { error = ex.Message };
         }
     }
 
-    public async Task<object> TextSearch(string databaseId, string containerId, string property, string searchPhrase, int n)
+    public async Task<object> TextSearch(string databaseId, string containerId, string property, string searchPhrase, int n, CancellationToken cancellationToken = default)
     {
         try
         {
-            var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-            if (string.IsNullOrWhiteSpace(endpoint))
-            {
-                return new { error = "Missing required environment variable COSMOS_ENDPOINT." };
-            }
-            if (string.IsNullOrWhiteSpace(databaseId) || string.IsNullOrWhiteSpace(containerId))
-            {
-                return new { error = "Parameters 'databaseId' and 'containerId' are required." };
-            }
-            if (string.IsNullOrWhiteSpace(property))
-            {
-                return new { error = "Parameter 'property' is required." };
-            }
+            ValidateRequiredParameter(databaseId, nameof(databaseId));
+            ValidateRequiredParameter(containerId, nameof(containerId));
+            ValidateRequiredParameter(property, nameof(property));
+            
             if (n < 1 || n > 20)
             {
                 return new { error = "Parameter 'n' must be a whole number between 1 and 20." };
@@ -246,13 +232,9 @@ public class CosmosDbToolsService
                 return new { error = "Invalid property name. Use dot notation with letters, digits, and underscores only (e.g., name or profile.name)." };
             }
 
-            var credential = new DefaultAzureCredential();
-            using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
-            {
-                ApplicationName = "AzureCosmosDBMCP"
-            });
+            _logger.LogInformation("Text search for '{SearchPhrase}' in {DatabaseId}/{ContainerId} property {Property}", searchPhrase, databaseId, containerId, property);
 
-            var container = client.GetContainer(databaseId, containerId);
+            var container = _cosmosClient.GetContainer(databaseId, containerId);
             var queryText = $"SELECT TOP {n} * FROM c WHERE FullTextContains(c.{property}, @searchPhrase) ";
             var query = new QueryDefinition(queryText).WithParameter("@searchPhrase", searchPhrase);
 
@@ -264,9 +246,9 @@ public class CosmosDbToolsService
             var results = new List<System.Text.Json.JsonElement>();
             while (streamIterator.HasMoreResults && results.Count < n)
             {
-                using var response = await streamIterator.ReadNextAsync();
+                using var response = await streamIterator.ReadNextAsync(cancellationToken);
                 using var stream = response.Content;
-                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream);
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
                 
                 var documents = document.RootElement.GetProperty("Documents");
                 foreach (var doc in documents.EnumerateArray())
@@ -276,32 +258,35 @@ public class CosmosDbToolsService
                 }
             }
 
+            _logger.LogInformation("Text search returned {Count} results", results.Count);
             return results;
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid parameter: {Message}", ex.Message);
+            return new { error = ex.Message };
         }
         catch (CosmosException cex)
         {
+            _logger.LogError(cex, "Cosmos DB error in text search: {StatusCode}", cex.StatusCode);
             return new { error = cex.Message, statusCode = (int)cex.StatusCode };
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error in text search");
             return new { error = ex.Message };
         }
     }
 
-    public async Task<object> VectorSearch(string databaseId, string containerId, string searchText, string vectorProperty, string selectProperties, int topN)
+    public async Task<object> VectorSearch(string databaseId, string containerId, string searchText, string vectorProperty, string selectProperties, int topN, CancellationToken cancellationToken = default)
     {
         try
         {
-            var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-            // OPENAI_ENDPOINT can be either an AI Foundry project endpoint or legacy Azure OpenAI endpoint
-            // AI Foundry projects expose OpenAI-compatible endpoints (recommended)
-            var openaiEndpoint = Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
-            var embeddingDeployment = Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
+            // Get configuration values
+            var openaiEndpoint = _configuration["OPENAI_ENDPOINT"] ?? Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
+            var embeddingDeployment = _configuration["OPENAI_EMBEDDING_DEPLOYMENT"] ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
 
-            if (string.IsNullOrWhiteSpace(cosmosEndpoint))
-            {
-                return new { error = "Missing required environment variable COSMOS_ENDPOINT." };
-            }
+            // Validate environment variables
             if (string.IsNullOrWhiteSpace(openaiEndpoint))
             {
                 return new { error = "Missing required environment variable OPENAI_ENDPOINT." };
@@ -311,22 +296,13 @@ public class CosmosDbToolsService
                 return new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." };
             }
 
-            if (string.IsNullOrWhiteSpace(databaseId) || string.IsNullOrWhiteSpace(containerId))
-            {
-                return new { error = "Parameters 'databaseId' and 'containerId' are required." };
-            }
-            if (string.IsNullOrWhiteSpace(searchText))
-            {
-                return new { error = "Parameter 'searchText' is required." };
-            }
-            if (string.IsNullOrWhiteSpace(vectorProperty))
-            {
-                return new { error = "Parameter 'vectorProperty' is required." };
-            }
-            if (string.IsNullOrWhiteSpace(selectProperties))
-            {
-                return new { error = "Parameter 'selectProperties' is required." };
-            }
+            // Validate parameters
+            ValidateRequiredParameter(databaseId, nameof(databaseId));
+            ValidateRequiredParameter(containerId, nameof(containerId));
+            ValidateRequiredParameter(searchText, nameof(searchText));
+            ValidateRequiredParameter(vectorProperty, nameof(vectorProperty));
+            ValidateRequiredParameter(selectProperties, nameof(selectProperties));
+            
             if (topN < 1 || topN > 50)
             {
                 return new { error = "Parameter 'topN' must be a whole number between 1 and 50." };
@@ -356,27 +332,26 @@ public class CosmosDbToolsService
                 }
             }
 
-            var credential = new DefaultAzureCredential();
+            _logger.LogInformation("Vector search for '{SearchText}' in {DatabaseId}/{ContainerId}", searchText, databaseId, containerId);
 
+            // Generate embedding using Azure OpenAI
             float[] embedding;
             try
             {
+                var credential = new DefaultAzureCredential();
                 var openaiClient = new AzureOpenAIClient(new Uri(openaiEndpoint), credential);
                 var embeddingClient = openaiClient.GetEmbeddingClient(embeddingDeployment);
-                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(searchText);
+                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(searchText, cancellationToken: cancellationToken);
                 embedding = embeddingResponse.Value.ToFloats().ToArray();
+                _logger.LogInformation("Generated embedding with {Dimensions} dimensions", embedding.Length);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to generate embedding");
                 return new { error = $"Failed to generate embedding: {ex.Message}" };
             }
 
-            using var cosmosClient = new CosmosClient(cosmosEndpoint, credential, new CosmosClientOptions
-            {
-                ApplicationName = "AzureCosmosDBMCP"
-            });
-
-            var container = cosmosClient.GetContainer(databaseId, containerId);
+            var container = _cosmosClient.GetContainer(databaseId, containerId);
 
             var selectClause = string.Join(", ", properties.Select(p => $"c.{p}"));
 
@@ -397,9 +372,9 @@ public class CosmosDbToolsService
             var results = new List<System.Text.Json.JsonElement>();
             while (streamIterator.HasMoreResults && results.Count < topN)
             {
-                using var response = await streamIterator.ReadNextAsync();
+                using var response = await streamIterator.ReadNextAsync(cancellationToken);
                 using var stream = response.Content;
-                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream);
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
                 
                 var documents = document.RootElement.GetProperty("Documents");
                 foreach (var doc in documents.EnumerateArray())
@@ -409,39 +384,36 @@ public class CosmosDbToolsService
                 }
             }
 
+            _logger.LogInformation("Vector search returned {Count} results", results.Count);
             return results;
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid parameter: {Message}", ex.Message);
+            return new { error = ex.Message };
         }
         catch (CosmosException cex)
         {
+            _logger.LogError(cex, "Cosmos DB error in vector search: {StatusCode}", cex.StatusCode);
             return new { error = cex.Message, statusCode = (int)cex.StatusCode };
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error in vector search");
             return new { error = ex.Message };
         }
     }
 
-    public async Task<object> GetApproximateSchema(string databaseId, string containerId)
+    public async Task<object> GetApproximateSchema(string databaseId, string containerId, CancellationToken cancellationToken = default)
     {
         try
         {
-            var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-            if (string.IsNullOrWhiteSpace(endpoint))
-            {
-                return new { error = "Missing required environment variable COSMOS_ENDPOINT." };
-            }
-            if (string.IsNullOrWhiteSpace(databaseId) || string.IsNullOrWhiteSpace(containerId))
-            {
-                return new { error = "Parameters 'databaseId' and 'containerId' are required." };
-            }
+            ValidateRequiredParameter(databaseId, nameof(databaseId));
+            ValidateRequiredParameter(containerId, nameof(containerId));
 
-            var credential = new DefaultAzureCredential();
-            using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
-            {
-                ApplicationName = "AzureCosmosDBMCP"
-            });
+            _logger.LogInformation("Getting approximate schema for {DatabaseId}/{ContainerId}", databaseId, containerId);
 
-            var container = client.GetContainer(databaseId, containerId);
+            var container = _cosmosClient.GetContainer(databaseId, containerId);
             var queryText = "SELECT TOP 10 * FROM c";
             using var streamIterator = container.GetItemQueryStreamIterator(
                 new QueryDefinition(queryText),
@@ -454,9 +426,9 @@ public class CosmosDbToolsService
 
             while (streamIterator.HasMoreResults && sampleCount < 10)
             {
-                using var response = await streamIterator.ReadNextAsync();
+                using var response = await streamIterator.ReadNextAsync(cancellationToken);
                 using var stream = response.Content;
-                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream);
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
                 
                 var documents = document.RootElement.GetProperty("Documents");
                 foreach (var doc in documents.EnumerateArray())
@@ -497,6 +469,7 @@ public class CosmosDbToolsService
 
             if (sampleCount == 0)
             {
+                _logger.LogWarning("No documents found to infer schema");
                 return new { message = "No documents found to infer schema." };
             }
 
@@ -511,15 +484,23 @@ public class CosmosDbToolsService
                 properties.Add(new { name, type = typeStr, description });
             }
 
+            _logger.LogInformation("Schema approximation complete. Found {PropertyCount} unique properties from {SampleCount} documents", properties.Count, sampleCount);
             var result = new { sampleSize = sampleCount, properties };
             return result;
         }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid parameter: {Message}", ex.Message);
+            return new { error = ex.Message };
+        }
         catch (CosmosException cex)
         {
+            _logger.LogError(cex, "Cosmos DB error getting approximate schema: {StatusCode}", cex.StatusCode);
             return new { error = cex.Message, statusCode = (int)cex.StatusCode };
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error getting approximate schema");
             return new { error = ex.Message };
         }
     }

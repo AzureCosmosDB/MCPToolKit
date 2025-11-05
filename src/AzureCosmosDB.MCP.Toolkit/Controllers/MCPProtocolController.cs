@@ -261,7 +261,7 @@ public class MCPProtocolController : ControllerBase
                                 }
                             }
 
-                            var result = await ExecuteTool(toolName, toolArgs);
+                            var result = await ExecuteTool(toolName, toolArgs, HttpContext.RequestAborted);
                         
                             var toolResponse = new
                             {
@@ -327,36 +327,41 @@ public class MCPProtocolController : ControllerBase
         }
     }
 
-    private async Task<object> ExecuteTool(string toolName, Dictionary<string, object> args)
+    private async Task<object> ExecuteTool(string toolName, Dictionary<string, object> args, CancellationToken cancellationToken = default)
     {
         return toolName.ToLowerInvariant() switch
         {
-            "list_databases" => await _cosmosDbTools.ListDatabases(),
-            "list_collections" => await _cosmosDbTools.ListCollections(GetStringArg(args, "databaseId")),
+            "list_databases" => await _cosmosDbTools.ListDatabases(cancellationToken),
+            "list_collections" => await _cosmosDbTools.ListCollections(GetStringArg(args, "databaseId"), cancellationToken),
             "get_recent_documents" => await _cosmosDbTools.GetRecentDocuments(
                 GetStringArg(args, "databaseId"),
                 GetStringArg(args, "containerId"),
-                GetRequiredIntArg(args, "n")),
+                GetRequiredIntArg(args, "n"),
+                cancellationToken),
             "text_search" => await _cosmosDbTools.TextSearch(
                 GetStringArg(args, "databaseId"),
                 GetStringArg(args, "containerId"),
                 GetStringArg(args, "property"),
                 GetStringArg(args, "searchPhrase"),
-                GetRequiredIntArg(args, "n")),
+                GetRequiredIntArg(args, "n"),
+                cancellationToken),
             "find_document_by_id" => await _cosmosDbTools.FindDocumentByID(
                 GetStringArg(args, "databaseId"),
                 GetStringArg(args, "containerId"),
-                GetStringArg(args, "id")),
+                GetStringArg(args, "id"),
+                cancellationToken),
             "get_approximate_schema" => await _cosmosDbTools.GetApproximateSchema(
                 GetStringArg(args, "databaseId"),
-                GetStringArg(args, "containerId")),
+                GetStringArg(args, "containerId"),
+                cancellationToken),
             "vector_search" => await _cosmosDbTools.VectorSearch(
                 GetStringArg(args, "databaseId"),
                 GetStringArg(args, "containerId"),
                 GetStringArg(args, "searchText"),
                 GetStringArg(args, "vectorProperty"),
                 GetStringArg(args, "selectProperties"),
-                GetRequiredIntArg(args, "topN")),
+                GetRequiredIntArg(args, "topN"),
+                cancellationToken),
             _ => throw new ArgumentException($"Unknown tool: {toolName}")
         };
     }
