@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/AzureCosmosDB/MCPToolKit/discussions
+    about: Ask questions, share ideas, or discuss the project with the community
+  - name: 📚 Documentation
+    url: https://github.com/AzureCosmosDB/MCPToolKit/tree/main/docs
+    about: Browse our comprehensive documentation and guides
+  - name: 🐛 Bug Bash Instructions
+    url: https://github.com/AzureCosmosDB/MCPToolKit/blob/main/docs/BUG-BASH-INSTRUCTIONS.md
+    about: Testing scenarios and bug reporting guidelines
