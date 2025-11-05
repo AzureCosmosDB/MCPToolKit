@@ -21,241 +21,530 @@
     
     <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js" defer></script>
     <style>
-        /* CSS Custom Properties for theming */
+        /* Microsoft Fluent Design System - Official Theme Colors */
         :root {
+            /* Primary - Microsoft Blue */
             --primary-color: #0078d4;
             --primary-hover: #106ebe;
             --primary-active: #005a9e;
+            --primary-light: #50e6ff;
+            --primary-dark: #004578;
+            
+            /* Secondary - Neutral colors from Fluent */
             --secondary-color: #323130;
+            --secondary-hover: #484644;
+            --secondary-light: #605e5c;
+            
+            /* Semantic colors - Microsoft Office palette */
             --success-color: #107c10;
-            --success-hover: #0e700e;
+            --success-hover: #0b5a08;
+            --success-light: #dff6dd;
+            --success-border: #92c353;
+            
             --warning-color: #ff8c00;
+            --warning-hover: #d17000;
+            --warning-light: #fff4ce;
+            --warning-border: #ffb900;
+            
             --error-color: #d13438;
-            --error-hover: #b52d32;
-            --background-color: #faf9f8;
+            --error-hover: #a4262c;
+            --error-light: #fde7e9;
+            --error-border: #e74856;
+            
+            --info-color: #00bcf2;
+            --info-hover: #008db5;
+            --info-light: #e1f5fe;
+            
+            /* Neutral palette - Microsoft Fluent */
+            --neutral-10: #faf9f8;
+            --neutral-20: #f3f2f1;
+            --neutral-30: #edebe9;
+            --neutral-40: #e1dfdd;
+            --neutral-50: #d2d0ce;
+            --neutral-60: #c8c6c4;
+            --neutral-70: #a19f9d;
+            --neutral-80: #8a8886;
+            --neutral-90: #605e5c;
+            --neutral-100: #484644;
+            --neutral-110: #323130;
+            --neutral-120: #201f1e;
+            
+            /* Surface colors */
+            --background-color: var(--neutral-10);
             --surface-color: #ffffff;
-            --border-color: #e1dfdd;
-            --text-primary: #323130;
-            --text-secondary: #605e5c;
-            --text-disabled: #a19f9d;
-            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
-            --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
-            --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.14);
+            --surface-hover: var(--neutral-20);
+            --border-color: var(--neutral-40);
+            
+            /* Text colors */
+            --text-primary: var(--neutral-110);
+            --text-secondary: var(--neutral-90);
+            --text-disabled: var(--neutral-70);
+            --text-white: #ffffff;
+            
+            /* Shadows - Fluent depth */
+            --shadow-2: 0 0.3px 0.9px rgba(0, 0, 0, 0.1), 0 1.6px 3.6px rgba(0, 0, 0, 0.13);
+            --shadow-4: 0 0.6px 1.8px rgba(0, 0, 0, 0.1), 0 3.2px 7.2px rgba(0, 0, 0, 0.13);
+            --shadow-8: 0 1.2px 3.6px rgba(0, 0, 0, 0.1), 0 6.4px 14.4px rgba(0, 0, 0, 0.13);
+            --shadow-16: 0 2.4px 7.2px rgba(0, 0, 0, 0.1), 0 12.8px 28.8px rgba(0, 0, 0, 0.13);
+            --shadow-64: 0 9.6px 28.8px rgba(0, 0, 0, 0.1), 0 51.2px 115.2px rgba(0, 0, 0, 0.13);
+            
+            /* Border radius - Fluent style */
             --border-radius: 4px;
-            --border-radius-lg: 8px;
-            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+            --border-radius-medium: 6px;
+            --border-radius-large: 8px;
+            
+            /* Transitions */
+            --transition-fast: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-normal: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            
+            /* Typography */
+            --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
+            --font-weight-regular: 400;
+            --font-weight-semibold: 600;
+            --font-weight-bold: 700;
         }
 
-        /* Dark mode support */
+        /* Dark mode support - Microsoft dark theme colors */
         @media (prefers-color-scheme: dark) {
             :root {
-                --background-color: #1e1e1e;
-                --surface-color: #2d2d30;
-                --border-color: #3e3e42;
+                --background-color: #1b1a19;
+                --surface-color: #292827;
+                --surface-hover: #323130;
+                --border-color: #3b3a39;
+                
                 --text-primary: #ffffff;
-                --text-secondary: #cccccc;
-                --text-disabled: #888888;
-                --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-                --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
-                --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+                --text-secondary: #d2d0ce;
+                --text-disabled: #797775;
+                
+                --primary-color: #2899f5;
+                --primary-hover: #50b0f7;
+                --primary-active: #0f78d4;
+                
+                --success-light: #393d1b;
+                --success-border: #6bb700;
+                
+                --warning-light: #413c1e;
+                --warning-border: #fcb900;
+                
+                --error-light: #442726;
+                --error-border: #f1707b;
+                
+                --info-light: #1f3a3d;
+                
+                --shadow-2: 0 0.3px 0.9px rgba(0, 0, 0, 0.4), 0 1.6px 3.6px rgba(0, 0, 0, 0.48);
+                --shadow-4: 0 0.6px 1.8px rgba(0, 0, 0, 0.4), 0 3.2px 7.2px rgba(0, 0, 0, 0.48);
+                --shadow-8: 0 1.2px 3.6px rgba(0, 0, 0, 0.4), 0 6.4px 14.4px rgba(0, 0, 0, 0.48);
+                --shadow-16: 0 2.4px 7.2px rgba(0, 0, 0, 0.4), 0 12.8px 28.8px rgba(0, 0, 0, 0.48);
             }
         }
 
         /* Reset and base styles */
         *, *::before, *::after {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
             font-family: var(--font-family);
-            line-height: 1.6;
+            line-height: 1.5;
             color: var(--text-primary);
-            background-color: var(--background-color);
+            background: linear-gradient(135deg, var(--neutral-10) 0%, var(--neutral-20) 100%);
             margin: 0;
-            padding: 1rem;
+            padding: 2rem 1rem;
             min-height: 100vh;
             font-size: 14px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
+        
         .container {
+            max-width: 1200px;
+            margin: 0 auto;
             background: var(--surface-color);
-            border-radius: var(--border-radius);
-            padding: 30px;
-            box-shadow: var(--shadow-md);
-            transition: var(--transition);
+            border-radius: var(--border-radius-large);
+            padding: 2.5rem;
+            box-shadow: var(--shadow-16);
+            transition: var(--transition-normal);
         }
+        
+        .container:hover {
+            box-shadow: var(--shadow-64);
+        }
+        
         h1 {
             color: var(--primary-color);
             text-align: center;
-            margin-bottom: 30px;
-            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-weight: var(--font-weight-semibold);
+            font-size: 2rem;
+            letter-spacing: -0.5px;
         }
-        .auth-section {
-            background: #e8f4fd;
-            border: 1px solid #0078d4;
-            border-radius: 6px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .section {
-            margin-bottom: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 6px;
-            border-left: 4px solid #0078d4;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 600;
-            color: #323130;
-        }
-        input[type="text"], input[type="url"], input[type="number"], select, textarea {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            font-size: 14px;
-            box-sizing: border-box;
-            background-color: var(--surface-color);
+        
+        h2 {
             color: var(--text-primary);
-            transition: var(--transition);
-        }
-        input[type="text"]:focus, input[type="url"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
-        }
-        .button-group {
+            font-size: 1.25rem;
+            font-weight: var(--font-weight-semibold);
+            margin: 0 0 1rem 0;
             display: flex;
-            gap: 10px;
-            margin: 20px 0;
-            flex-wrap: wrap;
-        }
-        button {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: var(--transition);
-            display: inline-flex;
             align-items: center;
             gap: 0.5rem;
         }
+        
+        h3 {
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            font-weight: var(--font-weight-semibold);
+            margin: 0 0 1rem 0;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+        
+        .auth-section {
+            background: var(--info-light);
+            border: 2px solid var(--info-color);
+            border-radius: var(--border-radius-medium);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            transition: var(--transition-normal);
+        }
+        
+        .auth-section:hover {
+            box-shadow: var(--shadow-4);
+        }
+        
+        .section {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: var(--neutral-10);
+            border-radius: var(--border-radius-medium);
+            border-left: 4px solid var(--primary-color);
+            transition: var(--transition-normal);
+        }
+        
+        .section:hover {
+            background: var(--surface-hover);
+            box-shadow: var(--shadow-2);
+        }
+        
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: var(--font-weight-semibold);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+        input[type="text"], 
+        input[type="url"], 
+        input[type="number"], 
+        select, 
+        textarea {
+            width: 100%;
+            padding: 0.625rem 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            font-size: 14px;
+            font-family: var(--font-family);
+            box-sizing: border-box;
+            background-color: var(--surface-color);
+            color: var(--text-primary);
+            transition: var(--transition-fast);
+        }
+        
+        input[type="text"]:hover:not(:disabled):not(:focus), 
+        input[type="url"]:hover:not(:disabled):not(:focus), 
+        input[type="number"]:hover:not(:disabled):not(:focus), 
+        select:hover:not(:disabled):not(:focus), 
+        textarea:hover:not(:disabled):not(:focus) {
+            border-color: var(--neutral-60);
+        }
+        
+        input[type="text"]:focus, 
+        input[type="url"]:focus, 
+        input[type="number"]:focus, 
+        select:focus, 
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 1px var(--primary-color);
+        }
+        
+        input[type="text"]:disabled,
+        input[type="url"]:disabled,
+        input[type="number"]:disabled,
+        select:disabled,
+        textarea:disabled {
+            background-color: var(--neutral-20);
+            color: var(--text-disabled);
+            cursor: not-allowed;
+        }
+        
+        small {
+            display: block;
+            margin-top: 0.375rem;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 0.75rem;
+            margin: 1.25rem 0;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background-color: var(--primary-color);
+            color: var(--text-white);
+            border: none;
+            padding: 0.625rem 1.25rem;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: var(--font-weight-semibold);
+            font-family: var(--font-family);
+            transition: var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            min-height: 36px;
+            box-shadow: var(--shadow-2);
+        }
+        
         button:hover:not(:disabled) {
             background-color: var(--primary-hover);
             transform: translateY(-1px);
+            box-shadow: var(--shadow-4);
         }
+        
+        button:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: var(--shadow-2);
+        }
+        
         button:disabled {
-            background-color: #a19f9d;
+            background-color: var(--neutral-40);
+            color: var(--text-disabled);
             cursor: not-allowed;
-            opacity: 0.6;
+            opacity: 0.5;
+            box-shadow: none;
         }
+        
         button:focus-visible {
             outline: 2px solid var(--primary-color);
             outline-offset: 2px;
         }
+        
         .login-btn {
-            background-color: #107c10;
+            background-color: var(--success-color);
         }
+        
         .login-btn:hover:not(:disabled) {
-            background-color: #0e700e;
+            background-color: var(--success-hover);
         }
+        
         .logout-btn {
-            background-color: #d13438;
+            background-color: var(--error-color);
         }
+        
         .logout-btn:hover:not(:disabled) {
-            background-color: #b52d32;
+            background-color: var(--error-hover);
+        }
+        
+        .discover-btn {
+            background-color: var(--success-color);
+        }
+        
+        .discover-btn:hover:not(:disabled) {
+            background-color: var(--success-hover);
         }
         .user-info {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 10px;
+            background: var(--success-light);
+            border: 1px solid var(--success-border);
+            color: var(--success-color);
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
         }
+        
+        .user-info strong {
+            color: var(--text-primary);
+            font-weight: var(--font-weight-semibold);
+        }
+        
         .auth-status {
-            font-weight: 600;
-            margin-bottom: 10px;
+            font-weight: var(--font-weight-semibold);
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: var(--border-radius);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
         }
+        
         .auth-status.authenticated {
-            color: #107c10;
+            color: var(--success-color);
+            background: var(--success-light);
+            border: 1px solid var(--success-border);
         }
+        
         .auth-status.unauthenticated {
-            color: #d13438;
+            color: var(--error-color);
+            background: var(--error-light);
+            border: 1px solid var(--error-border);
         }
-        .discover-btn {
-            background-color: #107c10;
-        }
-        .discover-btn:hover:not(:disabled) {
-            background-color: #0e700e;
-        }
+        
         .output {
-            background-color: #f8f8f8;
-            border: 1px solid #d1d1d1;
-            border-radius: 4px;
-            padding: 15px;
-            margin-top: 20px;
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-medium);
+            padding: 1.25rem;
+            margin-top: 1rem;
             min-height: 200px;
             max-height: 600px;
             overflow-y: auto;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
+            font-family: 'Consolas', 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
             white-space: pre-wrap;
             word-break: break-word;
-            line-height: 1.4;
+            line-height: 1.5;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
         }
+        
+        .output::-webkit-scrollbar {
+            width: 12px;
+        }
+        
+        .output::-webkit-scrollbar-track {
+            background: var(--neutral-20);
+            border-radius: var(--border-radius);
+        }
+        
+        .output::-webkit-scrollbar-thumb {
+            background: var(--neutral-60);
+            border-radius: var(--border-radius);
+        }
+        
+        .output::-webkit-scrollbar-thumb:hover {
+            background: var(--neutral-80);
+        }
+        
         .loading {
-            color: #0078d4;
-            font-style: italic;
+            color: var(--primary-color);
+            font-style: normal;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
         }
+        
         .error {
-            color: #d13438;
-            background-color: #fdf2f2;
-            border-color: #f1aeb5;
+            color: var(--error-color);
+            background-color: var(--error-light);
+            border-color: var(--error-border);
         }
+        
         .success {
             color: var(--success-color);
         }
         
-        /* Loading spinner */
+        /* Loading spinner - Fluent style */
         .spinner {
             display: inline-block;
-            width: 1rem;
-            height: 1rem;
-            border: 2px solid var(--border-color);
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 2.5px solid var(--neutral-40);
             border-radius: 50%;
             border-top-color: var(--primary-color);
-            animation: spin 1s ease-in-out infinite;
-            margin-right: 0.5rem;
+            animation: spin 0.8s linear infinite;
         }
 
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
         
+        /* Info boxes - Microsoft style */
+        .info {
+            margin-bottom: 1.25rem;
+            padding: 1rem;
+            background-color: var(--info-light);
+            border-left: 4px solid var(--info-color);
+            border-radius: var(--border-radius);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        
+        #authError {
+            background: var(--error-light);
+            border: 1px solid var(--error-border);
+            color: var(--error-color);
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            margin-bottom: 1rem;
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        #authError strong {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: var(--font-weight-semibold);
+        }
+        
+        #authErrorMessage {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
         /* Responsive improvements */
         @media (max-width: 768px) {
             body {
-                padding: 10px;
+                padding: 1rem 0.5rem;
             }
             .container {
-                padding: 20px;
+                padding: 1.5rem;
+                border-radius: var(--border-radius-medium);
+            }
+            h1 {
+                font-size: 1.5rem;
             }
             .button-group {
                 flex-direction: column;
             }
             button {
                 width: 100%;
-                margin-bottom: 0.5rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                font-size: 13px;
+            }
+            .container {
+                padding: 1rem;
             }
         }
         
@@ -271,88 +560,162 @@
             white-space: nowrap;
             border: 0;
         }
-        .info {
-            margin-bottom: 20px;
-            padding: 15px;
-            background-color: #e1f5fe;
-            border-left: 4px solid #0078d4;
-            border-radius: 4px;
+        
+        *:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
         }
         .curl-example {
-            background-color: #2d2d30;
-            color: #cccccc;
-            padding: 15px;
-            border-radius: 4px;
-            margin: 10px 0;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background-color: var(--neutral-120);
+            color: var(--neutral-20);
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            margin: 0.75rem 0;
+            font-family: 'Consolas', 'Menlo', 'Monaco', 'Courier New', monospace;
             font-size: 12px;
+            line-height: 1.6;
             overflow-x: auto;
             position: relative;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
         }
+        
+        .curl-example::-webkit-scrollbar {
+            height: 8px;
+        }
+        
+        .curl-example::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: var(--border-radius);
+        }
+        
+        .curl-example::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: var(--border-radius);
+        }
+        
+        .curl-example::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+        
         .curl-container {
             position: relative;
-            margin: 10px 0;
+            margin: 0.75rem 0;
         }
+        
+        .curl-container p {
+            margin: 0.5rem 0;
+            font-weight: var(--font-weight-semibold);
+            color: var(--text-primary);
+        }
+        
         .copy-btn {
             position: absolute;
-            top: 5px;
-            right: 5px;
-            background: #0078d4;
-            color: white;
+            top: 8px;
+            right: 8px;
+            background: var(--primary-color);
+            color: var(--text-white);
             border: none;
-            padding: 5px 10px;
-            border-radius: 3px;
+            padding: 0.375rem 0.75rem;
+            border-radius: var(--border-radius);
             cursor: pointer;
             font-size: 11px;
+            font-weight: var(--font-weight-semibold);
+            transition: var(--transition-fast);
+            box-shadow: var(--shadow-2);
+            z-index: 10;
         }
+        
         .copy-btn:hover {
-            background: #106ebe;
+            background: var(--primary-hover);
+            box-shadow: var(--shadow-4);
         }
+        
         .copy-btn.copied {
-            background: #107c10;
+            background: var(--success-color);
         }
+        
+        .copy-btn.copied::after {
+            content: ' ✓';
+        }
+        
         .collapsible {
-            background-color: #e1e1e1;
-            color: #0078d4;
+            background: linear-gradient(135deg, var(--neutral-20) 0%, var(--neutral-30) 100%);
+            color: var(--primary-color);
             cursor: pointer;
-            padding: 15px;
-            border: none;
+            padding: 1rem 1.25rem;
+            border: 1px solid var(--border-color);
             text-align: left;
             outline: none;
-            font-size: 16px;
-            font-weight: 600;
-            border-radius: 4px;
-            margin-bottom: 10px;
+            font-size: 1.1rem;
+            font-weight: var(--font-weight-semibold);
+            border-radius: var(--border-radius-medium);
+            margin-bottom: 1rem;
             width: 100%;
             position: relative;
+            transition: var(--transition-fast);
         }
+        
+        .collapsible:hover {
+            background: linear-gradient(135deg, var(--neutral-30) 0%, var(--neutral-40) 100%);
+            box-shadow: var(--shadow-2);
+        }
+        
         .collapsible:after {
             content: '▼';
             position: absolute;
-            right: 15px;
+            right: 1.25rem;
             top: 50%;
             transform: translateY(-50%);
-            transition: transform 0.3s;
+            transition: var(--transition-normal);
+            font-size: 0.9rem;
         }
+        
         .collapsible.collapsed:after {
             transform: translateY(-50%) rotate(-90deg);
         }
+        
         .collapsible-content {
             overflow: hidden;
-            transition: max-height 0.3s ease;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
+        
         .collapsible-content.collapsed {
             max-height: 0;
         }
+        
         .collapsible-content:not(.collapsed) {
-            max-height: 1000px;
+            max-height: 2000px;
+        }
+        
+        /* Modern card design for sections */
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+        
+        main {
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🌌 Azure Cosmos DB MCP Server Test</h1>
+            <h1>🌌 Azure Cosmos DB MCP Toolkit</h1>
+            <p class="subtitle">Test and interact with Model Context Protocol tools for Azure Cosmos DB</p>
         </header>
         <main>
         
@@ -909,6 +1272,13 @@
         }
 
         async function listTools() {
+            // Check authentication first
+            if (!currentAccessToken) {
+                showError('⚠️ Authentication Required\n\nPlease sign in with Microsoft Entra before listing tools.\n\n1. Enter your Client ID and Tenant ID in the authentication section\n2. Click "Sign In with Microsoft Entra"\n3. Then try again');
+                document.querySelector('.auth-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return;
+            }
+            
             const payload = {
                 jsonrpc: "2.0",
                 id: "list-tools-" + Date.now(),
@@ -920,6 +1290,13 @@
         }
 
         async function testTool() {
+            // Check authentication first
+            if (!currentAccessToken) {
+                showError('⚠️ Authentication Required\n\nPlease sign in with Microsoft Entra before testing tools.\n\n1. Enter your Client ID and Tenant ID in the authentication section\n2. Click "Sign In with Microsoft Entra"\n3. Then try again');
+                document.querySelector('.auth-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return;
+            }
+            
             const payload = {
                 jsonrpc: "2.0",
                 id: "test-" + Date.now(),
@@ -934,6 +1311,14 @@
         }
 
         async function testCosmosDbTool() {
+            // Check authentication FIRST before validating parameters
+            if (!currentAccessToken) {
+                showError('⚠️ Authentication Required\n\nPlease sign in with Microsoft Entra before testing tools.\n\n1. Enter your Client ID and Tenant ID above\n2. Click "Sign In with Microsoft Entra"\n3. Then try again');
+                // Scroll to auth section
+                document.querySelector('.auth-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return;
+            }
+            
             // Get values from form fields
             const database = document.getElementById('cosmosDatabase').value.trim();
             const container = document.getElementById('cosmosContainer').value.trim();
@@ -1132,23 +1517,33 @@
 
         // Show error message
         function showError(message) {
-            // If it's an auth-related error, show it in the auth section
-            if (message.includes('Client ID') || message.includes('login') || message.includes('Login') || 
-                message.includes('MSAL') || message.includes('Token') || message.includes('authentication')) {
+            // Check if it's an auth-related error
+            const isAuthError = message.includes('Client ID') || 
+                               message.includes('login') || 
+                               message.includes('Login') || 
+                               message.includes('MSAL') || 
+                               message.includes('Token') || 
+                               message.includes('authentication') ||
+                               message.includes('Authentication Required') ||
+                               message.includes('sign in') ||
+                               message.includes('Sign In');
+            
+            // ALWAYS show in output section for visibility
+            const output = document.getElementById('output');
+            output.className = 'output error';
+            output.textContent = '❌ Error: ' + message;
+            
+            // If it's an auth-related error, ALSO show it in the auth section for emphasis
+            if (isAuthError) {
                 const authError = document.getElementById('authError');
                 const authErrorMessage = document.getElementById('authErrorMessage');
                 authErrorMessage.textContent = message;
                 authError.style.display = 'block';
                 
-                // Auto-hide after 10 seconds
+                // Auto-hide after 15 seconds (increased from 10)
                 setTimeout(() => {
                     authError.style.display = 'none';
-                }, 10000);
-            } else {
-                // Show other errors in the output section
-                const output = document.getElementById('output');
-                output.className = 'output error';
-                output.textContent = '❌ Error: ' + message;
+                }, 15000);
             }
         }
 
