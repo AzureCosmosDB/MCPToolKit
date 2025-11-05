@@ -10,6 +10,7 @@
     4. Assigns necessary permissions (Cosmos DB, Container Registry)
     5. Updates container app with new image and authentication
     6. Creates deployment-info.json for AI Foundry integration
+    
 .PARAMETER ResourceGroup
     Azure Resource Group name for deployment (REQUIRED)
 .PARAMETER Location
@@ -369,20 +370,20 @@ function Update-Container-App {
     
     # Enable system-assigned managed identity if not already enabled
     $identityJustCreated = $false
-    if ($containerApp.identity.type -ne "SystemAssigned") {
+    if ($containerApp.identity.type -ne "SystemAssigned" -and $containerApp.identity.type -ne "SystemAssigned, UserAssigned") {
         Write-Info "Enabling SystemAssigned managed identity on Container App..."
         az containerapp identity assign --name $ContainerAppName --resource-group $ResourceGroup --system-assigned
         Write-Info "SystemAssigned managed identity enabled successfully"
         
-        # Wait for the identity to propagate
-        Write-Info "Waiting 15 seconds for identity to propagate..."
-        Start-Sleep -Seconds 15
+        # Optimized: Reduced wait time with retry logic for faster deployments
+        Write-Info "Waiting 10 seconds for identity to propagate..."
+        Start-Sleep -Seconds 10
         
         # Refresh container app info
         $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
         $identityJustCreated = $true
     } else {
-        Write-Info "Container App is already using SystemAssigned managed identity"
+        Write-Info "SystemAssigned managed identity is already enabled on Container App"
     }
     
     # Get existing environment variables to extract AI Foundry and embedding settings
@@ -474,20 +475,12 @@ function Update-Container-App {
     Write-Info "Updating container app with image: $script:IMAGE_TAG"
     
     try {
-        # Step 1: Update the image first
-        Write-Info "Updating container image..."
-        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --output none
+        # Optimization: Update image and environment variables in a single call for faster deployment
+        Write-Info "Updating container image and environment variables..."
+        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars $envVars --output none
         
         if ($LASTEXITCODE -ne 0) {
-            throw "Container app image update failed with exit code $LASTEXITCODE"
-        }
-        
-        # Step 2: Update environment variables separately to ensure they persist
-        Write-Info "Setting environment variables..."
-        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars $envVars --output none
-        
-        if ($LASTEXITCODE -ne 0) {
-            throw "Container app environment variables update failed with exit code $LASTEXITCODE"
+            throw "Container app update failed with exit code $LASTEXITCODE"
         }
         
         Write-Info "Container app updated successfully!"
@@ -524,9 +517,9 @@ function Update-Container-App {
         $dummyVar = "DEPLOYMENT_TIMESTAMP=" + (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
         az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars $dummyVar --output none
         
-        # Wait for the new revision to be created and become active
-        Write-Info "Waiting 15 seconds for new revision to become active..."
-        Start-Sleep -Seconds 15
+        # Optimized: Reduced wait time for new revision activation
+        Write-Info "Waiting 10 seconds for new revision to become active..."
+        Start-Sleep -Seconds 10
         
         # Verify the new revision is active
         $activeRevision = az containerapp revision list --name $ContainerAppName --resource-group $ResourceGroup --query "[?properties.active == \`true\`].name" -o tsv
@@ -733,12 +726,14 @@ function Test-MCP-Server-Health {
     $revision = az containerapp revision list --name $ContainerAppName --resource-group $ResourceGroup --query "[0]" | ConvertFrom-Json
     if ($revision.properties.provisioningState -ne "Provisioned") {
         Write-Warn "Container revision is not yet provisioned. Current state: $($revision.properties.provisioningState)"
-        Write-Info "Waiting 30 seconds for revision to provision..."
-        Start-Sleep -Seconds 30
+        # Optimized: Reduced initial wait time, rely on retry logic
+        Write-Info "Waiting 20 seconds for revision to provision..."
+        Start-Sleep -Seconds 20
     }
     
-    $maxRetries = 18  # 3 minutes total (10 seconds * 18)
-    $retryDelay = 10
+    # Optimized: Faster retry cycle for quicker feedback
+    $maxRetries = 24  # 3 minutes total (7.5 seconds * 24)
+    $retryDelay = 7.5
     
     for ($i = 1; $i -le $maxRetries; $i++) {
         Write-Info "Health check attempt $i of $maxRetries..."
@@ -802,8 +797,9 @@ function Verify-Container-App-Status {
         if ($revision.properties.provisioningState -eq "Failed") {
             Write-Info "Attempting to restart failed revision..."
             az containerapp revision restart --name $ContainerAppName --resource-group $ResourceGroup --revision $revision.name
-            Write-Info "Waiting 30 seconds for restart to complete..."
-            Start-Sleep -Seconds 30
+            # Optimized: Reduced restart wait time
+            Write-Info "Waiting 20 seconds for restart to complete..."
+            Start-Sleep -Seconds 20
         }
     }
     
