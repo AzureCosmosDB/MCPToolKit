@@ -129,7 +129,7 @@ A secure MCP server that provides:
 > ⚠️ **IMPORTANT:** AI Foundry integration is OPTIONAL and requires subscription whitelisting. Please **reach out to me with your subscription ID** if you want to test this scenario.
 
 **Test URL:** 
-https://eastus2euap.ai.azure.com/nextgen/r/B_Fe3WLpQqa0bfGMl6DyqQ,zhuoqunli-test,,foundy5tru,project/build/agents/asst_X9gDnQQpXr0lbTbuAP4nH3jO/build?flight=agentsv2%3Doff
+https://eastus2euap.ai.azure.com/nextgen/
 
 **Steps:**
 1. Run the AI Foundry connection setup:
@@ -178,22 +178,6 @@ Please log issues for:
 4. **Expected vs actual behavior**
 5. **Screenshots/logs** if applicable
 6. **deployment-info.json** contents (if relevant)
-
----
-
-## Timeline
-
-**Bug Bash Period:** [INSERT DATES]  
-**Report Issues By:** [INSERT DATE]  
-**Format:** Offline/Async - Test at your own pace
-
----
-
-## Need Help?
-
-- **Subscription Whitelisting for AI Foundry (Optional):** Contact me with your subscription ID
-- **Questions:** [Your contact info]
-- **Issue Reporting:** [Your issue tracking system]
 
 ---
 
