@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Azure Cosmos DB MCP Server Test Interface - Test and interact with your Model Context Protocol server">
     <meta name="author" content="Azure Cosmos DB Team">
-    <title>Azure Cosmos DB MCP Server Test</title>
+    <title>Azure Cosmos DB MCP Toolkit Client</title>
     
     <!-- Preload critical resources -->
     <link rel="preload" href="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js" as="script">
@@ -695,6 +695,53 @@
             border-bottom: 2px solid var(--border-color);
         }
         
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .logo-container {
+            flex-shrink: 0;
+        }
+        
+        .title-container {
+            text-align: left;
+        }
+        
+        .title-container h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            line-height: 1.2;
+        }
+        
+        .title-container .subtitle {
+            margin: 0.25rem 0 0 0;
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+        
+        /* Responsive header */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .title-container {
+                text-align: center;
+            }
+            
+            .title-container h1 {
+                font-size: 1.75rem;
+            }
+        }
+        
         main {
             animation: fadeIn 0.5s ease-out;
         }
@@ -714,8 +761,47 @@
 <body>
     <div class="container">
         <header>
-            <h1>🌌 Azure Cosmos DB MCP Toolkit</h1>
-            <p class="subtitle">Test and interact with Model Context Protocol tools for Azure Cosmos DB</p>
+            <div class="header-content">
+                <div class="logo-container">
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Azure Cosmos DB">
+                        <defs>
+                            <linearGradient id="cosmosGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#0078d4;stop-opacity:1" />
+                                <stop offset="50%" style="stop-color:#00bcf2;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#40e0d0;stop-opacity:1" />
+                            </linearGradient>
+                            <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#0078d4;stop-opacity:0.1" />
+                                <stop offset="100%" style="stop-color:#40e0d0;stop-opacity:0.05" />
+                            </linearGradient>
+                        </defs>
+                        
+                        <!-- Shield background -->
+                        <path d="M24 4L8 12V24C8 32 16 40 24 44C32 40 40 32 40 24V12L24 4Z" fill="url(#shieldGradient)" stroke="url(#cosmosGradient)" stroke-width="1.5"/>
+                        
+                        <!-- Cosmos DB orbit rings -->
+                        <ellipse cx="24" cy="24" rx="16" ry="6" fill="none" stroke="url(#cosmosGradient)" stroke-width="1.5" opacity="0.8"/>
+                        <ellipse cx="24" cy="24" rx="16" ry="6" fill="none" stroke="url(#cosmosGradient)" stroke-width="1.5" opacity="0.6" transform="rotate(60 24 24)"/>
+                        <ellipse cx="24" cy="24" rx="16" ry="6" fill="none" stroke="url(#cosmosGradient)" stroke-width="1.5" opacity="0.4" transform="rotate(120 24 24)"/>
+                        
+                        <!-- Central globe -->
+                        <circle cx="24" cy="24" r="5" fill="url(#cosmosGradient)"/>
+                        <circle cx="24" cy="24" r="3" fill="white" opacity="0.9"/>
+                        
+                        <!-- Data nodes -->
+                        <circle cx="24" cy="14" r="2" fill="#00bcf2"/>
+                        <circle cx="32" cy="20" r="1.5" fill="#40e0d0"/>
+                        <circle cx="32" cy="28" r="1.5" fill="#0078d4"/>
+                        <circle cx="24" cy="34" r="2" fill="#00bcf2"/>
+                        <circle cx="16" cy="28" r="1.5" fill="#40e0d0"/>
+                        <circle cx="16" cy="20" r="1.5" fill="#0078d4"/>
+                    </svg>
+                </div>
+                <div class="title-container">
+                    <h1>Azure Cosmos DB MCP Toolkit Client</h1>
+                    <p class="subtitle">Test and interact with Model Context Protocol tools for Azure Cosmos DB</p>
+                </div>
+            </div>
         </header>
         <main>
         
