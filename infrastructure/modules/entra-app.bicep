@@ -25,8 +25,6 @@ param entraAppDisplayName string
 @description('Unique name for the Entra Application')
 param entraAppUniqueName string
 
-var orgServiceManagementReferenceId = '4405e061-966a-4249-afdd-f7435f54a510'
-
 // Define app role for MCP Tool Executor
 var entraAppRoleValue = 'Mcp.Tool.Executor'
 var entraAppRoleId = guid(subscription().id, entraAppRoleValue)

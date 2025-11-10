@@ -103,12 +103,28 @@ function Parse-Arguments {
 function Create-Entra-App {
     Write-Info "Creating Entra App registration for Azure Cosmos DB MCP Toolkit: $ENTRA_APP_NAME"
 
-    # Check if jq equivalent (ConvertFrom-Json) is available - it's built-in to PowerShell
+    # Check if the app already exists
+    Write-Info "Checking if Entra App already exists..."
+    $existingApp = az ad app list --display-name $ENTRA_APP_NAME --query "[0]" | ConvertFrom-Json
     
-    # Register the Entra App with app-role
-    $appJson = az ad app create --display-name $ENTRA_APP_NAME --service-management-reference "4405e061-966a-4249-afdd-f7435f54a510" | ConvertFrom-Json
-    $ENTRA_APP_CLIENT_ID = $appJson.appId
-    $ENTRA_APP_OBJECT_ID = $appJson.id
+    if ($existingApp -and $existingApp.appId) {
+        Write-Info "Entra App already exists, reusing existing app"
+        $ENTRA_APP_CLIENT_ID = $existingApp.appId
+        $ENTRA_APP_OBJECT_ID = $existingApp.id
+    }
+    else {
+        Write-Info "Creating new Entra App registration..."
+        try {
+            $appJson = az ad app create --display-name $ENTRA_APP_NAME | ConvertFrom-Json
+            $ENTRA_APP_CLIENT_ID = $appJson.appId
+            $ENTRA_APP_OBJECT_ID = $appJson.id
+        }
+        catch {
+            Write-Error "Failed to create Entra App. Error: $_"
+            Write-Error "Please ensure you have sufficient permissions to create app registrations in Azure AD."
+            exit 1
+        }
+    }
     
     Write-Info "ENTRA_APP_CLIENT_ID=$ENTRA_APP_CLIENT_ID"
     Write-Info "ENTRA_APP_OBJECT_ID=$ENTRA_APP_OBJECT_ID"
