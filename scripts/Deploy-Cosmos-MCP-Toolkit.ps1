@@ -117,7 +117,7 @@ function Create-Entra-App {
         Write-Info "Creating new Entra App registration: $ENTRA_APP_NAME"
         
         # Register the Entra App (without --service-management-reference for broader compatibility)
-        $appJson = az ad app create --display-name $ENTRA_APP_NAME         .\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "rg-sajee-mcp-2025"| ConvertFrom-Json
+        $appJson = az ad app create --display-name $ENTRA_APP_NAME | ConvertFrom-Json
         $ENTRA_APP_CLIENT_ID = $appJson.appId
         $ENTRA_APP_OBJECT_ID = $appJson.id
         
