@@ -18,10 +18,15 @@
     Name of the Cosmos DB account (default: cosmosmcpkit)
 .PARAMETER ContainerAppName
     Name of the container app (default: mcp-toolkit-app)
+.PARAMETER EntraAppName
+    Name of the Entra App registration (default: "Azure Cosmos DB MCP Toolkit API")
+    Use this to create a unique app if the default name is already taken
 .EXAMPLE
     ./Deploy-Cosmos-MCP-Server.ps1 -ResourceGroup "my-cosmos-mcp-rg"
 .EXAMPLE
     ./Deploy-Cosmos-MCP-Server.ps1 -ResourceGroup "my-project" -Location "westus2" -CosmosAccountName "mycosmosdb"
+.EXAMPLE
+    ./Deploy-Cosmos-MCP-Server.ps1 -ResourceGroup "my-rg" -EntraAppName "My Custom MCP App"
 #>
 
 param(
@@ -35,17 +40,28 @@ param(
     [string]$CosmosAccountName = "",
     
     [Parameter(Mandatory=$false)]
-    [string]$ContainerAppName = ""
+    [string]$ContainerAppName = "",
+    
+    [Parameter(Mandatory=$false)]
+    [string]$EntraAppName = ""
 )
 
 $ErrorActionPreference = "Stop"
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Entra App Configuration (following PostgreSQL pattern)
-$ENTRA_APP_NAME = "Azure Cosmos DB MCP Toolkit API"
+$DEFAULT_ENTRA_APP_NAME = "Azure Cosmos DB MCP Toolkit API"
 $ENTRA_APP_ROLE_DESC = "Executor role for MCP Tool operations on Cosmos DB"
 $ENTRA_APP_ROLE_DISPLAY = "MCP Tool Executor"
 $ENTRA_APP_ROLE_VALUE = "Mcp.Tool.Executor"
+
+# Use custom app name if provided, otherwise use default
+if ([string]::IsNullOrWhiteSpace($EntraAppName)) {
+    $ENTRA_APP_NAME = $DEFAULT_ENTRA_APP_NAME
+}
+else {
+    $ENTRA_APP_NAME = $EntraAppName
+}
 
 # Color functions
 function Write-Info { param($Message) Write-Host "[INFO] $Message" -ForegroundColor Green }
@@ -102,16 +118,43 @@ function Parse-Arguments {
 function Create-Entra-App {
     Write-Info "Checking for existing Entra App registration: $ENTRA_APP_NAME"
 
+    # Get current user info for owner checks
+    $currentUserEmail = az account show --query "user.name" -o tsv
+    $currentUserObjectId = az ad user show --id $currentUserEmail --query "id" -o tsv 2>$null
+
     # Check if app already exists
     $existingApp = az ad app list --display-name $ENTRA_APP_NAME --query "[0]" | ConvertFrom-Json
     
     if ($existingApp -and $existingApp.appId) {
-        Write-Info "Found existing Entra App, using existing app..."
+        Write-Info "Found existing Entra App with name: $ENTRA_APP_NAME"
+        
+        # Check if current user is an owner of the existing app
+        $isOwner = $false
+        if ($currentUserObjectId -and $currentUserObjectId -ne "null") {
+            $owners = az ad app owner list --id $existingApp.appId --query "[].id" -o tsv 2>$null
+            if ($owners -contains $currentUserObjectId) {
+                $isOwner = $true
+                Write-Info "Current user is an owner of the existing app"
+            }
+            else {
+                Write-Warn "Current user is NOT an owner of the existing app"
+                Write-Warn "You may not have permissions to modify this app or assign roles"
+            }
+        }
+        
+        # Always use existing app if found (but warn if not owner)
         $ENTRA_APP_CLIENT_ID = $existingApp.appId
         $ENTRA_APP_OBJECT_ID = $existingApp.id
         
         Write-Info "ENTRA_APP_CLIENT_ID=$ENTRA_APP_CLIENT_ID"
         Write-Info "ENTRA_APP_OBJECT_ID=$ENTRA_APP_OBJECT_ID"
+        
+        if (-not $isOwner) {
+            Write-Warn "IMPORTANT: Since you're not an owner, you may need to:"
+            Write-Warn "1. Ask the app owner to add you as an owner, OR"
+            Write-Warn "2. Manually assign the Mcp.Tool.Executor role to yourself in Azure Portal, OR"
+            Write-Warn "3. Use a different app name by setting -EntraAppName parameter"
+        }
     }
     else {
         Write-Info "Creating new Entra App registration: $ENTRA_APP_NAME"
@@ -218,6 +261,31 @@ function Create-Entra-App {
     $script:ENTRA_APP_ROLE_VALUE = $ENTRA_APP_ROLE_VALUE
     $script:ENTRA_APP_SP_OBJECT_ID = $ENTRA_APP_SP_OBJECT_ID
 
+    # Ensure current user is an owner of the app
+    Write-Info "Ensuring current user is an owner of the Entra App..."
+    try {
+        $currentUserEmail = az account show --query "user.name" -o tsv
+        $currentUserObjectId = az ad user show --id $currentUserEmail --query "id" -o tsv 2>$null
+        
+        if ($currentUserObjectId -and $currentUserObjectId -ne "null") {
+            # Check if user is already an owner
+            $owners = az ad app owner list --id $ENTRA_APP_CLIENT_ID --query "[].id" -o tsv 2>$null
+            
+            if ($owners -notcontains $currentUserObjectId) {
+                Write-Info "Adding current user as owner of the Entra App..."
+                az ad app owner add --id $ENTRA_APP_CLIENT_ID --owner-object-id $currentUserObjectId 2>$null
+                Write-Info "User added as owner successfully"
+            }
+            else {
+                Write-Info "Current user is already an owner of the Entra App"
+            }
+        }
+    }
+    catch {
+        Write-Warn "Could not ensure user is owner of Entra App: $_"
+        Write-Warn "This may affect automatic role assignment"
+    }
+
     Write-Info "Entra App registration completed successfully!"
 }
 
@@ -261,13 +329,39 @@ function Assign-Current-User-Role {
         $tempBodyFile = [System.IO.Path]::GetTempFileName()
         $body | Out-File -FilePath $tempBodyFile -Encoding utf8 -NoNewline
         
-        az rest --method POST --url "https://graph.microsoft.com/v1.0/servicePrincipals/$($script:ENTRA_APP_SP_OBJECT_ID)/appRoleAssignedTo" --headers "Content-Type=application/json" --body "@$tempBodyFile" | Out-Null
+        $output = az rest --method POST --url "https://graph.microsoft.com/v1.0/servicePrincipals/$($script:ENTRA_APP_SP_OBJECT_ID)/appRoleAssignedTo" --headers "Content-Type=application/json" --body "@$tempBodyFile" 2>&1
         
         # Clean up temp file
         Remove-Item $tempBodyFile -Force
         
-        Write-Info "Successfully assigned Mcp.Tool.Executor role to $currentUserEmail"
-        Write-Info "Note: Sign out and sign in again in the browser for the role to take effect"
+        # Check if the command succeeded
+        if ($LASTEXITCODE -eq 0) {
+            Write-Info "Successfully assigned Mcp.Tool.Executor role to $currentUserEmail"
+            Write-Info "Note: Sign out and sign in again in the browser for the role to take effect"
+        }
+        else {
+            # Check if it's a permissions error
+            if ($output -match "Authorization_RequestDenied|Insufficient privileges") {
+                Write-Warn "Insufficient permissions to assign the Entra App role automatically."
+                Write-Warn ""
+                Write-Warn "REQUIRED ACTION:"
+                Write-Warn "1. Ask an Azure AD administrator or application owner to assign you the role"
+                Write-Warn "2. They can use this command:"
+                Write-Warn "   az ad app permission grant --id $($script:ENTRA_APP_CLIENT_ID) --api 00000003-0000-0000-c000-000000000000 --scope AppRoleAssignment.ReadWrite.All"
+                Write-Warn ""
+                Write-Warn "OR manually assign the role in Azure Portal:"
+                Write-Warn "1. Go to Azure Portal > Enterprise Applications"
+                Write-Warn "2. Search for app: $($script:ENTRA_APP_NAME)"
+                Write-Warn "3. Go to 'Users and groups'"
+                Write-Warn "4. Click 'Add user/group'"
+                Write-Warn "5. Select your user ($currentUserEmail) and assign the 'Mcp.Tool.Executor' role"
+                Write-Warn ""
+                Write-Warn "Deployment will continue, but you won't be able to use the web UI until the role is assigned."
+            }
+            else {
+                throw "Azure CLI command failed: $output"
+            }
+        }
     }
     catch {
         Write-Warn "Failed to assign role automatically: $_"
@@ -477,21 +571,55 @@ function Update-Container-App {
     
     # Configure CORS for the Container App
     Write-Info "Configuring CORS to allow all origins..."
-    try {
-        az containerapp ingress cors enable --name $ContainerAppName --resource-group $ResourceGroup --allowed-origins "*" --allowed-methods "GET,POST,PUT,DELETE,OPTIONS" --allowed-headers "*" --expose-headers "*" --max-age 3600 --output none
-        Write-Info "CORS configured successfully"
+    
+    # First check if CORS is already configured
+    $existingCors = az containerapp ingress cors show --name $ContainerAppName --resource-group $ResourceGroup 2>$null | ConvertFrom-Json
+    
+    if ($existingCors -and $existingCors.allowedOrigins -contains "*") {
+        Write-Info "CORS already configured with allowed origins: $($existingCors.allowedOrigins -join ', ')"
     }
-    catch {
-        Write-Warn "Failed to configure CORS: $_"
-        Write-Warn "You may need to configure CORS manually in Azure Portal"
+    else {
+        try {
+            # Wait a moment for the container app to be ready
+            Start-Sleep -Seconds 2
+            
+            $ErrorActionPreference = "Continue"
+            az containerapp ingress cors enable --name $ContainerAppName --resource-group $ResourceGroup --allowed-origins "*" --allowed-methods "GET,POST,PUT,DELETE,OPTIONS" --allowed-headers "*" --expose-headers "*" --max-age 3600 --output none 2>&1 | Out-Null
+            $ErrorActionPreference = "Stop"
+            
+            # Verify CORS was configured by checking again
+            Start-Sleep -Seconds 1
+            $corsConfig = az containerapp ingress cors show --name $ContainerAppName --resource-group $ResourceGroup 2>$null | ConvertFrom-Json
+            
+            if ($corsConfig -and $corsConfig.allowedOrigins) {
+                Write-Info "CORS configured successfully"
+                Write-Info "Allowed origins: $($corsConfig.allowedOrigins -join ', ')"
+            }
+            else {
+                Write-Warn "Could not verify CORS configuration. Please check manually in Azure Portal"
+                Write-Warn "Run: az containerapp ingress cors show --name $ContainerAppName --resource-group $ResourceGroup"
+            }
+        }
+        catch {
+            Write-Warn "Exception during CORS configuration: $_"
+            # Check if CORS was configured despite the error
+            $corsConfig = az containerapp ingress cors show --name $ContainerAppName --resource-group $ResourceGroup 2>$null | ConvertFrom-Json
+            if ($corsConfig -and $corsConfig.allowedOrigins) {
+                Write-Info "CORS was configured successfully despite warning"
+                Write-Info "Allowed origins: $($corsConfig.allowedOrigins -join ', ')"
+            }
+            else {
+                Write-Warn "You may need to configure CORS manually in Azure Portal"
+            }
+        }
     }
     
     # Get ACR credentials and configure registry
     Write-Info "Configuring ACR credentials for container app..."
     $acrName = az acr list --resource-group $ResourceGroup --query "[0].name" -o tsv
     $acrLoginServer = az acr show --name $acrName --resource-group $ResourceGroup --query "loginServer" -o tsv
-    $acrUsername = az acr credential show --name $acrName --query "username" -o tsv
-    $acrPassword = az acr credential show --name $acrName --query "passwords[0].value" -o tsv
+    $acrUsername = az acr credential show --name $acrName --resource-group $ResourceGroup --query "username" -o tsv
+    $acrPassword = az acr credential show --name $acrName --resource-group $ResourceGroup --query "passwords[0].value" -o tsv
     
     Write-Info "ACR Login Server: $acrLoginServer"
     Write-Info "ACR Username: $acrUsername"
