@@ -338,16 +338,23 @@ public class CosmosDbToolsService
             float[] embedding;
             try
             {
+                _logger.LogInformation("OpenAI Endpoint: {Endpoint}, Deployment: {Deployment}", openaiEndpoint, embeddingDeployment);
+                
                 var credential = new DefaultAzureCredential();
                 var openaiClient = new AzureOpenAIClient(new Uri(openaiEndpoint), credential);
+                
+                _logger.LogInformation("Getting embedding client for deployment: {Deployment}", embeddingDeployment);
                 var embeddingClient = openaiClient.GetEmbeddingClient(embeddingDeployment);
+                
+                _logger.LogInformation("Generating embedding for text: {Text}", searchText);
                 var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(searchText, cancellationToken: cancellationToken);
+                
                 embedding = embeddingResponse.Value.ToFloats().ToArray();
                 _logger.LogInformation("Generated embedding with {Dimensions} dimensions", embedding.Length);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate embedding");
+                _logger.LogError(ex, "Failed to generate embedding. Endpoint: {Endpoint}, Deployment: {Deployment}", openaiEndpoint, embeddingDeployment);
                 return new { error = $"Failed to generate embedding: {ex.Message}" };
             }
 

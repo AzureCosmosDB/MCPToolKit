@@ -59,13 +59,27 @@ MCPToolKit/
 
 ### Step 1: Deploy Infrastructure
 
+Choose **ONE** of the following methods to deploy the infrastructure:
+
+#### Option A: Deploy to Azure Button
+
 Click the Deploy to Azure button to create all required Azure resources:
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
 
-#### Deploy via Azure Developer CLI (azd up) 
+**What gets deployed:**
+- Azure Container Apps environment
+- Azure Container Registry
+- Managed Identity with RBAC assignments
+- All networking and security configurations
 
-Deploy the complete infrastructure and application with a single command:
+**After deploying**, continue to **Step 2** to deploy the application.
+
+---
+
+#### Option B: Deploy via Azure Developer CLI (azd up) 
+
+Deploy the complete infrastructure with a single command:
 
 ```bash
 # Clone the repository
@@ -87,15 +101,18 @@ azd up
 ```
 
 **What gets deployed:**
-- Azure Container Apps (MCP Server)
+- Azure Container Apps environment
 - Azure Container Registry
 - Managed Identity with RBAC assignments
-- Entra ID App Registration for authentication
 - All networking and security configurations
 
-**Configuration saved to:** `deployment-info.json` for AI Foundry integration
+**After deploying**, continue to **Step 2** to deploy the application.
 
-### Step 2: Deploy MCP Server
+---
+
+### Step 2: Deploy MCP Server Application (Required for Both Options)
+
+> **Note:** This step is required regardless of which deployment method you chose in Step 1.
 
 Run the one-step deployment script:
 
