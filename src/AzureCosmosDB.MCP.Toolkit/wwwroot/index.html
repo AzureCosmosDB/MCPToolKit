@@ -3,810 +3,235 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Azure Cosmos DB MCP Server Test Interface - Test and interact with your Model Context Protocol server">
-    <meta name="author" content="Azure Cosmos DB Team">
-    <title>Azure Cosmos DB MCP Toolkit Client</title>
-    
-    <!-- Preload critical resources -->
-    <link rel="preload" href="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js" as="script">
-    
-    <!-- Security headers -->
-    <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <meta http-equiv="X-Frame-Options" content="DENY">
-    
-    <!-- Microsoft Fluent UI Design System -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600&display=swap" rel="stylesheet">
-    
-    <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js" defer></script>
+    <title>Azure Cosmos DB MCP Server Test</title>
+    <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
     <style>
-        /* Microsoft Fluent Design System - Official Theme Colors */
-        :root {
-            /* Primary - Microsoft Blue */
-            --primary-color: #0078d4;
-            --primary-hover: #106ebe;
-            --primary-active: #005a9e;
-            --primary-light: #50e6ff;
-            --primary-dark: #004578;
-            
-            /* Secondary - Neutral colors from Fluent */
-            --secondary-color: #323130;
-            --secondary-hover: #484644;
-            --secondary-light: #605e5c;
-            
-            /* Semantic colors - Microsoft Office palette */
-            --success-color: #107c10;
-            --success-hover: #0b5a08;
-            --success-light: #dff6dd;
-            --success-border: #92c353;
-            
-            --warning-color: #ff8c00;
-            --warning-hover: #d17000;
-            --warning-light: #fff4ce;
-            --warning-border: #ffb900;
-            
-            --error-color: #d13438;
-            --error-hover: #a4262c;
-            --error-light: #fde7e9;
-            --error-border: #e74856;
-            
-            --info-color: #00bcf2;
-            --info-hover: #008db5;
-            --info-light: #e1f5fe;
-            
-            /* Neutral palette - Microsoft Fluent */
-            --neutral-10: #faf9f8;
-            --neutral-20: #f3f2f1;
-            --neutral-30: #edebe9;
-            --neutral-40: #e1dfdd;
-            --neutral-50: #d2d0ce;
-            --neutral-60: #c8c6c4;
-            --neutral-70: #a19f9d;
-            --neutral-80: #8a8886;
-            --neutral-90: #605e5c;
-            --neutral-100: #484644;
-            --neutral-110: #323130;
-            --neutral-120: #201f1e;
-            
-            /* Surface colors */
-            --background-color: var(--neutral-10);
-            --surface-color: #ffffff;
-            --surface-hover: var(--neutral-20);
-            --border-color: var(--neutral-40);
-            
-            /* Text colors */
-            --text-primary: var(--neutral-110);
-            --text-secondary: var(--neutral-90);
-            --text-disabled: var(--neutral-70);
-            --text-white: #ffffff;
-            
-            /* Shadows - Fluent depth */
-            --shadow-2: 0 0.3px 0.9px rgba(0, 0, 0, 0.1), 0 1.6px 3.6px rgba(0, 0, 0, 0.13);
-            --shadow-4: 0 0.6px 1.8px rgba(0, 0, 0, 0.1), 0 3.2px 7.2px rgba(0, 0, 0, 0.13);
-            --shadow-8: 0 1.2px 3.6px rgba(0, 0, 0, 0.1), 0 6.4px 14.4px rgba(0, 0, 0, 0.13);
-            --shadow-16: 0 2.4px 7.2px rgba(0, 0, 0, 0.1), 0 12.8px 28.8px rgba(0, 0, 0, 0.13);
-            --shadow-64: 0 9.6px 28.8px rgba(0, 0, 0, 0.1), 0 51.2px 115.2px rgba(0, 0, 0, 0.13);
-            
-            /* Border radius - Fluent style */
-            --border-radius: 4px;
-            --border-radius-medium: 6px;
-            --border-radius-large: 8px;
-            
-            /* Transitions */
-            --transition-fast: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-normal: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-slow: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            
-            /* Typography */
-            --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
-            --font-weight-regular: 400;
-            --font-weight-semibold: 600;
-            --font-weight-bold: 700;
-        }
-
-        /* Dark mode support - Microsoft dark theme colors */
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --background-color: #1b1a19;
-                --surface-color: #292827;
-                --surface-hover: #323130;
-                --border-color: #3b3a39;
-                
-                --text-primary: #ffffff;
-                --text-secondary: #d2d0ce;
-                --text-disabled: #797775;
-                
-                --primary-color: #2899f5;
-                --primary-hover: #50b0f7;
-                --primary-active: #0f78d4;
-                
-                --success-light: #393d1b;
-                --success-border: #6bb700;
-                
-                --warning-light: #413c1e;
-                --warning-border: #fcb900;
-                
-                --error-light: #442726;
-                --error-border: #f1707b;
-                
-                --info-light: #1f3a3d;
-                
-                --shadow-2: 0 0.3px 0.9px rgba(0, 0, 0, 0.4), 0 1.6px 3.6px rgba(0, 0, 0, 0.48);
-                --shadow-4: 0 0.6px 1.8px rgba(0, 0, 0, 0.4), 0 3.2px 7.2px rgba(0, 0, 0, 0.48);
-                --shadow-8: 0 1.2px 3.6px rgba(0, 0, 0, 0.4), 0 6.4px 14.4px rgba(0, 0, 0, 0.48);
-                --shadow-16: 0 2.4px 7.2px rgba(0, 0, 0, 0.4), 0 12.8px 28.8px rgba(0, 0, 0, 0.48);
-            }
-        }
-
-        /* Reset and base styles */
-        *, *::before, *::after {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
         body {
-            font-family: var(--font-family);
-            line-height: 1.5;
-            color: var(--text-primary);
-            background: linear-gradient(135deg, var(--neutral-10) 0%, var(--neutral-20) 100%);
-            margin: 0;
-            padding: 2rem 1rem;
-            min-height: 100vh;
-            font-size: 14px;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
-        
-        .container {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             max-width: 1200px;
             margin: 0 auto;
-            background: var(--surface-color);
-            border-radius: var(--border-radius-large);
-            padding: 2.5rem;
-            box-shadow: var(--shadow-16);
-            transition: var(--transition-normal);
+            padding: 20px;
+            background-color: #f5f5f5;
         }
-        
-        .container:hover {
-            box-shadow: var(--shadow-64);
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        
         h1 {
-            color: var(--primary-color);
+            color: #0078d4;
             text-align: center;
-            margin-bottom: 0.5rem;
-            font-weight: var(--font-weight-semibold);
-            font-size: 2rem;
-            letter-spacing: -0.5px;
+            margin-bottom: 30px;
         }
-        
-        h2 {
-            color: var(--text-primary);
-            font-size: 1.25rem;
-            font-weight: var(--font-weight-semibold);
-            margin: 0 0 1rem 0;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        h3 {
-            color: var(--text-primary);
-            font-size: 1.1rem;
-            font-weight: var(--font-weight-semibold);
-            margin: 0 0 1rem 0;
-        }
-        
-        .subtitle {
-            text-align: center;
-            color: var(--text-secondary);
-            margin-bottom: 2rem;
-            font-size: 0.95rem;
-        }
-        
         .auth-section {
-            background: var(--info-light);
-            border: 2px solid var(--info-color);
-            border-radius: var(--border-radius-medium);
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            transition: var(--transition-normal);
+            background: #e8f4fd;
+            border: 1px solid #0078d4;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
         }
-        
-        .auth-section:hover {
-            box-shadow: var(--shadow-4);
-        }
-        
         .section {
-            margin-bottom: 2rem;
-            padding: 1.5rem;
-            background: var(--neutral-10);
-            border-radius: var(--border-radius-medium);
-            border-left: 4px solid var(--primary-color);
-            transition: var(--transition-normal);
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #0078d4;
         }
-        
-        .section:hover {
-            background: var(--surface-hover);
-            box-shadow: var(--shadow-2);
-        }
-        
         .form-group {
-            margin-bottom: 1.25rem;
+            margin-bottom: 20px;
+            clear: both;
         }
-        
         label {
             display: block;
-            margin-bottom: 0.5rem;
-            font-weight: var(--font-weight-semibold);
-            color: var(--text-primary);
-            font-size: 0.9rem;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #323130;
         }
-        input[type="text"], 
-        input[type="url"], 
-        input[type="number"], 
-        select, 
-        textarea {
+        input[type="text"], input[type="url"], input[type="number"], select, textarea {
             width: 100%;
-            padding: 0.625rem 0.75rem;
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius);
+            padding: 12px;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
             font-size: 14px;
-            font-family: var(--font-family);
             box-sizing: border-box;
-            background-color: var(--surface-color);
-            color: var(--text-primary);
-            transition: var(--transition-fast);
         }
-        
-        input[type="text"]:hover:not(:disabled):not(:focus), 
-        input[type="url"]:hover:not(:disabled):not(:focus), 
-        input[type="number"]:hover:not(:disabled):not(:focus), 
-        select:hover:not(:disabled):not(:focus), 
-        textarea:hover:not(:disabled):not(:focus) {
-            border-color: var(--neutral-60);
-        }
-        
-        input[type="text"]:focus, 
-        input[type="url"]:focus, 
-        input[type="number"]:focus, 
-        select:focus, 
-        textarea:focus {
+        input[type="text"]:focus, input[type="url"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
             outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 1px var(--primary-color);
+            border-color: #0078d4;
+            box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
         }
-        
-        input[type="text"]:disabled,
-        input[type="url"]:disabled,
-        input[type="number"]:disabled,
-        select:disabled,
-        textarea:disabled {
-            background-color: var(--neutral-20);
-            color: var(--text-disabled);
-            cursor: not-allowed;
-        }
-        
-        small {
-            display: block;
-            margin-top: 0.375rem;
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-        }
-        
         .button-group {
             display: flex;
-            gap: 0.75rem;
-            margin: 1.25rem 0;
+            gap: 10px;
+            margin: 20px 0;
             flex-wrap: wrap;
         }
-        
         button {
-            background-color: var(--primary-color);
-            color: var(--text-white);
+            background-color: #0078d4;
+            color: white;
             border: none;
-            padding: 0.625rem 1.25rem;
-            border-radius: var(--border-radius);
+            padding: 12px 24px;
+            border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
-            font-weight: var(--font-weight-semibold);
-            font-family: var(--font-family);
-            transition: var(--transition-fast);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            min-height: 36px;
-            box-shadow: var(--shadow-2);
+            font-weight: 600;
+            transition: background-color 0.2s;
         }
-        
         button:hover:not(:disabled) {
-            background-color: var(--primary-hover);
-            transform: translateY(-1px);
-            box-shadow: var(--shadow-4);
+            background-color: #106ebe;
         }
-        
-        button:active:not(:disabled) {
-            transform: translateY(0);
-            box-shadow: var(--shadow-2);
-        }
-        
         button:disabled {
-            background-color: var(--neutral-40);
-            color: var(--text-disabled);
+            background-color: #a19f9d;
             cursor: not-allowed;
-            opacity: 0.5;
-            box-shadow: none;
         }
-        
-        button:focus-visible {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 2px;
-        }
-        
         .login-btn {
-            background-color: var(--success-color);
+            background-color: #107c10;
         }
-        
         .login-btn:hover:not(:disabled) {
-            background-color: var(--success-hover);
+            background-color: #0e700e;
         }
-        
         .logout-btn {
-            background-color: var(--error-color);
+            background-color: #d13438;
         }
-        
         .logout-btn:hover:not(:disabled) {
-            background-color: var(--error-hover);
-        }
-        
-        .discover-btn {
-            background-color: var(--success-color);
-        }
-        
-        .discover-btn:hover:not(:disabled) {
-            background-color: var(--success-hover);
+            background-color: #b52d32;
         }
         .user-info {
-            background: var(--success-light);
-            border: 1px solid var(--success-border);
-            color: var(--success-color);
-            padding: 1rem;
-            border-radius: var(--border-radius);
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
         }
-        
-        .user-info strong {
-            color: var(--text-primary);
-            font-weight: var(--font-weight-semibold);
-        }
-        
         .auth-status {
-            font-weight: var(--font-weight-semibold);
-            margin-bottom: 1rem;
-            padding: 0.75rem;
-            border-radius: var(--border-radius);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 10px;
         }
-        
         .auth-status.authenticated {
-            color: var(--success-color);
-            background: var(--success-light);
-            border: 1px solid var(--success-border);
+            color: #107c10;
         }
-        
         .auth-status.unauthenticated {
-            color: var(--error-color);
-            background: var(--error-light);
-            border: 1px solid var(--error-border);
+            color: #d13438;
         }
-        
+        .discover-btn {
+            background-color: #107c10;
+        }
+        .discover-btn:hover:not(:disabled) {
+            background-color: #0e700e;
+        }
         .output {
-            background-color: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-medium);
-            padding: 1.25rem;
-            margin-top: 1rem;
+            background-color: #f8f8f8;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
             min-height: 200px;
             max-height: 600px;
             overflow-y: auto;
-            font-family: 'Consolas', 'Menlo', 'Monaco', 'Courier New', monospace;
-            font-size: 13px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
             white-space: pre-wrap;
             word-break: break-word;
-            line-height: 1.5;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+            line-height: 1.4;
         }
-        
-        .output::-webkit-scrollbar {
-            width: 12px;
-        }
-        
-        .output::-webkit-scrollbar-track {
-            background: var(--neutral-20);
-            border-radius: var(--border-radius);
-        }
-        
-        .output::-webkit-scrollbar-thumb {
-            background: var(--neutral-60);
-            border-radius: var(--border-radius);
-        }
-        
-        .output::-webkit-scrollbar-thumb:hover {
-            background: var(--neutral-80);
-        }
-        
         .loading {
-            color: var(--primary-color);
-            font-style: normal;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
+            color: #0078d4;
+            font-style: italic;
         }
-        
         .error {
-            color: var(--error-color);
-            background-color: var(--error-light);
-            border-color: var(--error-border);
+            color: #d13438;
+            background-color: #fdf2f2;
+            border-color: #f1aeb5;
         }
-        
         .success {
-            color: var(--success-color);
+            color: #107c10;
         }
-        
-        /* Loading spinner - Fluent style */
-        .spinner {
-            display: inline-block;
-            width: 1.25rem;
-            height: 1.25rem;
-            border: 2.5px solid var(--neutral-40);
-            border-radius: 50%;
-            border-top-color: var(--primary-color);
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        /* Info boxes - Microsoft style */
         .info {
-            margin-bottom: 1.25rem;
-            padding: 1rem;
-            background-color: var(--info-light);
-            border-left: 4px solid var(--info-color);
-            border-radius: var(--border-radius);
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-        }
-        
-        #authError {
-            background: var(--error-light);
-            border: 1px solid var(--error-border);
-            color: var(--error-color);
-            padding: 1rem;
-            border-radius: var(--border-radius);
-            margin-bottom: 1rem;
-            animation: slideDown 0.3s ease-out;
-        }
-        
-        #authError strong {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-weight: var(--font-weight-semibold);
-        }
-        
-        #authErrorMessage {
-            margin-top: 0.5rem;
-            font-size: 0.9rem;
-        }
-        
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        /* Responsive improvements */
-        @media (max-width: 768px) {
-            body {
-                padding: 1rem 0.5rem;
-            }
-            .container {
-                padding: 1.5rem;
-                border-radius: var(--border-radius-medium);
-            }
-            h1 {
-                font-size: 1.5rem;
-            }
-            .button-group {
-                flex-direction: column;
-            }
-            button {
-                width: 100%;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            body {
-                font-size: 13px;
-            }
-            .container {
-                padding: 1rem;
-            }
-        }
-        
-        /* Accessibility improvements */
-        .sr-only {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
-        }
-        
-        *:focus-visible {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 2px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #e1f5fe;
+            border-left: 4px solid #0078d4;
+            border-radius: 4px;
         }
         .curl-example {
-            background-color: var(--neutral-120);
-            color: var(--neutral-20);
-            padding: 1rem;
-            border-radius: var(--border-radius);
-            margin: 0.75rem 0;
-            font-family: 'Consolas', 'Menlo', 'Monaco', 'Courier New', monospace;
+            background-color: #2d2d30;
+            color: #cccccc;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 12px;
-            line-height: 1.6;
             overflow-x: auto;
             position: relative;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
         }
-        
-        .curl-example::-webkit-scrollbar {
-            height: 8px;
-        }
-        
-        .curl-example::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: var(--border-radius);
-        }
-        
-        .curl-example::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: var(--border-radius);
-        }
-        
-        .curl-example::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.5);
-        }
-        
         .curl-container {
             position: relative;
-            margin: 0.75rem 0;
+            margin: 10px 0;
         }
-        
-        .curl-container p {
-            margin: 0.5rem 0;
-            font-weight: var(--font-weight-semibold);
-            color: var(--text-primary);
-        }
-        
         .copy-btn {
             position: absolute;
-            top: 8px;
-            right: 8px;
-            background: var(--primary-color);
-            color: var(--text-white);
+            top: 5px;
+            right: 5px;
+            background: #0078d4;
+            color: white;
             border: none;
-            padding: 0.375rem 0.75rem;
-            border-radius: var(--border-radius);
+            padding: 5px 10px;
+            border-radius: 3px;
             cursor: pointer;
             font-size: 11px;
-            font-weight: var(--font-weight-semibold);
-            transition: var(--transition-fast);
-            box-shadow: var(--shadow-2);
-            z-index: 10;
         }
-        
         .copy-btn:hover {
-            background: var(--primary-hover);
-            box-shadow: var(--shadow-4);
+            background: #106ebe;
         }
-        
         .copy-btn.copied {
-            background: var(--success-color);
+            background: #107c10;
         }
-        
-        .copy-btn.copied::after {
-            content: ' ✓';
-        }
-        
         .collapsible {
-            background: linear-gradient(135deg, var(--neutral-20) 0%, var(--neutral-30) 100%);
-            color: var(--primary-color);
+            background-color: #e1e1e1;
+            color: #0078d4;
             cursor: pointer;
-            padding: 1rem 1.25rem;
-            border: 1px solid var(--border-color);
+            padding: 15px;
+            border: none;
             text-align: left;
             outline: none;
-            font-size: 1.1rem;
-            font-weight: var(--font-weight-semibold);
-            border-radius: var(--border-radius-medium);
-            margin-bottom: 1rem;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 4px;
+            margin-bottom: 10px;
             width: 100%;
             position: relative;
-            transition: var(--transition-fast);
         }
-        
-        .collapsible:hover {
-            background: linear-gradient(135deg, var(--neutral-30) 0%, var(--neutral-40) 100%);
-            box-shadow: var(--shadow-2);
-        }
-        
         .collapsible:after {
             content: '▼';
             position: absolute;
-            right: 1.25rem;
+            right: 15px;
             top: 50%;
             transform: translateY(-50%);
-            transition: var(--transition-normal);
-            font-size: 0.9rem;
+            transition: transform 0.3s;
         }
-        
         .collapsible.collapsed:after {
             transform: translateY(-50%) rotate(-90deg);
         }
-        
         .collapsible-content {
             overflow: hidden;
-            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: max-height 0.3s ease;
         }
-        
         .collapsible-content.collapsed {
             max-height: 0;
         }
-        
         .collapsible-content:not(.collapsed) {
-            max-height: 2000px;
-        }
-        
-        /* Modern card design for sections */
-        header {
-            text-align: center;
-            margin-bottom: 2rem;
-            padding-bottom: 1.5rem;
-            border-bottom: 2px solid var(--border-color);
-        }
-        
-        .header-content {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-        
-        .logo-container {
-            flex-shrink: 0;
-        }
-        
-        .title-container {
-            text-align: left;
-        }
-        
-        .title-container h1 {
-            margin: 0;
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--primary-color);
-            line-height: 1.2;
-        }
-        
-        .title-container .subtitle {
-            margin: 0.25rem 0 0 0;
-            font-size: 1rem;
-            color: var(--text-secondary);
-            font-weight: 400;
-        }
-        
-        /* Responsive header */
-        @media (max-width: 768px) {
-            .header-content {
-                flex-direction: column;
-                text-align: center;
-            }
-            
-            .title-container {
-                text-align: center;
-            }
-            
-            .title-container h1 {
-                font-size: 1.75rem;
-            }
-        }
-        
-        main {
-            animation: fadeIn 0.5s ease-out;
-        }
-        
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            max-height: 1000px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <div class="header-content">
-                <div class="logo-container">
-                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Azure Cosmos DB">
-                        <defs>
-                            <linearGradient id="cosmosGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style="stop-color:#0078d4;stop-opacity:1" />
-                                <stop offset="50%" style="stop-color:#00bcf2;stop-opacity:1" />
-                                <stop offset="100%" style="stop-color:#40e0d0;stop-opacity:1" />
-                            </linearGradient>
-                            <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style="stop-color:#0078d4;stop-opacity:0.1" />
-                                <stop offset="100%" style="stop-color:#40e0d0;stop-opacity:0.05" />
-                            </linearGradient>
-                        </defs>
-                        
-                        <!-- Shield background -->
-                        <path d="M24 4L8 12V24C8 32 16 40 24 44C32 40 40 32 40 24V12L24 4Z" fill="url(#shieldGradient)" stroke="url(#cosmosGradient)" stroke-width="1.5"/>
-                        
-                        <!-- Cosmos DB orbit rings -->
-                        <ellipse cx="24" cy="24" rx="16" ry="6" fill="none" stroke="url(#cosmosGradient)" stroke-width="1.5" opacity="0.8"/>
-                        <ellipse cx="24" cy="24" rx="16" ry="6" fill="none" stroke="url(#cosmosGradient)" stroke-width="1.5" opacity="0.6" transform="rotate(60 24 24)"/>
-                        <ellipse cx="24" cy="24" rx="16" ry="6" fill="none" stroke="url(#cosmosGradient)" stroke-width="1.5" opacity="0.4" transform="rotate(120 24 24)"/>
-                        
-                        <!-- Central globe -->
-                        <circle cx="24" cy="24" r="5" fill="url(#cosmosGradient)"/>
-                        <circle cx="24" cy="24" r="3" fill="white" opacity="0.9"/>
-                        
-                        <!-- Data nodes -->
-                        <circle cx="24" cy="14" r="2" fill="#00bcf2"/>
-                        <circle cx="32" cy="20" r="1.5" fill="#40e0d0"/>
-                        <circle cx="32" cy="28" r="1.5" fill="#0078d4"/>
-                        <circle cx="24" cy="34" r="2" fill="#00bcf2"/>
-                        <circle cx="16" cy="28" r="1.5" fill="#40e0d0"/>
-                        <circle cx="16" cy="20" r="1.5" fill="#0078d4"/>
-                    </svg>
-                </div>
-                <div class="title-container">
-                    <h1>Azure Cosmos DB MCP Toolkit Client</h1>
-                    <p class="subtitle">Test and interact with Model Context Protocol tools for Azure Cosmos DB</p>
-                </div>
-            </div>
-        </header>
-        <main>
+        <h1>Azure Cosmos DB MCP Server Test</h1>
         
         <div class="auth-section">
-            <h2>🔐 Microsoft Entra Authentication</h2>
+            <h3>🔐 Microsoft Entra Authentication</h3>
             
             <!-- Auth Error Display -->
             <div id="authError" style="display: none; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
@@ -822,13 +247,24 @@
                 <div class="form-group">
                     <label for="clientId">Entra App Client ID:</label>
                     <input type="text" id="clientId" placeholder="Enter your Entra App Client ID" value="">
-                    <small style="color: #666;">Get this from your deployment-info.json or Azure portal</small>
+                    <small style="color: #666;">
+                        Get from deployment-info.json (entraAppClientId) or run:<br>
+                        <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">az ad app list --display-name "Azure Cosmos DB MCP Toolkit API" --query "[0].appId" -o tsv</code>
+                    </small>
                 </div>
                 
                 <div class="form-group">
-                    <label for="tenantId">Tenant ID (required):</label>
+                    <label for="tenantId">Tenant ID:</label>
                     <input type="text" id="tenantId" placeholder="Enter your Microsoft Entra Tenant ID" value="">
-                    <small style="color: #666;">Run: az account show --query "tenantId" -o tsv</small>
+                    <small style="color: #666;">
+                        Get your Azure AD tenant ID by running:<br>
+                        <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">az account show --query "tenantId" -o tsv</code>
+                    </small>
+                </div>
+                
+                <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin-top: 15px;">
+                    <strong>⚠️ Important:</strong> Client ID and Tenant ID must be <strong>different</strong> values. 
+                    Don't confuse them or swap their positions!
                 </div>
             </div>
             
@@ -839,18 +275,9 @@
             </div>
             
             <div class="button-group">
-                <button id="loginBtn" class="login-btn" onclick="login()">
-                    <span aria-hidden="true">🔑</span>
-                    Sign In with Microsoft Entra
-                </button>
-                <button id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none;">
-                    <span aria-hidden="true">🚪</span>
-                    Sign Out
-                </button>
-                <button id="getTokenBtn" onclick="getTokenSilently()" style="display: none;">
-                    <span aria-hidden="true">🔄</span>
-                    Refresh Token
-                </button>
+                <button id="loginBtn" class="login-btn" onclick="login()">🔑 Sign In with Microsoft Entra</button>
+                <button id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none;">🚪 Sign Out</button>
+                <button id="getTokenBtn" onclick="getTokenSilently()" style="display: none;">🔄 Refresh Token</button>
             </div>
         </div>
 
@@ -858,7 +285,7 @@
             <h3>Configuration</h3>
             <div class="form-group">
                 <label for="serverUrl">Azure Cosmos DB MCP Server URL:</label>
-                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-toolkit-app.purpleground-fd95b588.eastus.azurecontainerapps.io" oninput="updateCurlExamples()">
+                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-toolkit-app.wittysmoke-40fb47e2.eastus.azurecontainerapps.io" oninput="updateCurlExamples()">
             </div>
         </div>
 
@@ -876,7 +303,17 @@
             
             <div class="collapsible-content collapsed">
                 <div class="info">
-                    <span style="font-size: 11px;">Select a tool and configure the required parameters below. If you've run deployment scripts, you can find these values in the Azure portal under your Cosmos DB account.</span>
+                    <span style="font-size: 11px;">Configure your Cosmos DB parameters below. If you've run deployment scripts, you can find these values in the Azure portal under your Cosmos DB account.</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="cosmosDatabase">Database ID:</label>
+                    <input type="text" id="cosmosDatabase" placeholder="your-database-name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="cosmosContainer">Container ID:</label>
+                    <input type="text" id="cosmosContainer" placeholder="your-container-name">
                 </div>
 
                 <div class="form-group">
@@ -893,68 +330,43 @@
                     </select>
                 </div>
 
-                <div id="toolParameters">
-                    <!-- Common parameters -->
-                    <div class="form-group" id="param-database" style="display: none;">
-                        <label for="cosmosDatabase">Database ID: <span style="color: red;">*</span></label>
-                        <input type="text" id="cosmosDatabase" placeholder="your-database-name">
-                    </div>
-                    
-                    <div class="form-group" id="param-container" style="display: none;">
-                        <label for="cosmosContainer">Container ID: <span style="color: red;">*</span></label>
-                        <input type="text" id="cosmosContainer" placeholder="your-container-name">
-                    </div>
-                    
-                    <!-- find_document_by_id parameters -->
-                    <div class="form-group" id="param-docId" style="display: none;">
-                        <label for="docId">Document ID: <span style="color: red;">*</span></label>
+                <div id="toolParameters" style="display: none;">
+                    <div class="form-group" id="docIdField" style="display: none;">
+                        <label for="docId">Document ID:</label>
                         <input type="text" id="docId" placeholder="document-id">
                     </div>
                     
-                    <!-- text_search parameters -->
-                    <div class="form-group" id="param-searchProperty" style="display: none;">
-                        <label for="searchProperty">Property: <span style="color: red;">*</span></label>
+                    <div class="form-group" id="searchPropertyField" style="display: none;">
+                        <label for="searchProperty">Property:</label>
                         <input type="text" id="searchProperty" placeholder="name or profile.description">
-                        <small style="color: #666;">The document property to search within</small>
                     </div>
                     
-                    <div class="form-group" id="param-searchPhrase" style="display: none;">
-                        <label for="searchPhrase">Search Phrase: <span style="color: red;">*</span></label>
+                    <div class="form-group" id="searchPhraseField" style="display: none;">
+                        <label for="searchPhrase">Search Phrase:</label>
                         <input type="text" id="searchPhrase" placeholder="Azure">
-                        <small style="color: #666;">Text to search for within the property</small>
                     </div>
                     
-                    <!-- vector_search parameters -->
-                    <div class="form-group" id="param-vectorSearch" style="display: none;">
-                        <label for="vectorSearch">Search Text: <span style="color: red;">*</span></label>
+                    <div class="form-group" id="vectorSearchField" style="display: none;">
+                        <label for="vectorSearch">Search Text:</label>
                         <input type="text" id="vectorSearch" placeholder="machine learning algorithms">
-                        <small style="color: #666;">Natural language query for semantic search</small>
                     </div>
                     
-                    <div class="form-group" id="param-vectorProperty" style="display: none;">
-                        <label for="vectorProperty">Vector Property: <span style="color: red;">*</span></label>
+                    <div class="form-group" id="vectorPropertyField" style="display: none;">
+                        <label for="vectorProperty">Vector Property:</label>
                         <input type="text" id="vectorProperty" placeholder="vector or embeddings">
-                        <small style="color: #666;">Name of the property containing vector embeddings</small>
                     </div>
                     
-                    <div class="form-group" id="param-selectProperties" style="display: none;">
-                        <label for="selectProperties">Select Properties: <span style="color: red;">*</span></label>
+                    <div class="form-group" id="selectPropertiesField" style="display: none;">
+                        <label for="selectProperties">Select Properties:</label>
                         <input type="text" id="selectProperties" placeholder="id,title,content">
-                        <small style="color: #666;">Comma-separated list of properties to return</small>
                     </div>
                     
-                    <!-- Result count parameter for get_recent_documents and text_search -->
-                    <div class="form-group" id="param-resultCount" style="display: none;">
-                        <label for="resultCount">Number of Results (n): <span style="color: red;">*</span></label>
-                        <input type="number" id="resultCount" min="1" max="20" value="5" required>
-                        <small style="color: #666;">Required: Between 1 and 20 results</small>
-                    </div>
-                    
-                    <!-- Result count parameter for vector_search -->
-                    <div class="form-group" id="param-topN" style="display: none;">
-                        <label for="topN">Number of Results (topN): <span style="color: red;">*</span></label>
-                        <input type="number" id="topN" min="1" max="50" value="10" required>
-                        <small style="color: #666;">Required: Between 1 and 50 results</small>
+                    <div class="form-group" id="resultCountField" style="display: none;">
+                        <label for="resultCount">Number of Documents (1-20):</label>
+                        <input type="number" id="resultCount" min="1" max="20" value="5">
+                        <small style="color: #666; display: block; margin-top: 4px;">
+                            How many recent documents to retrieve
+                        </small>
                     </div>
                 </div>
                 
@@ -984,7 +396,7 @@
                     <button class="copy-btn" onclick="copyToClipboard('testToolCurl', this)">Copy</button>
                 </div>
             </div>
-        </main>
+        </div>
     </div>
 
     <script>
@@ -1008,6 +420,25 @@
                 return false;
             }
 
+            // Validate that clientId and tenantId are GUIDs
+            const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            
+            if (!guidPattern.test(clientId)) {
+                showError('Client ID must be a valid GUID (e.g., 12345678-1234-1234-1234-123456789abc). Please check your deployment-info.json for the correct entraAppClientId value.');
+                return false;
+            }
+            
+            if (!guidPattern.test(tenantId)) {
+                showError('Tenant ID must be a valid GUID. Run: az account show --query "tenantId" -o tsv');
+                return false;
+            }
+
+            // Check if user accidentally swapped clientId and tenantId
+            if (tenantId === clientId) {
+                showError('Client ID and Tenant ID should be different. Please verify you have the correct values from your deployment-info.json');
+                return false;
+            }
+
             const authority = `https://login.microsoftonline.com/${tenantId}`;
 
             const msalConfig = {
@@ -1024,6 +455,10 @@
 
             try {
                 msalInstance = new msal.PublicClientApplication(msalConfig);
+                console.log('MSAL initialized successfully');
+                console.log('Client ID:', clientId);
+                console.log('Tenant ID:', tenantId);
+                console.log('Authority:', authority);
                 return true;
             } catch (error) {
                 showError(`Failed to initialize MSAL: ${error.message}`);
@@ -1055,7 +490,15 @@
                 
             } catch (error) {
                 console.error('Login failed:', error);
-                showError(`Login failed: ${error.message}`);
+                
+                // Check for specific error about application not found
+                if (error.message && error.message.includes('was not found in the directory')) {
+                    showError(`Application not found in directory.\n\n❌ This usually means:\n1. The Client ID is incorrect - verify it matches your deployment-info.json\n2. You may have entered the Tenant ID in the Client ID field\n3. The Entra App hasn't been created yet - run the deployment script\n\n🔧 To fix:\n- Get the correct Client ID: az ad app list --display-name "Azure Cosmos DB MCP Toolkit API" --query "[0].appId" -o tsv\n- Or check your deployment-info.json file for "entraAppClientId"\n\nOriginal error: ${error.message}`);
+                } else if (error.message && error.message.includes('wrong tenant')) {
+                    showError(`Wrong tenant error.\n\n❌ You may have:\n1. Entered the wrong Tenant ID\n2. Swapped the Client ID and Tenant ID\n\n🔧 To fix:\n- Get your Tenant ID: az account show --query "tenantId" -o tsv\n- Verify Client ID and Tenant ID are different values\n\nOriginal error: ${error.message}`);
+                } else {
+                    showError(`Login failed: ${error.message}\n\n💡 Common issues:\n- Client ID is incorrect\n- Tenant ID is incorrect\n- App registration doesn't exist\n- Pop-up was blocked by browser`);
+                }
                 updateAuthUI(false);
             }
         }
@@ -1218,18 +661,18 @@
                 let toolParams = { databaseId: database, containerId: container };
                 
                 if (tool === 'get_recent_documents') {
-                    toolParams.n = parseInt(document.getElementById('resultCount')?.value) || 5;
+                    toolParams.n = 5;
                 } else if (tool === 'find_document_by_id') {
                     toolParams.id = document.getElementById('docId')?.value || 'sample-id';
                 } else if (tool === 'text_search') {
                     toolParams.property = document.getElementById('searchProperty')?.value || 'name';
                     toolParams.searchPhrase = document.getElementById('searchPhrase')?.value || 'Azure';
-                    toolParams.n = parseInt(document.getElementById('resultCount')?.value) || 5;
+                    toolParams.n = 5;
                 } else if (tool === 'vector_search') {
                     toolParams.searchText = document.getElementById('vectorSearch')?.value || 'machine learning';
                     toolParams.vectorProperty = document.getElementById('vectorProperty')?.value || 'vector';
                     toolParams.selectProperties = document.getElementById('selectProperties')?.value || 'id,title';
-                    toolParams.topN = parseInt(document.getElementById('topN')?.value) || 10;
+                    toolParams.topN = 5;
                 } else if (tool === 'list_databases') {
                     toolParams = {}; // No parameters needed
                 } else if (tool === 'list_collections') {
@@ -1306,18 +749,19 @@
             document.getElementById('testCosmosBtn').disabled = true;
             
             try {
-                const response = await fetch(`${serverUrl}/mcp`, {
+                // Azure Container Apps may strip Authorization header, so send token in query param too
+                const urlWithToken = `${serverUrl}/mcp?access_token=${encodeURIComponent(token)}`;
+                
+                const response = await fetch(urlWithToken, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json, text/event-stream',
-                        'Authorization': `Bearer ${token}`,
-                        'X-MS-TOKEN-AAD-ACCESS-TOKEN': token,  // First fallback
-                        'X-Access-Token': token,  // Second fallback (less likely to be stripped)
-                        'X-Auth-Token': token  // Third fallback
+                        'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify(payload),
-                    mode: 'cors'
+                    mode: 'cors',
+                    credentials: 'include'
                 });
 
                 const responseText = await response.text();
@@ -1325,6 +769,8 @@
                 if (!response.ok) {
                     if (response.status === 401) {
                         showError(`Authentication failed. Please check:\n1. You have the 'Mcp.Tool.Executor' role\n2. Your token is valid\n3. The Client ID is correct\n\nHTTP ${response.status}: ${responseText}`);
+                    } else if (response.status === 500) {
+                        showError(`Server Error (HTTP 500).\n\nThe MCP server encountered an internal error. This could be due to:\n1. Missing environment variables (COSMOS_ENDPOINT)\n2. Cosmos DB connection issues\n3. Insufficient permissions on Cosmos DB\n4. Invalid authentication configuration\n\nServer response:\n${responseText}\n\n🔧 Check the container app logs:\naz containerapp logs show --name <your-app-name> --resource-group <your-rg> --follow`);
                     } else {
                         throw new Error(`HTTP ${response.status}: ${response.statusText}\n\nResponse: ${responseText}`);
                     }
@@ -1358,13 +804,6 @@
         }
 
         async function listTools() {
-            // Check authentication first
-            if (!currentAccessToken) {
-                showError('⚠️ Authentication Required\n\nPlease sign in with Microsoft Entra before listing tools.\n\n1. Enter your Client ID and Tenant ID in the authentication section\n2. Click "Sign In with Microsoft Entra"\n3. Then try again');
-                document.querySelector('.auth-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                return;
-            }
-            
             const payload = {
                 jsonrpc: "2.0",
                 id: "list-tools-" + Date.now(),
@@ -1376,13 +815,6 @@
         }
 
         async function testTool() {
-            // Check authentication first
-            if (!currentAccessToken) {
-                showError('⚠️ Authentication Required\n\nPlease sign in with Microsoft Entra before testing tools.\n\n1. Enter your Client ID and Tenant ID in the authentication section\n2. Click "Sign In with Microsoft Entra"\n3. Then try again');
-                document.querySelector('.auth-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                return;
-            }
-            
             const payload = {
                 jsonrpc: "2.0",
                 id: "test-" + Date.now(),
@@ -1397,14 +829,6 @@
         }
 
         async function testCosmosDbTool() {
-            // Check authentication FIRST before validating parameters
-            if (!currentAccessToken) {
-                showError('⚠️ Authentication Required\n\nPlease sign in with Microsoft Entra before testing tools.\n\n1. Enter your Client ID and Tenant ID above\n2. Click "Sign In with Microsoft Entra"\n3. Then try again');
-                // Scroll to auth section
-                document.querySelector('.auth-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                return;
-            }
-            
             // Get values from form fields
             const database = document.getElementById('cosmosDatabase').value.trim();
             const container = document.getElementById('cosmosContainer').value.trim();
@@ -1430,19 +854,14 @@
                     toolParams = { databaseId: database };
                     break;
                 case 'get_recent_documents':
-                    const recentDocsN = parseInt(document.getElementById('resultCount').value);
                     if (!database || !container) {
                         showError('Database ID and Container ID are required');
-                        return;
-                    }
-                    if (!recentDocsN || recentDocsN < 1 || recentDocsN > 20) {
-                        showError('Number of Results (n) must be between 1 and 20');
                         return;
                     }
                     toolParams = { 
                         databaseId: database, 
                         containerId: container,
-                        n: recentDocsN
+                        n: parseInt(document.getElementById('resultCount').value) || 5
                     };
                     break;
                 case 'find_document_by_id':
@@ -1460,13 +879,8 @@
                 case 'text_search':
                     const property = document.getElementById('searchProperty').value.trim();
                     const phrase = document.getElementById('searchPhrase').value.trim();
-                    const textSearchN = parseInt(document.getElementById('resultCount').value);
                     if (!database || !container || !property || !phrase) {
                         showError('Database ID, Container ID, Property, and Search Phrase are required');
-                        return;
-                    }
-                    if (!textSearchN || textSearchN < 1 || textSearchN > 20) {
-                        showError('Number of Results (n) must be between 1 and 20');
                         return;
                     }
                     toolParams = { 
@@ -1474,20 +888,15 @@
                         containerId: container,
                         property: property,
                         searchPhrase: phrase,
-                        n: textSearchN
+                        n: parseInt(document.getElementById('resultCount').value) || 5
                     };
                     break;
                 case 'vector_search':
                     const searchText = document.getElementById('vectorSearch').value.trim();
                     const vectorProp = document.getElementById('vectorProperty').value.trim();
                     const selectProps = document.getElementById('selectProperties').value.trim();
-                    const topN = parseInt(document.getElementById('topN').value);
                     if (!database || !container || !searchText || !vectorProp || !selectProps) {
                         showError('Database ID, Container ID, Search Text, Vector Property, and Select Properties are required');
-                        return;
-                    }
-                    if (!topN || topN < 1 || topN > 50) {
-                        showError('Number of Results (topN) must be between 1 and 50');
                         return;
                     }
                     toolParams = { 
@@ -1496,7 +905,7 @@
                         searchText: searchText,
                         vectorProperty: vectorProp,
                         selectProperties: selectProps,
-                        topN: topN
+                        topN: parseInt(document.getElementById('resultCount').value) || 5
                     };
                     break;
                 case 'get_approximate_schema':
@@ -1524,68 +933,91 @@
             await makeRequest(payload, `Test ${tool}`);
         }
 
-        function updateToolParameters() {
-            const tool = document.getElementById('toolSelect').value;
-            
-            // Hide all parameter fields first
-            document.getElementById('param-database').style.display = 'none';
-            document.getElementById('param-container').style.display = 'none';
-            document.getElementById('param-docId').style.display = 'none';
-            document.getElementById('param-searchProperty').style.display = 'none';
-            document.getElementById('param-searchPhrase').style.display = 'none';
-            document.getElementById('param-vectorSearch').style.display = 'none';
-            document.getElementById('param-vectorProperty').style.display = 'none';
-            document.getElementById('param-selectProperties').style.display = 'none';
-            document.getElementById('param-resultCount').style.display = 'none';
-            document.getElementById('param-topN').style.display = 'none';
-            
-            // Show relevant parameters based on selected tool
-            switch (tool) {
-                case 'list_databases':
-                    // No parameters needed
-                    break;
-                case 'list_collections':
-                    document.getElementById('param-database').style.display = 'block';
-                    break;
-                case 'get_recent_documents':
-                    document.getElementById('param-database').style.display = 'block';
-                    document.getElementById('param-container').style.display = 'block';
-                    document.getElementById('param-resultCount').style.display = 'block';
-                    break;
-                case 'find_document_by_id':
-                    document.getElementById('param-database').style.display = 'block';
-                    document.getElementById('param-container').style.display = 'block';
-                    document.getElementById('param-docId').style.display = 'block';
-                    break;
-                case 'text_search':
-                    document.getElementById('param-database').style.display = 'block';
-                    document.getElementById('param-container').style.display = 'block';
-                    document.getElementById('param-searchProperty').style.display = 'block';
-                    document.getElementById('param-searchPhrase').style.display = 'block';
-                    document.getElementById('param-resultCount').style.display = 'block';
-                    break;
-                case 'vector_search':
-                    document.getElementById('param-database').style.display = 'block';
-                    document.getElementById('param-container').style.display = 'block';
-                    document.getElementById('param-vectorSearch').style.display = 'block';
-                    document.getElementById('param-vectorProperty').style.display = 'block';
-                    document.getElementById('param-selectProperties').style.display = 'block';
-                    document.getElementById('param-topN').style.display = 'block';
-                    break;
-                case 'get_approximate_schema':
-                    document.getElementById('param-database').style.display = 'block';
-                    document.getElementById('param-container').style.display = 'block';
-                    break;
-            }
-            
-            // Update curl examples
-            updateCurlExamples();
-        }
-
         function clearOutput() {
             const output = document.getElementById('output');
             output.className = 'output';
             output.textContent = 'Output cleared. Ready for next request...';
+        }
+
+        function copyToClipboard(elementId, button) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy to clipboard');
+            });
+        }
+
+        function updateToolParameters() {
+            const tool = document.getElementById('toolSelect').value;
+            const toolParams = document.getElementById('toolParameters');
+            
+            // Hide all parameter fields first
+            document.getElementById('docIdField').style.display = 'none';
+            document.getElementById('searchPropertyField').style.display = 'none';
+            document.getElementById('searchPhraseField').style.display = 'none';
+            document.getElementById('vectorSearchField').style.display = 'none';
+            document.getElementById('vectorPropertyField').style.display = 'none';
+            document.getElementById('selectPropertiesField').style.display = 'none';
+            document.getElementById('resultCountField').style.display = 'none';
+            
+            if (!tool) {
+                toolParams.style.display = 'none';
+                updateCurlExamples();
+                return;
+            }
+            
+            // Show the parameter container
+            toolParams.style.display = 'block';
+            
+            // Show relevant fields based on selected tool
+            switch (tool) {
+                case 'list_databases':
+                    // No additional parameters needed
+                    break;
+                    
+                case 'list_collections':
+                    // Database ID is always shown, no additional parameters
+                    break;
+                    
+                case 'get_recent_documents':
+                    // Only this tool should show the Number of Documents field
+                    document.getElementById('resultCountField').style.display = 'block';
+                    break;
+                    
+                case 'find_document_by_id':
+                    document.getElementById('docIdField').style.display = 'block';
+                    break;
+                    
+                case 'text_search':
+                    document.getElementById('searchPropertyField').style.display = 'block';
+                    document.getElementById('searchPhraseField').style.display = 'block';
+                    // text_search does NOT show resultCountField - uses fixed value of 5 or from input
+                    break;
+                    
+                case 'vector_search':
+                    document.getElementById('vectorSearchField').style.display = 'block';
+                    document.getElementById('vectorPropertyField').style.display = 'block';
+                    document.getElementById('selectPropertiesField').style.display = 'block';
+                    // vector_search does NOT show resultCountField - uses fixed value or topN
+                    break;
+                    
+                case 'get_approximate_schema':
+                    // Database ID and Container ID are always shown, no additional parameters
+                    break;
+            }
+            
+            updateCurlExamples();
         }
 
         function toggleCollapse(element) {
@@ -1603,41 +1035,31 @@
 
         // Show error message
         function showError(message) {
-            // Check if it's an auth-related error
-            const isAuthError = message.includes('Client ID') || 
-                               message.includes('login') || 
-                               message.includes('Login') || 
-                               message.includes('MSAL') || 
-                               message.includes('Token') || 
-                               message.includes('authentication') ||
-                               message.includes('Authentication Required') ||
-                               message.includes('sign in') ||
-                               message.includes('Sign In');
-            
-            // ALWAYS show in output section for visibility
-            const output = document.getElementById('output');
-            output.className = 'output error';
-            output.textContent = '❌ Error: ' + message;
-            
-            // If it's an auth-related error, ALSO show it in the auth section for emphasis
-            if (isAuthError) {
+            // If it's an auth-related error, show it in the auth section
+            if (message.includes('Client ID') || message.includes('login') || message.includes('Login') || 
+                message.includes('MSAL') || message.includes('Token') || message.includes('authentication')) {
                 const authError = document.getElementById('authError');
                 const authErrorMessage = document.getElementById('authErrorMessage');
                 authErrorMessage.textContent = message;
                 authError.style.display = 'block';
                 
-                // Auto-hide after 15 seconds (increased from 10)
+                // Auto-hide after 10 seconds
                 setTimeout(() => {
                     authError.style.display = 'none';
-                }, 15000);
+                }, 10000);
+            } else {
+                // Show other errors in the output section
+                const output = document.getElementById('output');
+                output.className = 'output error';
+                output.textContent = '❌ Error: ' + message;
             }
         }
 
         // Show loading message
         function showLoading(message) {
             const output = document.getElementById('output');
-            output.className = 'output loading';
-            output.innerHTML = '<span class="spinner"></span>' + message;
+            output.className = 'output';
+            output.textContent = '⏳ ' + message;
         }
 
         // Show success message
@@ -1652,24 +1074,35 @@
             const output = document.getElementById('output');
             output.className = 'output';
             
-            // Check if this is an MCP protocol response with nested content
-            if (typeof data === 'object' && data.result && data.result.content && Array.isArray(data.result.content)) {
-                // Extract the actual data from MCP response
-                const content = data.result.content[0];
-                if (content && content.type === 'text' && content.text) {
-                    try {
-                        // Try to parse the text as JSON
-                        const actualData = JSON.parse(content.text);
-                        output.textContent = JSON.stringify(actualData, null, 2);
-                    } catch (e) {
-                        // If not JSON, show as plain text
-                        output.textContent = content.text;
+            if (typeof data === 'object') {
+                // Check if it's an MCP response with a result field
+                if (data.result && typeof data.result === 'object' && data.result.content) {
+                    // MCP tool response - extract and parse the actual content
+                    const content = data.result.content;
+                    if (Array.isArray(content) && content.length > 0 && content[0].text) {
+                        try {
+                            // Try to parse the text as JSON
+                            const parsedText = JSON.parse(content[0].text);
+                            output.textContent = JSON.stringify(parsedText, null, 2);
+                        } catch (e) {
+                            // If not JSON, display as-is
+                            output.textContent = content[0].text;
+                        }
+                    } else {
+                        output.textContent = JSON.stringify(data, null, 2);
                     }
                 } else {
                     output.textContent = JSON.stringify(data, null, 2);
                 }
-            } else if (typeof data === 'object') {
-                output.textContent = JSON.stringify(data, null, 2);
+            } else if (typeof data === 'string') {
+                try {
+                    // Try to parse string as JSON
+                    const parsed = JSON.parse(data);
+                    output.textContent = JSON.stringify(parsed, null, 2);
+                } catch (e) {
+                    // Not JSON, display as-is
+                    output.textContent = data;
+                }
             } else {
                 output.textContent = data;
             }

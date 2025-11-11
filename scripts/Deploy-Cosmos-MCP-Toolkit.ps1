@@ -10,7 +10,6 @@
     4. Assigns necessary permissions (Cosmos DB, Container Registry)
     5. Updates container app with new image and authentication
     6. Creates deployment-info.json for AI Foundry integration
-    
 .PARAMETER ResourceGroup
     Azure Resource Group name for deployment (REQUIRED)
 .PARAMETER Location
@@ -103,28 +102,12 @@ function Parse-Arguments {
 function Create-Entra-App {
     Write-Info "Creating Entra App registration for Azure Cosmos DB MCP Toolkit: $ENTRA_APP_NAME"
 
-    # Check if the app already exists
-    Write-Info "Checking if Entra App already exists..."
-    $existingApp = az ad app list --display-name $ENTRA_APP_NAME --query "[0]" | ConvertFrom-Json
+    # Check if jq equivalent (ConvertFrom-Json) is available - it's built-in to PowerShell
     
-    if ($existingApp -and $existingApp.appId) {
-        Write-Info "Entra App already exists, reusing existing app"
-        $ENTRA_APP_CLIENT_ID = $existingApp.appId
-        $ENTRA_APP_OBJECT_ID = $existingApp.id
-    }
-    else {
-        Write-Info "Creating new Entra App registration..."
-        try {
-            $appJson = az ad app create --display-name $ENTRA_APP_NAME | ConvertFrom-Json
-            $ENTRA_APP_CLIENT_ID = $appJson.appId
-            $ENTRA_APP_OBJECT_ID = $appJson.id
-        }
-        catch {
-            Write-Error "Failed to create Entra App. Error: $_"
-            Write-Error "Please ensure you have sufficient permissions to create app registrations in Azure AD."
-            exit 1
-        }
-    }
+    # Register the Entra App with app-role
+    $appJson = az ad app create --display-name $ENTRA_APP_NAME --service-management-reference "4405e061-966a-4249-afdd-f7435f54a510" | ConvertFrom-Json
+    $ENTRA_APP_CLIENT_ID = $appJson.appId
+    $ENTRA_APP_OBJECT_ID = $appJson.id
     
     Write-Info "ENTRA_APP_CLIENT_ID=$ENTRA_APP_CLIENT_ID"
     Write-Info "ENTRA_APP_OBJECT_ID=$ENTRA_APP_OBJECT_ID"
@@ -168,8 +151,15 @@ function Create-Entra-App {
         $updatedRoles = $existingRoles + $newRole
         $rolesPayload = @{ appRoles = $updatedRoles } | ConvertTo-Json -Depth 10
 
+        # Create a temporary file for the body to avoid issues with special characters
+        $tempRolesFile = [System.IO.Path]::GetTempFileName()
+        $rolesPayload | Out-File -FilePath $tempRolesFile -Encoding utf8 -NoNewline
+        
         # PATCH back the updated app-roles
-        az rest --method PATCH --url $ENTRA_APP_URL --body $rolesPayload | Out-Null
+        az rest --method PATCH --url $ENTRA_APP_URL --headers "Content-Type=application/json" --body "@$tempRolesFile" | Out-Null
+        
+        # Clean up temp file
+        Remove-Item $tempRolesFile -Force
 
         Write-Info "App role added successfully"
         $script:ENTRA_APP_ROLE_ID_BY_VALUE = $ENTRA_APP_ROLE_ID
@@ -239,7 +229,15 @@ function Assign-Current-User-Role {
     } | ConvertTo-Json
     
     try {
-        az rest --method POST --url "https://graph.microsoft.com/v1.0/servicePrincipals/$($script:ENTRA_APP_SP_OBJECT_ID)/appRoleAssignedTo" --headers "Content-Type=application/json" --body $body | Out-Null
+        # Create a temporary file for the body to avoid shell escaping issues
+        $tempBodyFile = [System.IO.Path]::GetTempFileName()
+        $body | Out-File -FilePath $tempBodyFile -Encoding utf8 -NoNewline
+        
+        az rest --method POST --url "https://graph.microsoft.com/v1.0/servicePrincipals/$($script:ENTRA_APP_SP_OBJECT_ID)/appRoleAssignedTo" --headers "Content-Type=application/json" --body "@$tempBodyFile" | Out-Null
+        
+        # Clean up temp file
+        Remove-Item $tempBodyFile -Force
+        
         Write-Info "Successfully assigned Mcp.Tool.Executor role to $currentUserEmail"
         Write-Info "Note: Sign out and sign in again in the browser for the role to take effect"
     }
@@ -386,20 +384,20 @@ function Update-Container-App {
     
     # Enable system-assigned managed identity if not already enabled
     $identityJustCreated = $false
-    if ($containerApp.identity.type -ne "SystemAssigned" -and $containerApp.identity.type -ne "SystemAssigned, UserAssigned") {
+    if ($containerApp.identity.type -ne "SystemAssigned") {
         Write-Info "Enabling SystemAssigned managed identity on Container App..."
         az containerapp identity assign --name $ContainerAppName --resource-group $ResourceGroup --system-assigned
         Write-Info "SystemAssigned managed identity enabled successfully"
         
-        # Optimized: Reduced wait time with retry logic for faster deployments
-        Write-Info "Waiting 10 seconds for identity to propagate..."
-        Start-Sleep -Seconds 10
+        # Wait for the identity to propagate
+        Write-Info "Waiting 15 seconds for identity to propagate..."
+        Start-Sleep -Seconds 15
         
         # Refresh container app info
         $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
         $identityJustCreated = $true
     } else {
-        Write-Info "SystemAssigned managed identity is already enabled on Container App"
+        Write-Info "Container App is already using SystemAssigned managed identity"
     }
     
     # Get existing environment variables to extract AI Foundry and embedding settings
@@ -439,24 +437,6 @@ function Update-Container-App {
         $envVars += "OPENAI_EMBEDDING_DEPLOYMENT=$embeddingDeployment"
     }
 
-    # Debug: Display environment variables that will be set
-    Write-Info "Environment variables to be set:"
-    foreach ($envVar in $envVars) {
-        if ($envVar -like "COSMOS_ENDPOINT=*") {
-            Write-Info "  ✅ $envVar"
-        } elseif ($envVar -like "*ENDPOINT=*" -or $envVar -like "*ClientId=*") {
-            $name = $envVar.Split('=')[0]
-            $value = $envVar.Split('=')[1]
-            if ($value.Length -gt 30) {
-                Write-Info "  $name=$($value.Substring(0, 30))..."
-            } else {
-                Write-Info "  $envVar"
-            }
-        } else {
-            Write-Info "  $envVar"
-        }
-    }
-
     # First, ensure ingress is configured correctly for port 8080
     Write-Info "Configuring ingress to use target port 8080..."
     try {
@@ -465,6 +445,17 @@ function Update-Container-App {
     }
     catch {
         Write-Warn "Failed to update ingress configuration: $_"
+    }
+    
+    # Configure CORS for the Container App
+    Write-Info "Configuring CORS to allow all origins..."
+    try {
+        az containerapp ingress cors enable --name $ContainerAppName --resource-group $ResourceGroup --allowed-origins "*" --allowed-methods "GET,POST,PUT,DELETE,OPTIONS" --allowed-headers "*" --expose-headers "*" --max-age 3600 --output none
+        Write-Info "CORS configured successfully"
+    }
+    catch {
+        Write-Warn "Failed to configure CORS: $_"
+        Write-Warn "You may need to configure CORS manually in Azure Portal"
     }
     
     # Get ACR credentials and configure registry
@@ -491,8 +482,6 @@ function Update-Container-App {
     Write-Info "Updating container app with image: $script:IMAGE_TAG"
     
     try {
-        # Optimization: Update image and environment variables in a single call for faster deployment
-        Write-Info "Updating container image and environment variables..."
         az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars $envVars --output none
         
         if ($LASTEXITCODE -ne 0) {
@@ -500,46 +489,6 @@ function Update-Container-App {
         }
         
         Write-Info "Container app updated successfully!"
-        
-        # Step 3: Verify environment variables are set correctly
-        Write-Info "Verifying environment variables..."
-        $updatedApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
-        $currentEnvVars = $updatedApp.properties.template.containers[0].env
-        $cosmosEnvVar = $currentEnvVars | Where-Object { $_.name -eq "COSMOS_ENDPOINT" }
-        
-        if ($cosmosEnvVar) {
-            Write-Info "✅ COSMOS_ENDPOINT confirmed: $($cosmosEnvVar.value)"
-        } else {
-            Write-Warn "⚠️ COSMOS_ENDPOINT not found in current configuration. Retrying..."
-            
-            # Retry setting environment variables with explicit COSMOS_ENDPOINT
-            $retryEnvVars = $envVars + @("COSMOS_ENDPOINT=$cosmosEndpoint")
-            az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars $retryEnvVars --output none
-            Write-Info "Environment variables retry completed"
-        }
-        
-        # Step 4: Configure CORS to allow web UI access
-        Write-Info "Configuring CORS settings..."
-        $containerAppFqdn = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "properties.configuration.ingress.fqdn" -o tsv
-        $allowedOrigins = "https://$containerAppFqdn"
-        
-        az containerapp ingress cors enable --name $ContainerAppName --resource-group $ResourceGroup --allowed-origins $allowedOrigins --allowed-methods "GET" "POST" "PUT" "DELETE" "OPTIONS" --allowed-headers "*" --expose-headers "*" --max-age 3600
-        Write-Info "CORS configured to allow access from: $allowedOrigins"
-        
-        # Step 5: Force creation of a new revision to ensure changes take effect
-        Write-Info "Creating new revision to ensure environment variables are loaded..."
-        
-        # Get current revision and force a new one by updating a dummy environment variable
-        $dummyVar = "DEPLOYMENT_TIMESTAMP=" + (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
-        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars $dummyVar --output none
-        
-        # Optimized: Reduced wait time for new revision activation
-        Write-Info "Waiting 10 seconds for new revision to become active..."
-        Start-Sleep -Seconds 10
-        
-        # Verify the new revision is active
-        $activeRevision = az containerapp revision list --name $ContainerAppName --resource-group $ResourceGroup --query "[?properties.active == \`true\`].name" -o tsv
-        Write-Info "Active revision: $activeRevision"
     }
     catch {
         $errorMessage = $_.Exception.Message
@@ -654,66 +603,6 @@ function Assign-Cosmos-RBAC {
     $script:ACA_MI_DISPLAY_NAME = $ACA_MI_DISPLAY_NAME
 }
 
-function Assign-OpenAI-RBAC {
-    Write-Info "Assigning Azure OpenAI permissions to Container App Managed Identity..."
-
-    if (-not $script:ACA_MI_PRINCIPAL_ID) {
-        Write-Info "Getting Container App Managed Identity Principal ID..."
-        $script:ACA_MI_PRINCIPAL_ID = az containerapp show --resource-group $ResourceGroup --name $ContainerAppName --query "identity.principalId" --output tsv
-        
-        if (-not $script:ACA_MI_PRINCIPAL_ID -or $script:ACA_MI_PRINCIPAL_ID -eq "null") {
-            Write-Error "Failed to get Container App Managed Identity Principal ID"
-            exit 1
-        }
-    }
-
-    Write-Info "Container App MI Principal ID: $script:ACA_MI_PRINCIPAL_ID"
-    
-    # Find Azure OpenAI or AI Services resource
-    Write-Info "Finding Azure OpenAI/AI Services resource..."
-    $openaiResources = az cognitiveservices account list --resource-group $ResourceGroup --query "[?kind=='OpenAI' || kind=='AIServices'].{name:name, id:id, kind:kind}" | ConvertFrom-Json
-    
-    if (-not $openaiResources -or $openaiResources.Count -eq 0) {
-        Write-Warn "No Azure OpenAI or AI Services resource found in resource group $ResourceGroup"
-        Write-Warn "Skipping OpenAI role assignment. Vector search will not work without this."
-        return
-    }
-    
-    $openaiResource = $openaiResources[0]
-    Write-Info "Found resource: $($openaiResource.name) (kind: $($openaiResource.kind))"
-    
-    # Assign Cognitive Services OpenAI User role
-    Write-Info "Assigning 'Cognitive Services OpenAI User' role..."
-    
-    # Check if role assignment already exists
-    $existingAssignment = az role assignment list --assignee $script:ACA_MI_PRINCIPAL_ID --scope $openaiResource.id --query "[?roleDefinitionName=='Cognitive Services OpenAI User']" | ConvertFrom-Json
-    
-    if ($existingAssignment.Count -eq 0) {
-        try {
-            az role assignment create --role "Cognitive Services OpenAI User" --assignee $script:ACA_MI_PRINCIPAL_ID --scope $openaiResource.id --output none
-            Write-Info "Successfully assigned 'Cognitive Services OpenAI User' role to Container App MI"
-        }
-        catch {
-            Write-Warn "Failed to assign OpenAI role: $_"
-            Write-Warn "You may need to assign this role manually for vector search to work"
-        }
-    } else {
-        Write-Info "'Cognitive Services OpenAI User' role assignment already exists"
-    }
-    
-    # Update OPENAI_ENDPOINT to use the correct Cognitive Services endpoint (not AI Foundry)
-    Write-Info "Updating OPENAI_ENDPOINT to Cognitive Services endpoint..."
-    $openaiEndpoint = az cognitiveservices account show --name $openaiResource.name --resource-group $ResourceGroup --query "properties.endpoint" -o tsv
-    
-    if ($openaiEndpoint) {
-        Write-Info "Setting OPENAI_ENDPOINT to: $openaiEndpoint"
-        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars "OPENAI_ENDPOINT=$openaiEndpoint" --output none
-        Write-Info "OPENAI_ENDPOINT updated successfully"
-    } else {
-        Write-Warn "Could not retrieve OpenAI endpoint"
-    }
-}
-
 function Show-Container-Logs {
     Write-Info "Waiting 10 seconds for Azure Container App to initialize then fetching logs..."
     Start-Sleep 10
@@ -742,14 +631,12 @@ function Test-MCP-Server-Health {
     $revision = az containerapp revision list --name $ContainerAppName --resource-group $ResourceGroup --query "[0]" | ConvertFrom-Json
     if ($revision.properties.provisioningState -ne "Provisioned") {
         Write-Warn "Container revision is not yet provisioned. Current state: $($revision.properties.provisioningState)"
-        # Optimized: Reduced initial wait time, rely on retry logic
-        Write-Info "Waiting 20 seconds for revision to provision..."
-        Start-Sleep -Seconds 20
+        Write-Info "Waiting 30 seconds for revision to provision..."
+        Start-Sleep -Seconds 30
     }
     
-    # Optimized: Faster retry cycle for quicker feedback
-    $maxRetries = 24  # 3 minutes total (7.5 seconds * 24)
-    $retryDelay = 7.5
+    $maxRetries = 18  # 3 minutes total (10 seconds * 18)
+    $retryDelay = 10
     
     for ($i = 1; $i -le $maxRetries; $i++) {
         Write-Info "Health check attempt $i of $maxRetries..."
@@ -813,9 +700,8 @@ function Verify-Container-App-Status {
         if ($revision.properties.provisioningState -eq "Failed") {
             Write-Info "Attempting to restart failed revision..."
             az containerapp revision restart --name $ContainerAppName --resource-group $ResourceGroup --revision $revision.name
-            # Optimized: Reduced restart wait time
-            Write-Info "Waiting 20 seconds for restart to complete..."
-            Start-Sleep -Seconds 20
+            Write-Info "Waiting 30 seconds for restart to complete..."
+            Start-Sleep -Seconds 30
         }
     }
     
@@ -905,7 +791,6 @@ function Main {
     Configure-Entra-App-RedirectURIs
     Update-Frontend-Config
     Assign-Cosmos-RBAC
-    Assign-OpenAI-RBAC
     Show-Container-Logs
 
     Write-Info "Deployment completed!"
