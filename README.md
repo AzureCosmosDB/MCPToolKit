@@ -10,6 +10,7 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 - Docker Desktop ([Install](https://www.docker.com/products/docker-desktop/)) (for local development)
 - .NET 9.0 SDK ([Install](https://dotnet.microsoft.com/download/dotnet/9.0)) (for local development)
 - Git ([Install](https://git-scm.com/downloads))
+- Azure Developer CLI ([Install](https://aka.ms/azure-dev/install)) (optional, only for `azd up` deployment method)
 
 ## What You Get
 
@@ -77,7 +78,12 @@ Click the Deploy to Azure button to create all required Azure resources:
 
 ---
 
-#### Option B: Deploy via Azure Developer CLI (azd up) 
+#### Option B: Deploy via Azure Developer CLI (azd up)
+
+> **Note**: Azure Developer CLI (`azd`) must be installed. If not installed, use [Option A](#option-a-deploy-to-azure-button) or install `azd`:
+> - **Windows**: `winget install microsoft.azd`
+> - **macOS/Linux**: `curl -fsSL https://aka.ms/install-azd.sh | bash`
+> - Or download from: https://aka.ms/azure-dev/install
 
 Deploy the complete infrastructure with a single command:
 
@@ -85,6 +91,9 @@ Deploy the complete infrastructure with a single command:
 # Clone the repository
 git clone https://github.com/AzureCosmosDB/MCPToolKit.git
 cd MCPToolKit
+
+# Initialize the azd project (first time only)
+azd init
 
 # Set the environment variables to match the Cosmos DB you want to access
 azd env set COSMOS_ENDPOINT "https://<your-cosmos-account>.documents.azure.com:443/"
@@ -256,10 +265,9 @@ For local development, set `DEV_BYPASS_AUTH=true` to bypass authentication. See 
 
 ## Additional Resources
 
+- [Architecture Diagrams](docs/ARCHITECTURE-DIAGRAMS.md) - System architecture, component interactions, and deployment topology diagrams
+- [Web Testing Guide](docs/WEB-TESTING-GUIDE.md) - Using the browser-based test UI to interact with the MCP server
 - [Local Development Guide](LOCAL_DEVELOPMENT.md) - Setup, testing, and debugging locally
-- [Authentication Setup](docs/AUTHENTICATION-SETUP.md) - Detailed auth configuration
-- [Deploy to Azure Guide](docs/deploy-to-azure-guide.md) - Advanced deployment options
-- [Web Testing Guide](docs/WEB-TESTING-GUIDE.md) - Using the test UI
 - [Testing Guide](TESTING_GUIDE.md) - Unit and integration tests
 
 ## License
