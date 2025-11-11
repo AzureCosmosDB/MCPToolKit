@@ -9,7 +9,7 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 - **Azure OpenAI or Azure AI Foundry project** ([Create Azure OpenAI](https://learn.microsoft.com/azure/ai-services/openai/how-to/create-resource) or [Create AI Foundry project](https://learn.microsoft.com/azure/ai-studio/how-to/create-projects)) (required for vector search with embeddings)
 - Azure CLI ([Install](https://docs.microsoft.com/cli/azure/install-azure-cli)) installed and authenticated
 - PowerShell 7+ ([Install](https://docs.microsoft.com/powershell/scripting/install/installing-powershell)) (for deployment scripts)
-- Docker Desktop ([Install](https://www.docker.com/products/docker-desktop/)) (for local development)
+- **Docker Desktop** ([Install](https://www.docker.com/products/docker-desktop/)) installed and running
 - .NET 9.0 SDK ([Install](https://dotnet.microsoft.com/download/dotnet/9.0)) (for local development)
 - Git ([Install](https://git-scm.com/downloads))
 - Azure Developer CLI ([Install](https://aka.ms/azure-dev/install)) (optional, only for `azd up` deployment method)
@@ -57,7 +57,7 @@ MCPToolKit/
 
 ## Quick Start
 
-> **IMPORTANT**: For best results, ensure all resources (Azure Cosmos DB, AI Foundry Project, Container App) are created in the **same resource group**. This simplifies permissions, networking, and role assignments.
+> Ensure all resources (Azure Cosmos DB, AI Foundry Project, Container App) are created in the same resource group and that Docker is running before starting the deployment.
 
 
 ### Step 1: Deploy Infrastructure
