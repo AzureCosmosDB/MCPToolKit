@@ -159,8 +159,61 @@ function Create-Entra-App {
     else {
         Write-Info "Creating new Entra App registration: $ENTRA_APP_NAME"
         
-        # Register the Entra App (without --service-management-reference for broader compatibility)
-        $appJson = az ad app create --display-name $ENTRA_APP_NAME | ConvertFrom-Json
+        # Try without service-management-reference first (works for most subscriptions)
+        # Capture output and suppress PowerShell error handling temporarily
+        $oldErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        
+        $appJson = (az ad app create --display-name $ENTRA_APP_NAME 2>&1) | Out-String
+        $firstExitCode = $LASTEXITCODE
+        
+        $ErrorActionPreference = $oldErrorActionPreference
+        
+        # If it failed due to service-management-reference requirement, retry with it
+        if ($firstExitCode -ne 0) {
+            if ($appJson -match "ServiceManagementReference") {
+                Write-Error @"
+================================================================================
+SUBSCRIPTION POLICY REQUIRES SERVICE-MANAGEMENT-REFERENCE
+================================================================================
+
+Your subscription has a policy that requires the --service-management-reference 
+parameter when creating Entra Apps. This parameter must be a GUID from your 
+organization's Service or Asset Management database.
+
+SOLUTION OPTIONS:
+
+1. CREATE THE ENTRA APP MANUALLY:
+   Run this command in Azure CLI:
+   
+   az ad app create --display-name "$ENTRA_APP_NAME" \
+     --service-management-reference YOUR_SERVICE_GUID
+   
+   Then re-run this script.
+
+2. USE AN EXISTING ENTRA APP:
+   If you already have an app, run the script with:
+   
+   -EntraAppName "Your Existing App Name"
+
+3. CONTACT YOUR AZURE ADMINISTRATOR:
+   They can provide the correct service-management-reference GUID for your 
+   organization, or create the app registration for you.
+
+For more information, see: https://aka.ms/service-management-reference-error
+================================================================================
+"@
+                exit 1
+            }
+            else {
+                Write-Error "Failed to create Entra App: $appJson"
+                exit 1
+            }
+        }
+        
+        # Parse the JSON response
+        $appJson = $appJson | ConvertFrom-Json
+        
         $ENTRA_APP_CLIENT_ID = $appJson.appId
         $ENTRA_APP_OBJECT_ID = $appJson.id
         
@@ -461,32 +514,59 @@ function Build-And-Push-Image {
     $ACR_NAME = $script:CONTAINER_REGISTRY -replace '\.azurecr\.io$', ''
     Write-Info "Logging into ACR: $ACR_NAME"
 
-    # Login to ACR
-    az acr login --name $ACR_NAME
-
-    # Build image
-    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $IMAGE_TAG = "$($script:CONTAINER_REGISTRY)/mcp-toolkit:$timestamp"
-
-    # Ensure we're in the root directory
-    $rootDir = Split-Path -Parent $SCRIPT_DIR
-    Push-Location $rootDir
-    
     try {
-        Write-Info "Building .NET application from: $(Get-Location)"
-        dotnet publish src/AzureCosmosDB.MCP.Toolkit/AzureCosmosDB.MCP.Toolkit.csproj -c Release -o src/AzureCosmosDB.MCP.Toolkit/bin/publish
+        # Login to ACR
+        az acr login --name $ACR_NAME
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "ACR login failed with exit code $LASTEXITCODE"
+        }
 
-        Write-Info "Building image: $IMAGE_TAG"
-        docker build -t $IMAGE_TAG -f Dockerfile .
+        # Build image
+        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        $IMAGE_TAG = "$($script:CONTAINER_REGISTRY)/mcp-toolkit:$timestamp"
 
-        Write-Info "Pushing image: $IMAGE_TAG"
-        docker push $IMAGE_TAG
+        # Ensure we're in the root directory
+        $rootDir = Split-Path -Parent $SCRIPT_DIR
+        Push-Location $rootDir
+        
+        try {
+            Write-Info "Building .NET application from: $(Get-Location)"
+            dotnet publish src/AzureCosmosDB.MCP.Toolkit/AzureCosmosDB.MCP.Toolkit.csproj -c Release -o src/AzureCosmosDB.MCP.Toolkit/bin/publish
 
-        $script:IMAGE_TAG = $IMAGE_TAG
-        Write-Info "Image pushed successfully!"
+            Write-Info "Building image: $IMAGE_TAG"
+            docker build -t $IMAGE_TAG -f Dockerfile .
+            
+            if ($LASTEXITCODE -ne 0) {
+                throw "Docker build failed with exit code $LASTEXITCODE"
+            }
+
+            Write-Info "Pushing image: $IMAGE_TAG"
+            docker push $IMAGE_TAG
+            
+            if ($LASTEXITCODE -ne 0) {
+                throw "Docker push failed with exit code $LASTEXITCODE"
+            }
+
+            $script:IMAGE_TAG = $IMAGE_TAG
+            Write-Info "Image pushed successfully!"
+        }
+        finally {
+            Pop-Location
+        }
     }
-    finally {
-        Pop-Location
+    catch {
+        Write-Warn "Failed to build or push container image: $_"
+        Write-Warn ""
+        Write-Warn "TROUBLESHOOTING:"
+        Write-Warn "1. Check network connectivity to ACR: az acr check-health -n $ACR_NAME --yes"
+        Write-Warn "2. Verify Docker is running: docker ps"
+        Write-Warn "3. If behind a proxy, configure Docker proxy settings"
+        Write-Warn ""
+        Write-Warn "Deployment will continue without updating the container image."
+        Write-Warn "The Container App will keep using its existing image."
+        Write-Warn ""
+        $script:IMAGE_TAG = $null
     }
 }
 
@@ -634,24 +714,46 @@ function Update-Container-App {
         Write-Warn "Failed to set ACR credentials: $_"
     }
     
-    # Update container app with new image and environment variables
-    Write-Info "Updating container app with image: $script:IMAGE_TAG"
-    
-    try {
-        az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars $envVars --output none
+    # Only update image if a new one was built successfully
+    if ($script:IMAGE_TAG) {
+        Write-Info "Updating container app with new image: $script:IMAGE_TAG"
         
-        if ($LASTEXITCODE -ne 0) {
-            throw "Container app update failed with exit code $LASTEXITCODE"
+        try {
+            az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars $envVars --output none
+            
+            if ($LASTEXITCODE -ne 0) {
+                throw "Container app update failed with exit code $LASTEXITCODE"
+            }
+            
+            Write-Info "Container app updated successfully with new image!"
         }
-        
-        Write-Info "Container app updated successfully!"
+        catch {
+            $errorMessage = $_.Exception.Message
+            Write-Error "Container app update failed: $errorMessage"
+            Write-Error "Check the container app logs for more details:"
+            Write-Info "az containerapp logs show --name $ContainerAppName --resource-group $ResourceGroup --follow"
+            exit 1
+        }
     }
-    catch {
-        $errorMessage = $_.Exception.Message
-        Write-Error "Container app update failed: $errorMessage"
-        Write-Error "Check the container app logs for more details:"
-        Write-Info "az containerapp logs show --name $ContainerAppName --resource-group $ResourceGroup --follow"
-        exit 1
+    else {
+        Write-Warn "Skipping image update (no new image was built)"
+        Write-Info "Updating only environment variables..."
+        
+        try {
+            az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars $envVars --output none
+            
+            if ($LASTEXITCODE -ne 0) {
+                throw "Container app update failed with exit code $LASTEXITCODE"
+            }
+            
+            Write-Info "Container app environment variables updated successfully!"
+            Write-Info "Note: Container app is still using its existing image"
+        }
+        catch {
+            $errorMessage = $_.Exception.Message
+            Write-Warn "Failed to update environment variables: $errorMessage"
+            Write-Warn "Continuing with deployment..."
+        }
     }
 
     $script:CURRENT_TENANT_ID = $CURRENT_TENANT_ID
@@ -757,6 +859,116 @@ function Assign-Cosmos-RBAC {
     # Export variables for use in deployment summary
     $script:ACA_MI_PRINCIPAL_ID = $ACA_MI_PRINCIPAL_ID
     $script:ACA_MI_DISPLAY_NAME = $ACA_MI_DISPLAY_NAME
+}
+
+function Assign-AI-Foundry-RBAC {
+    Write-Info "Assigning AI Foundry / Azure OpenAI permissions to Container App Managed Identity..."
+
+    # Get Container App to extract OpenAI endpoint
+    $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
+    $existingEnvVars = $containerApp.properties.template.containers[0].env
+    $aifProjectEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value
+    
+    if (-not $aifProjectEndpoint) {
+        Write-Warn "OPENAI_ENDPOINT not configured. Skipping AI Foundry RBAC assignment."
+        return
+    }
+    
+    Write-Info "AI Foundry Endpoint: $aifProjectEndpoint"
+    
+    # Search for Cognitive Services accounts in the resource group
+    Write-Info "Searching for Cognitive Services / AI Foundry resources in resource group..."
+    $cognitiveAccounts = az cognitiveservices account list --resource-group $ResourceGroup | ConvertFrom-Json
+    
+    if (-not $cognitiveAccounts -or $cognitiveAccounts.Count -eq 0) {
+        Write-Warn "No Cognitive Services accounts found in resource group: $ResourceGroup"
+        Write-Warn "Please manually assign 'Cognitive Services OpenAI User' role to managed identity:"
+        Write-Warn "  Principal ID: $($script:ACA_MI_PRINCIPAL_ID)"
+        return
+    }
+    
+    # If it's an AI Foundry endpoint (services.ai.azure.com), try to find the connected account
+    $matchingAccount = $null
+    
+    if ($aifProjectEndpoint -match "\.services\.ai\.azure\.com") {
+        Write-Info "Detected AI Foundry project endpoint format"
+        
+        # For AI Foundry, we typically want OpenAI accounts in the same resource group
+        # Prefer accounts with "openai" in the endpoint or kind
+        foreach ($account in $cognitiveAccounts) {
+            if ($account.kind -eq "OpenAI" -or $account.properties.endpoint -match "openai\.azure\.com") {
+                $matchingAccount = $account
+                Write-Info "Found OpenAI account for AI Foundry project: $($account.name)"
+                break
+            }
+        }
+        
+        # If no OpenAI account found, use the first Cognitive Services account
+        if (-not $matchingAccount -and $cognitiveAccounts.Count -gt 0) {
+            $matchingAccount = $cognitiveAccounts[0]
+            Write-Info "Using Cognitive Services account: $($matchingAccount.name)"
+        }
+    }
+    else {
+        # Direct endpoint match for classic Azure OpenAI
+        $endpointHost = ([System.Uri]$aifProjectEndpoint).Host
+        foreach ($account in $cognitiveAccounts) {
+            $accountEndpoint = $account.properties.endpoint
+            if ($accountEndpoint -and ($accountEndpoint.Contains($endpointHost) -or $endpointHost.Contains($account.name))) {
+                $matchingAccount = $account
+                break
+            }
+        }
+    }
+    
+    if (-not $matchingAccount) {
+        Write-Warn "Could not automatically determine which Cognitive Services account to use"
+        Write-Warn "Found these accounts in resource group:"
+        foreach ($account in $cognitiveAccounts) {
+            Write-Warn "  - $($account.name): $($account.properties.endpoint) (Kind: $($account.kind))"
+        }
+        Write-Warn ""
+        Write-Warn "Attempting to assign role to all OpenAI accounts in the resource group..."
+        
+        # Try to assign to all OpenAI accounts
+        $assigned = $false
+        foreach ($account in $cognitiveAccounts) {
+            if ($account.kind -eq "OpenAI") {
+                Write-Info "Assigning role to OpenAI account: $($account.name)"
+                $existingRoleAssignment = az role assignment list --assignee $script:ACA_MI_PRINCIPAL_ID --scope $account.id --query "[?roleDefinitionName=='Cognitive Services OpenAI User'].id" -o tsv
+                
+                if (-not $existingRoleAssignment) {
+                    az role assignment create --role "Cognitive Services OpenAI User" --assignee-object-id $script:ACA_MI_PRINCIPAL_ID --assignee-principal-type ServicePrincipal --scope $account.id
+                    Write-Info "Successfully assigned role to $($account.name)"
+                    $assigned = $true
+                }
+                else {
+                    Write-Info "Role already assigned to $($account.name)"
+                    $assigned = $true
+                }
+            }
+        }
+        
+        if (-not $assigned) {
+            Write-Warn "No OpenAI accounts found. Please manually assign the role."
+        }
+        return
+    }
+    
+    $resourceId = $matchingAccount.id
+    $resourceName = $matchingAccount.name
+    Write-Info "Target Cognitive Services account: $resourceName"
+    
+    # Check if role assignment already exists
+    $existingRoleAssignment = az role assignment list --assignee $script:ACA_MI_PRINCIPAL_ID --scope $resourceId --query "[?roleDefinitionName=='Cognitive Services OpenAI User'].id" -o tsv
+    
+    if ($existingRoleAssignment) {
+        Write-Info "'Cognitive Services OpenAI User' role already assigned to Container App MI"
+    } else {
+        Write-Info "Assigning 'Cognitive Services OpenAI User' role..."
+        az role assignment create --role "Cognitive Services OpenAI User" --assignee-object-id $script:ACA_MI_PRINCIPAL_ID --assignee-principal-type ServicePrincipal --scope $resourceId
+        Write-Info "Successfully assigned 'Cognitive Services OpenAI User' role to Container App MI"
+    }
 }
 
 function Show-Container-Logs {
@@ -942,11 +1154,12 @@ function Main {
     Assign-Current-User-Role
     Deploy-Infrastructure
     Get-Deployment-Outputs
+    Update-Frontend-Config  # Must run BEFORE Build-And-Push-Image so HTML is updated before build
     Build-And-Push-Image
     Update-Container-App
     Configure-Entra-App-RedirectURIs
-    Update-Frontend-Config
     Assign-Cosmos-RBAC
+    Assign-AI-Foundry-RBAC
     Show-Container-Logs
 
     Write-Info "Deployment completed!"
