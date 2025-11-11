@@ -59,6 +59,12 @@ MCPToolKit/
 
 > Ensure all resources (Azure Cosmos DB, AI Foundry Project, Container App) are created in the same resource group and that Docker is running before starting the deployment.
 
+**First, clone the repository:**
+
+```bash
+git clone https://github.com/AzureCosmosDB/MCPToolKit.git
+cd MCPToolKit
+```
 
 ### Step 1: Deploy Infrastructure
 
@@ -90,10 +96,6 @@ Click the Deploy to Azure button to create all required Azure resources:
 Deploy the complete infrastructure with a single command:
 
 ```bash
-# Clone the repository
-git clone https://github.com/AzureCosmosDB/MCPToolKit.git
-cd MCPToolKit
-
 # Initialize the azd project (first time only)
 azd init
 
@@ -125,9 +127,19 @@ azd up
 
 > **Note:** This step is required regardless of which deployment method you chose in Step 1.
 
-Run the one-step deployment script:
+**If you haven't cloned the repository yet:**
+
+```bash
+git clone https://github.com/AzureCosmosDB/MCPToolKit.git
+cd MCPToolKit
+```
+
+**Run the deployment script from the repository root:**
+
+> **Important for Windows users:** If you cloned using Git Bash, open **PowerShell** to run the deployment script (the script requires PowerShell, not Bash).
 
 ```powershell
+# From the MCPToolKit directory
 .\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP"
 ```
 
