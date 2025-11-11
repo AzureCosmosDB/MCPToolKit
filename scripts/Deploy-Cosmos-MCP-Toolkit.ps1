@@ -100,17 +100,35 @@ function Parse-Arguments {
 }
 
 function Create-Entra-App {
-    Write-Info "Creating Entra App registration for Azure Cosmos DB MCP Toolkit: $ENTRA_APP_NAME"
+    Write-Info "Checking for existing Entra App registration: $ENTRA_APP_NAME"
 
-    # Check if jq equivalent (ConvertFrom-Json) is available - it's built-in to PowerShell
+    # Check if app already exists
+    $existingApp = az ad app list --display-name $ENTRA_APP_NAME --query "[0]" | ConvertFrom-Json
     
-    # Register the Entra App with app-role
-    $appJson = az ad app create --display-name $ENTRA_APP_NAME --service-management-reference "4405e061-966a-4249-afdd-f7435f54a510" | ConvertFrom-Json
-    $ENTRA_APP_CLIENT_ID = $appJson.appId
-    $ENTRA_APP_OBJECT_ID = $appJson.id
-    
-    Write-Info "ENTRA_APP_CLIENT_ID=$ENTRA_APP_CLIENT_ID"
-    Write-Info "ENTRA_APP_OBJECT_ID=$ENTRA_APP_OBJECT_ID"
+    if ($existingApp -and $existingApp.appId) {
+        Write-Info "Found existing Entra App, using existing app..."
+        $ENTRA_APP_CLIENT_ID = $existingApp.appId
+        $ENTRA_APP_OBJECT_ID = $existingApp.id
+        
+        Write-Info "ENTRA_APP_CLIENT_ID=$ENTRA_APP_CLIENT_ID"
+        Write-Info "ENTRA_APP_OBJECT_ID=$ENTRA_APP_OBJECT_ID"
+    }
+    else {
+        Write-Info "Creating new Entra App registration: $ENTRA_APP_NAME"
+        
+        # Register the Entra App (without --service-management-reference for broader compatibility)
+        $appJson = az ad app create --display-name $ENTRA_APP_NAME         .\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "rg-sajee-mcp-2025"| ConvertFrom-Json
+        $ENTRA_APP_CLIENT_ID = $appJson.appId
+        $ENTRA_APP_OBJECT_ID = $appJson.id
+        
+        if (-not $ENTRA_APP_CLIENT_ID -or -not $ENTRA_APP_OBJECT_ID) {
+            Write-Error "Failed to create Entra App or retrieve app details"
+            exit 1
+        }
+        
+        Write-Info "ENTRA_APP_CLIENT_ID=$ENTRA_APP_CLIENT_ID"
+        Write-Info "ENTRA_APP_OBJECT_ID=$ENTRA_APP_OBJECT_ID"
+    }
 
     $GRAPH_BASE = "https://graph.microsoft.com/v1.0"
     $ENTRA_APP_URL = "$GRAPH_BASE/applications/$ENTRA_APP_OBJECT_ID"
@@ -176,12 +194,22 @@ function Create-Entra-App {
     
     # Get the service principal object ID for the Entra App
     Write-Info "Getting Entra App Service Principal Object ID..."
-    $ENTRA_APP_SP_OBJECT_ID = az ad sp list --filter "appId eq '$ENTRA_APP_CLIENT_ID'" --query "[0].id" -o tsv
-    if (-not $ENTRA_APP_SP_OBJECT_ID -or $ENTRA_APP_SP_OBJECT_ID -eq "null") {
+    
+    # Try to show the SP directly by appId (fastest method)
+    $ENTRA_APP_SP_OBJECT_ID = az ad sp show --id $ENTRA_APP_CLIENT_ID --query "id" -o tsv 2>$null
+    
+    if (-not $ENTRA_APP_SP_OBJECT_ID -or $ENTRA_APP_SP_OBJECT_ID -eq "null" -or $ENTRA_APP_SP_OBJECT_ID -eq "") {
         Write-Info "Entra App Service Principal not found, creating one..."
         az ad sp create --id $ENTRA_APP_CLIENT_ID | Out-Null
-        $ENTRA_APP_SP_OBJECT_ID = az ad sp list --filter "appId eq '$ENTRA_APP_CLIENT_ID'" --query "[0].id" -o tsv
+        Start-Sleep -Seconds 5  # Wait for SP to propagate
+        $ENTRA_APP_SP_OBJECT_ID = az ad sp show --id $ENTRA_APP_CLIENT_ID --query "id" -o tsv 2>$null
     }
+    
+    if (-not $ENTRA_APP_SP_OBJECT_ID -or $ENTRA_APP_SP_OBJECT_ID -eq "null" -or $ENTRA_APP_SP_OBJECT_ID -eq "") {
+        Write-Error "Failed to get or create Service Principal for Entra App"
+        exit 1
+    }
+    
     Write-Info "Entra App Service Principal Object ID: $ENTRA_APP_SP_OBJECT_ID"
 
     # Export variables for use in other functions
