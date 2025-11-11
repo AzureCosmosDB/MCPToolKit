@@ -285,7 +285,7 @@
             <h3>Configuration</h3>
             <div class="form-group">
                 <label for="serverUrl">Azure Cosmos DB MCP Server URL:</label>
-                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-toolkit-app.wittysmoke-40fb47e2.eastus.azurecontainerapps.io" oninput="updateCurlExamples()">
+                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-toolkit-app.lemonflower-41b31a3d.westus2.azurecontainerapps.io" oninput="updateCurlExamples()">
             </div>
         </div>
 
@@ -790,8 +790,11 @@
             } catch (error) {
                 console.error('Request failed:', error);
                 
-                if (error.message.includes('CORS') || error.message.includes('fetch')) {
-                    showError(`${actionName} failed due to CORS restrictions.\n\nError: ${error.message}\n\n🔧 Solutions:\n1. Use the cURL commands shown below\n2. Configure CORS in your Azure Container App`);
+                // Check if it's a real CORS error (blocked by browser)
+                if (error.name === 'TypeError' && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+                    showError(`${actionName} failed - unable to reach the server.\n\nError: ${error.message}\n\n🔧 Possible causes:\n1. CORS is not configured on the Container App\n2. The server URL is incorrect\n3. The server is not running\n4. Network connectivity issues\n\nTo verify CORS configuration:\naz containerapp ingress cors show --name <your-app-name> --resource-group <your-rg>\n\nTo enable CORS:\naz containerapp ingress cors enable --name <your-app-name> --resource-group <your-rg> --allowed-origins "*"`);
+                } else if (error.message.includes('CORS')) {
+                    showError(`${actionName} failed due to CORS restrictions.\n\nError: ${error.message}\n\n🔧 Solutions:\n1. Configure CORS in your Azure Container App\n2. Use the cURL commands shown below`);
                 } else {
                     showError(`${actionName} failed: ${error.message}`);
                 }
