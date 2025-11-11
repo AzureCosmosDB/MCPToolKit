@@ -141,6 +141,10 @@ cd MCPToolKit
 ```powershell
 # From the MCPToolKit directory
 .\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP"
+
+# Optional: Specify a custom Entra App name if the default name is already taken
+# or if you don't have permissions to modify the existing app
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP" -EntraAppName "My Custom MCP App"
 ```
 
 This script:
