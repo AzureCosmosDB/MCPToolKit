@@ -5,6 +5,8 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 ## Prerequisites
 
 - Azure subscription ([Free account](https://azure.microsoft.com/free/))
+- **Azure Cosmos DB account** ([Create account](https://learn.microsoft.com/azure/cosmos-db/nosql/quickstart-portal))
+- **Azure OpenAI or Azure AI Foundry project** ([Create Azure OpenAI](https://learn.microsoft.com/azure/ai-services/openai/how-to/create-resource) or [Create AI Foundry project](https://learn.microsoft.com/azure/ai-studio/how-to/create-projects)) (required for vector search with embeddings)
 - Azure CLI ([Install](https://docs.microsoft.com/cli/azure/install-azure-cli)) installed and authenticated
 - PowerShell 7+ ([Install](https://docs.microsoft.com/powershell/scripting/install/installing-powershell)) (for deployment scripts)
 - Docker Desktop ([Install](https://www.docker.com/products/docker-desktop/)) (for local development)
@@ -259,16 +261,10 @@ To use with GitHub Copilot or other VS Code MCP clients:
 - **Managed Identity**: Container App uses managed identity for Cosmos DB access
 - **RBAC**: Least-privilege role assignments
 
-### Local Development
-
-For local development, set `DEV_BYPASS_AUTH=true` to bypass authentication. See [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md) for details.
-
 ## Additional Resources
 
 - [Architecture Diagrams](docs/ARCHITECTURE-DIAGRAMS.md) - System architecture, component interactions, and deployment topology diagrams
 - [Web Testing Guide](docs/WEB-TESTING-GUIDE.md) - Using the browser-based test UI to interact with the MCP server
-- [Local Development Guide](LOCAL_DEVELOPMENT.md) - Setup, testing, and debugging locally
-- [Testing Guide](TESTING_GUIDE.md) - Unit and integration tests
 
 ## License
 
