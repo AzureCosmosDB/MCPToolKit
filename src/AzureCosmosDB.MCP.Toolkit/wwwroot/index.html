@@ -285,7 +285,7 @@
             <h3>Configuration</h3>
             <div class="form-group">
                 <label for="serverUrl">Azure Cosmos DB MCP Server URL:</label>
-                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-toolkit-app.lemonflower-41b31a3d.westus2.azurecontainerapps.io" oninput="updateCurlExamples()">
+                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-toolkit-app.icywave-532ba7dd.westus2.azurecontainerapps.io" oninput="updateCurlExamples()">
             </div>
         </div>
 
@@ -1080,16 +1080,28 @@
             if (typeof data === 'object') {
                 // Check if it's an MCP response with a result field
                 if (data.result && typeof data.result === 'object' && data.result.content) {
-                    // MCP tool response - extract and parse the actual content
+                    // MCP tool response - extract the actual content
                     const content = data.result.content;
-                    if (Array.isArray(content) && content.length > 0 && content[0].text) {
-                        try {
-                            // Try to parse the text as JSON
-                            const parsedText = JSON.parse(content[0].text);
-                            output.textContent = JSON.stringify(parsedText, null, 2);
-                        } catch (e) {
-                            // If not JSON, display as-is
-                            output.textContent = content[0].text;
+                    if (Array.isArray(content) && content.length > 0 && content[0].text !== undefined) {
+                        const textContent = content[0].text;
+                        
+                        // Backend now returns structured data directly (not as JSON string)
+                        // So text is already an object/array or a plain value
+                        if (typeof textContent === 'object') {
+                            // Already parsed - just stringify for display
+                            output.textContent = JSON.stringify(textContent, null, 2);
+                        } else if (typeof textContent === 'string') {
+                            // Check if it's a JSON string that needs parsing
+                            try {
+                                const parsed = JSON.parse(textContent);
+                                output.textContent = JSON.stringify(parsed, null, 2);
+                            } catch (e) {
+                                // Not JSON, display as-is
+                                output.textContent = textContent;
+                            }
+                        } else {
+                            // Primitive value (number, boolean, etc.)
+                            output.textContent = String(textContent);
                         }
                     } else {
                         output.textContent = JSON.stringify(data, null, 2);
