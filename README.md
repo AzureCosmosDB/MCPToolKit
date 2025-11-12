@@ -167,6 +167,16 @@ Even if you own the Entra App, assigning app roles to users requires elevated Mi
 
 The deployment script will continue successfully, but you'll need to manually assign yourself the role to use the web UI:
 
+**Quick Method - Use the Script:**
+
+```powershell
+.\scripts\Assign-Role-To-Current-User.ps1
+```
+
+This automatically assigns the role to your account (works for all account types including Visual Studio subscriptions).
+
+**Manual Method - Via Azure Portal:**
+
 1. Go to [Azure Portal](https://portal.azure.com) → **Enterprise Applications**
 2. Search for "**Azure Cosmos DB MCP Toolkit API**" (or your custom app name)
 3. Click **Users and groups** in the left menu
@@ -176,6 +186,18 @@ The deployment script will continue successfully, but you'll need to manually as
 7. Under **Select a role**, click **None Selected**
 8. Select the **Mcp.Tool.Executor** role
 9. Click **Assign**
+
+**To Assign Roles to Teammates:**
+
+```powershell
+.\scripts\Assign-Role-To-Users.ps1 -UserEmails "user1@company.com,user2@company.com"
+```
+
+**To Verify Role Assignments:**
+
+```powershell
+.\scripts\Verify-Role-Assignments.ps1
+```
 
 **Alternative - Use a Different App Name:**
 
@@ -205,6 +227,7 @@ If you encounter issues during deployment or testing, see the comprehensive [Tro
 
 **Common issues:**
 - ⚠️ [Invalid or expired token (HTTP 401)](docs/TROUBLESHOOTING-DEPLOYMENT.md#invalid-or-expired-token-http-401-when-testing) - Role assignment required
+- ⚠️ [User not found / Visual Studio subscriptions](docs/TROUBLESHOOTING-DEPLOYMENT.md#user-not-found---visual-studio-subscriptions--personal-accounts) - Use role assignment scripts
 - ⚠️ [Service management reference error](docs/TROUBLESHOOTING-DEPLOYMENT.md#1-entra-app-creation-fails---service-management-reference-required) - Manual app creation steps
 - ⚠️ [ACR login fails](docs/TROUBLESHOOTING-DEPLOYMENT.md#3-acr-login-fails---resource-not-found) - Resource group mismatch
 - ⚠️ [Docker push fails](docs/TROUBLESHOOTING-DEPLOYMENT.md#docker-push-fails---networkssl-errors) - Network connectivity

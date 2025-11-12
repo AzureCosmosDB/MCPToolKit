@@ -126,6 +126,7 @@ The script has been optimized to query only 5 apps. If it still times out:
 Failed to build or push container image: ACR login failed
 SSL connection error
 EOF during push
+Error response from daemon: Get "https://xxx.azurecr.io/v2/": net/http: TLS handshake timeout
 ```
 
 **Cause:** Network connectivity issues to Azure Container Registry (ACR).
@@ -152,6 +153,149 @@ The script gracefully handles this - deployment continues using the existing con
    ```
 
 5. **Rerun the deployment script** once network issues are resolved
+
+---
+
+### User Not Found - Visual Studio Subscriptions / Personal Accounts
+
+**Symptoms:**
+```
+[WARN] Could not find user object ID for: your.email@outlook.com
+[WARN] You may need to manually assign the role in Azure Portal
+```
+
+**Cause:** This happens with:
+- **Visual Studio subscriptions** (MSDN subscriptions)
+- **Personal Microsoft Accounts** (outlook.com, hotmail.com, live.com)
+- **Guest users** in Azure AD
+- **Login email ≠ User Principal Name** in the directory
+
+**Why This Happens:**
+
+The deployment script runs:
+```powershell
+az ad user show --id your.email@outlook.com
+```
+
+But your actual Azure AD username might be different (e.g., `your.email_outlook.com#EXT#@tenant.onmicrosoft.com`), so the lookup fails.
+
+**Solution - Get Your Object ID and Assign Role:**
+
+**Latest Script (Recommended):** The deployment script has been updated to automatically handle this using the Graph API `/me` endpoint. If you're using an older version, update your script or use the provided role assignment script:
+
+**Quick Solution - Use the Script:**
+
+```powershell
+.\scripts\Assign-Role-To-Current-User.ps1
+```
+
+This script automatically:
+- Gets your Object ID using the Graph API `/me` endpoint (works for all account types)
+- Reads the Service Principal ID from `deployment-info.json`
+- Assigns the `Mcp.Tool.Executor` role to your account
+
+**Manual Method (Alternative):**
+
+If you prefer to do it manually or need to understand the steps:
+
+1. **Get your Object ID:**
+   ```powershell
+   az rest --method GET --url "https://graph.microsoft.com/v1.0/me" --query "id" -o tsv
+   ```
+
+2. **Get Service Principal Object ID:**
+   ```powershell
+   $deploymentInfo = Get-Content deployment-info.json | ConvertFrom-Json
+   $spObjectId = $deploymentInfo.entraAppSpObjectId
+   ```
+
+3. **Assign the role:**
+   ```powershell
+   $userObjectId = "YOUR_OBJECT_ID_FROM_STEP_1"
+   $appRoleId = "c6ae5dd5-ae87-48d8-8134-e07d93fdb962"
+   
+   $body = @{
+       principalId = $userObjectId
+       resourceId = $spObjectId
+       appRoleId = $appRoleId
+   } | ConvertTo-Json
+   
+   $tempFile = "$env:TEMP\role-assignment.json"
+   $body | Out-File -FilePath $tempFile -Encoding utf8 -NoNewline
+   
+   az rest --method POST --url "https://graph.microsoft.com/v1.0/servicePrincipals/$spObjectId/appRoleAssignedTo" --headers "Content-Type=application/json" --body "@$tempFile"
+   
+   Remove-Item $tempFile -Force
+   ```
+
+**After Role Assignment:**
+1. Sign out from the web UI
+2. Use Incognito/Private window
+3. Sign in again to get a fresh token with the role
+
+---
+
+### Assigning Roles to Other Users
+
+**Scenario:** You want to grant access to teammates or other users.
+
+**Quick Solution - Use the Script:**
+
+```powershell
+# Assign to multiple users at once
+.\scripts\Assign-Role-To-Users.ps1 -UserEmails "user1@company.com,user2@company.com,user3@company.com"
+
+# Or run interactively (will prompt for emails)
+.\scripts\Assign-Role-To-Users.ps1
+```
+
+This script automatically:
+- Handles both corporate accounts and Visual Studio subscriptions
+- Tries multiple lookup methods if standard lookup fails
+- Shows detailed results for each user
+- Provides helpful error messages
+
+**Verify Role Assignments:**
+
+```powershell
+.\scripts\Verify-Role-Assignments.ps1
+```
+
+This will list all users with the `Mcp.Tool.Executor` role.
+
+**Manual Method (Alternative):**
+
+If you prefer to do it manually:
+
+1. **Get their Object ID:**
+   ```powershell
+   # For organizational users
+   az ad user show --id their.email@company.com --query "id" -o tsv
+   
+   # If that fails, search by name
+   az ad user list --query "[?contains(displayName, 'Their Name')].{name:displayName, id:id, upn:userPrincipalName}" -o table
+   ```
+
+2. **Assign the role:**
+   ```powershell
+   $userObjectId = "THEIR_OBJECT_ID"
+   $deploymentInfo = Get-Content deployment-info.json | ConvertFrom-Json
+   $spObjectId = $deploymentInfo.entraAppSpObjectId
+   $appRoleId = "c6ae5dd5-ae87-48d8-8134-e07d93fdb962"
+   
+   $body = @{
+       principalId = $userObjectId
+       resourceId = $spObjectId
+       appRoleId = $appRoleId
+   } | ConvertTo-Json
+   
+   $tempFile = "$env:TEMP\role-assignment.json"
+   $body | Out-File -FilePath $tempFile -Encoding utf8 -NoNewline
+   
+   az rest --method POST --url "https://graph.microsoft.com/v1.0/servicePrincipals/$spObjectId/appRoleAssignedTo" --headers "Content-Type=application/json" --body "@$tempFile"
+   
+   Remove-Item $tempFile -Force
+   ```
 
 ---
 
@@ -282,10 +426,12 @@ Include the following information:
 | Issue | Quick Fix |
 |-------|-----------|
 | HTTP 401 - Invalid token | [Manual role assignment](#solution---manual-role-assignment-required) in Azure Portal |
+| User not found / Visual Studio subscription | Use [Graph API /me endpoint](#user-not-found---visual-studio-subscriptions--personal-accounts) to get Object ID |
 | Service management reference error | Use `-EntraAppName` parameter with existing app name |
 | ACR login fails | Verify resource group name is correct |
 | Auto-detection timeout | Skip auto-detection with `-EntraAppName` parameter |
-| Docker push fails | Check Docker is running, verify ACR connectivity |
+| Docker push fails / TLS handshake timeout | Check Docker is running, verify ACR connectivity |
+| Need to assign role to other users | Follow [Assigning Roles to Other Users](#assigning-roles-to-other-users) guide |
 
 ### Key Files
 
