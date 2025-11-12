@@ -169,41 +169,101 @@ function Create-Entra-App {
         
         $ErrorActionPreference = $oldErrorActionPreference
         
-        # If it failed due to service-management-reference requirement, retry with it
+        # If it failed due to service-management-reference requirement, try to auto-detect
         if ($firstExitCode -ne 0) {
             if ($appJson -match "ServiceManagementReference") {
-                Write-Error @"
+                Write-Warn "Subscription requires service-management-reference parameter"
+                Write-Info "Attempting to auto-detect service-management-reference GUID from existing apps..."
+                Write-Info "(This may take 10-20 seconds...)"
+                
+                # Query with a timeout to avoid hanging indefinitely
+                # Use --top to limit the number of apps fetched from the API
+                $job = Start-Job -ScriptBlock {
+                    az ad app list --top 5 --query "[?serviceManagementReference != null] | [0].{name:displayName, smRef:serviceManagementReference}" 2>$null
+                }
+                
+                # Wait for up to 30 seconds
+                $completed = Wait-Job -Job $job -Timeout 30
+                
+                if ($completed) {
+                    $result = Receive-Job -Job $job
+                    Remove-Job -Job $job
+                    
+                    if ($result) {
+                        $existingApps = $result | ConvertFrom-Json
+                    }
+                    else {
+                        $existingApps = $null
+                    }
+                }
+                else {
+                    Write-Warn "Auto-detection timed out after 30 seconds"
+                    Stop-Job -Job $job
+                    Remove-Job -Job $job
+                    $existingApps = $null
+                }
+                
+                if ($existingApps -and $existingApps.Count -gt 0) {
+                    $smRef = $existingApps[0].serviceManagementReference
+                    Write-Info "Found service-management-reference from existing app '$($existingApps[0].name)': $smRef"
+                    Write-Info "Attempting to create Entra App with detected GUID..."
+                    
+                    $appJson = az ad app create --display-name $ENTRA_APP_NAME --service-management-reference $smRef 2>&1
+                    $secondExitCode = $LASTEXITCODE
+                    
+                    if ($secondExitCode -eq 0) {
+                        Write-Info "Successfully created Entra App with auto-detected service-management-reference"
+                    }
+                    else {
+                        Write-Error @"
+Failed to create Entra App with auto-detected service-management-reference.
+
+The detected GUID '$smRef' from existing app '$($existingApps[0].name)' didn't work.
+
+MANUAL SOLUTION:
+1. Find the correct service-management-reference GUID from your IT department
+2. Create the app manually:
+   az ad app create --display-name "$ENTRA_APP_NAME" --service-management-reference YOUR_SERVICE_GUID
+
+3. Then re-run this script with:
+   -EntraAppName "$ENTRA_APP_NAME"
+"@
+                        exit 1
+                    }
+                }
+                else {
+                    Write-Error @"
 ================================================================================
 SUBSCRIPTION POLICY REQUIRES SERVICE-MANAGEMENT-REFERENCE
 ================================================================================
 
-Your subscription has a policy that requires the --service-management-reference 
-parameter when creating Entra Apps. This parameter must be a GUID from your 
-organization's Service or Asset Management database.
+Your subscription requires the --service-management-reference parameter.
+Auto-detection failed or timed out.
 
-SOLUTION OPTIONS:
+FASTEST SOLUTION - SKIP AUTO-DETECTION:
 
-1. CREATE THE ENTRA APP MANUALLY:
-   Run this command in Azure CLI:
+If you already created the Entra App manually, rerun with:
+  -EntraAppName "Azure Cosmos DB MCP Toolkit API"
+
+MANUAL CREATION OPTIONS:
+
+1. CREATE WITH A KNOWN GUID:
+   Ask your IT department for the service-management-reference GUID, then:
    
-   az ad app create --display-name "$ENTRA_APP_NAME" \
+   az ad app create --display-name "Azure Cosmos DB MCP Toolkit API" \
      --service-management-reference YOUR_SERVICE_GUID
    
-   Then re-run this script.
+   Then re-run this script with: -EntraAppName "Azure Cosmos DB MCP Toolkit API"
 
-2. USE AN EXISTING ENTRA APP:
-   If you already have an app, run the script with:
-   
-   -EntraAppName "Your Existing App Name"
+2. FIND AN EXISTING APP'S GUID:
+   Run: az ad app show --id <any-existing-app-id> --query serviceManagementReference
+   Then use that GUID to create your app.
 
-3. CONTACT YOUR AZURE ADMINISTRATOR:
-   They can provide the correct service-management-reference GUID for your 
-   organization, or create the app registration for you.
-
-For more information, see: https://aka.ms/service-management-reference-error
+For more information: https://aka.ms/service-management-reference-error
 ================================================================================
 "@
-                exit 1
+                    exit 1
+                }
             }
             else {
                 Write-Error "Failed to create Entra App: $appJson"
@@ -515,8 +575,8 @@ function Build-And-Push-Image {
     Write-Info "Logging into ACR: $ACR_NAME"
 
     try {
-        # Login to ACR
-        az acr login --name $ACR_NAME
+        # Login to ACR - specify resource group to avoid auto-discovery issues
+        az acr login --name $ACR_NAME --resource-group $RESOURCE_GROUP
         
         if ($LASTEXITCODE -ne 0) {
             throw "ACR login failed with exit code $LASTEXITCODE"

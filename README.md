@@ -153,6 +153,40 @@ This script:
 - Configures all security and permissions
 - Outputs configuration to `deployment-info.json`
 
+#### Troubleshooting: Authorization Errors During Deployment
+
+If you encounter an **"Authorization_RequestDenied"** or **"Insufficient privileges"** error when the script tries to assign the app role to your user, this is expected in certain scenarios.
+
+**Why this happens:**
+
+Even if you own the Entra App, assigning app roles to users requires elevated Microsoft Graph API permissions that you may not have:
+- **Required permission**: `AppRoleAssignment.ReadWrite.All`
+- **Your account**: May only have basic user permissions
+
+**Solution - Manual Role Assignment:**
+
+The deployment script will continue successfully, but you'll need to manually assign yourself the role to use the web UI:
+
+1. Go to [Azure Portal](https://portal.azure.com) → **Enterprise Applications**
+2. Search for "**Azure Cosmos DB MCP Toolkit API**" (or your custom app name)
+3. Click **Users and groups** in the left menu
+4. Click **+ Add user/group**
+5. Under **Users**, click **None Selected**
+6. Search for and select your user account
+7. Under **Select a role**, click **None Selected**
+8. Select the **Mcp.Tool.Executor** role
+9. Click **Assign**
+
+**Alternative - Use a Different App Name:**
+
+If you don't have permissions to access the existing app, create a new one:
+
+```powershell
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP" -EntraAppName "My Custom MCP App"
+```
+
+> **Note**: The Container App's managed identity roles (Cosmos DB, Azure OpenAI) are assigned automatically and don't require these elevated permissions. Only your personal web UI access requires manual role assignment if you lack Graph API permissions.
+
 ### Step 3: Test Your Deployment
 
 Open the test UI: `https://YOUR-CONTAINER-APP.azurecontainerapps.io`
