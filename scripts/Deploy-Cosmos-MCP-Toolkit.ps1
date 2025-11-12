@@ -124,43 +124,19 @@ function Parse-Arguments {
 function Create-Entra-App {
     Write-Info "Checking for existing Entra App registration: $ENTRA_APP_NAME"
 
-    # Get current user info for owner checks
-    $currentUserEmail = az account show --query "user.name" -o tsv
-    $currentUserObjectId = az ad user show --id $currentUserEmail --query "id" -o tsv 2>$null
-
     # Check if app already exists
     $existingApp = az ad app list --display-name $ENTRA_APP_NAME --query "[0]" | ConvertFrom-Json
     
     if ($existingApp -and $existingApp.appId) {
         Write-Info "Found existing Entra App with name: $ENTRA_APP_NAME"
+        Write-Info "Using existing app registration (skipping ownership checks)"
         
-        # Check if current user is an owner of the existing app
-        $isOwner = $false
-        if ($currentUserObjectId -and $currentUserObjectId -ne "null") {
-            $owners = az ad app owner list --id $existingApp.appId --query "[].id" -o tsv 2>$null
-            if ($owners -contains $currentUserObjectId) {
-                $isOwner = $true
-                Write-Info "Current user is an owner of the existing app"
-            }
-            else {
-                Write-Warn "Current user is NOT an owner of the existing app"
-                Write-Warn "You may not have permissions to modify this app or assign roles"
-            }
-        }
-        
-        # Always use existing app if found (but warn if not owner)
+        # Use existing app
         $ENTRA_APP_CLIENT_ID = $existingApp.appId
         $ENTRA_APP_OBJECT_ID = $existingApp.id
         
         Write-Info "ENTRA_APP_CLIENT_ID=$ENTRA_APP_CLIENT_ID"
         Write-Info "ENTRA_APP_OBJECT_ID=$ENTRA_APP_OBJECT_ID"
-        
-        if (-not $isOwner) {
-            Write-Warn "IMPORTANT: Since you're not an owner, you may need to:"
-            Write-Warn "1. Ask the app owner to add you as an owner, OR"
-            Write-Warn "2. Manually assign the Mcp.Tool.Executor role to yourself in Azure Portal, OR"
-            Write-Warn "3. Use a different app name by setting -EntraAppName parameter"
-        }
     }
     else {
         Write-Info "Creating new Entra App registration: $ENTRA_APP_NAME"
@@ -392,7 +368,15 @@ For more information: https://aka.ms/service-management-reference-error
     Write-Info "Ensuring current user is an owner of the Entra App..."
     try {
         $currentUserEmail = az account show --query "user.name" -o tsv
-        $currentUserObjectId = az ad user show --id $currentUserEmail --query "id" -o tsv 2>$null
+        $currentUserObjectId = $null
+        try {
+            $currentUserObjectId = az ad user show --id $currentUserEmail --query "id" -o tsv 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                $currentUserObjectId = $null
+            }
+        } catch {
+            $currentUserObjectId = $null
+        }
         
         if ($currentUserObjectId -and $currentUserObjectId -ne "null") {
             # Check if user is already an owner
@@ -423,8 +407,16 @@ function Assign-Current-User-Role {
     $currentUserEmail = az account show --query "user.name" -o tsv
     Write-Info "Current user: $currentUserEmail"
     
-    # Get user object ID - try standard method first
-    $userObjectId = az ad user show --id $currentUserEmail --query "id" -o tsv 2>$null
+    # Get user object ID - try standard method first (suppress errors)
+    $userObjectId = $null
+    try {
+        $userObjectId = az ad user show --id $currentUserEmail --query "id" -o tsv 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $userObjectId = $null
+        }
+    } catch {
+        $userObjectId = $null
+    }
     
     if (-not $userObjectId -or $userObjectId -eq "null" -or $userObjectId -eq "") {
         Write-Info "Standard user lookup failed, trying Graph API /me endpoint..."
