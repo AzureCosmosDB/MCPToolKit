@@ -284,6 +284,9 @@ public class MCPProtocolController : ControllerBase
 
                             var result = await ExecuteTool(toolName, toolArgs, HttpContext.RequestAborted);
                         
+                            // MCP Best Practice: Return structured data directly, not as serialized JSON string
+                            // If result is already structured (array/object), return it directly
+                            // If result is an error object, return it as-is
                             var toolResponse = new
                             {
                                 jsonrpc = "2.0",
@@ -295,7 +298,7 @@ public class MCPProtocolController : ControllerBase
                                         new
                                         {
                                             type = "text",
-                                            text = JsonSerializer.Serialize(result)
+                                            text = result  // Return result directly without double serialization
                                         }
                                     }
                                 }
