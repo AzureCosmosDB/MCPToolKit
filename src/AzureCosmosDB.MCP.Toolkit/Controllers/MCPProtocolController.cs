@@ -76,6 +76,13 @@ public class MCPProtocolController : ControllerBase
             if (User?.Identity?.IsAuthenticated != true)
             {
                 _logger.LogWarning("Token provided but authentication failed");
+                
+                // Log all user claims for debugging
+                if (User != null)
+                {
+                    _logger.LogWarning("User claims: {Claims}", string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
+                }
+                
                 return Unauthorized(new MCPResponse
                 {
                     JsonRpc = "2.0",
@@ -235,8 +242,22 @@ public class MCPProtocolController : ControllerBase
 
                 case "tools/call":
                     // Check for MCP Tool Executor role before executing tools
+                    _logger.LogInformation("tools/call request - Auth enabled: {AuthEnabled}, User authenticated: {IsAuth}", 
+                        _authService.IsAuthenticationEnabled(), 
+                        User?.Identity?.IsAuthenticated ?? false);
+                    
+                    if (User != null)
+                    {
+                        _logger.LogInformation("User claims: {Claims}", 
+                            string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
+                        _logger.LogInformation("Checking role 'Mcp.Tool.Executor': {HasRole}", 
+                            User.IsInRole("Mcp.Tool.Executor"));
+                    }
+                    
                     if (_authService.IsAuthenticationEnabled() && User?.Identity?.IsAuthenticated == true && !User.IsInRole("Mcp.Tool.Executor"))
                     {
+                        _logger.LogWarning("User does not have Mcp.Tool.Executor role. User roles: {Roles}", 
+                            string.Join(", ", User.Claims.Where(c => c.Type == "roles" || c.Type.EndsWith("/role")).Select(c => c.Value)));
                         return Forbid("Insufficient permissions. The 'Mcp.Tool.Executor' role is required to execute tools.");
                     }
 

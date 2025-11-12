@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,7 +67,12 @@ if (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(c
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
-                ValidIssuer = $"https://login.microsoftonline.com/{tenantId}/v2.0",
+                // Accept both v1.0 and v2.0 tokens
+                ValidIssuers = new[]
+                {
+                    $"https://login.microsoftonline.com/{tenantId}/v2.0",  // v2.0 endpoint
+                    $"https://sts.windows.net/{tenantId}/"                 // v1.0 endpoint
+                },
 
                 ValidateAudience = true,
                 ValidAudiences = validAudiences,
@@ -138,6 +144,34 @@ if (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(c
                 {
                     var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
                     logger.LogInformation("Token validated successfully for user: {User}", context.Principal?.Identity?.Name ?? "Unknown");
+                    
+                    // CRITICAL FIX: Ensure ClaimsIdentity uses "roles" as the RoleClaimType
+                    if (context.Principal?.Identity is ClaimsIdentity identity)
+                    {
+                        // Log all claims before fix
+                        logger.LogInformation("Claims before fix: {Claims}", 
+                            string.Join(", ", context.Principal.Claims.Select(c => $"{c.Type}={c.Value}")));
+                        logger.LogInformation("Identity RoleClaimType before: {RoleClaimType}, NameClaimType: {NameClaimType}", 
+                            identity.RoleClaimType, identity.NameClaimType);
+                        
+                        // The issue: when MapInboundClaims=false, the ClaimsIdentity might not have the correct RoleClaimType
+                        // We need to recreate the identity with the correct claim types
+                        var claims = context.Principal.Claims.ToList();
+                        var newIdentity = new ClaimsIdentity(
+                            claims,
+                            identity.AuthenticationType,
+                            nameType: "name",  // Use "name" as the name claim type
+                            roleType: "roles"  // Use "roles" as the role claim type
+                        );
+                        
+                        context.Principal = new ClaimsPrincipal(newIdentity);
+                        
+                        logger.LogInformation("Identity RoleClaimType after fix: {RoleClaimType}", 
+                            newIdentity.RoleClaimType);
+                        logger.LogInformation("Can find role? {HasRole}", 
+                            context.Principal.IsInRole("Mcp.Tool.Executor"));
+                    }
+                    
                     return Task.CompletedTask;
                 },
                 OnChallenge = context =>
