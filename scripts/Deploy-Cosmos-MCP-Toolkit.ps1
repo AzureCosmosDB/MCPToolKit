@@ -423,16 +423,52 @@ function Assign-Current-User-Role {
     $currentUserEmail = az account show --query "user.name" -o tsv
     Write-Info "Current user: $currentUserEmail"
     
-    # Get user object ID
+    # Get user object ID - try standard method first
     $userObjectId = az ad user show --id $currentUserEmail --query "id" -o tsv 2>$null
     
-    if (-not $userObjectId -or $userObjectId -eq "null") {
-        Write-Warn "Could not find user object ID for: $currentUserEmail"
-        Write-Warn "You may need to manually assign the role in Azure Portal"
-        return
+    if (-not $userObjectId -or $userObjectId -eq "null" -or $userObjectId -eq "") {
+        Write-Info "Standard user lookup failed, trying Graph API /me endpoint..."
+        Write-Info "(This is common for Visual Studio subscriptions, personal accounts, or guest users)"
+        
+        # Fallback: Use Graph API /me endpoint - works for all account types
+        try {
+            $meResult = az rest --method GET --url "https://graph.microsoft.com/v1.0/me" 2>&1
+            
+            if ($LASTEXITCODE -eq 0 -and $meResult) {
+                $meData = $meResult | ConvertFrom-Json
+                $userObjectId = $meData.id
+                $userDisplayName = $meData.displayName
+                $userUPN = $meData.userPrincipalName
+                
+                Write-Info "Found user via Graph API:"
+                Write-Info "  Display Name: $userDisplayName"
+                Write-Info "  UPN: $userUPN"
+                Write-Info "  Object ID: $userObjectId"
+            }
+            else {
+                throw "Graph API /me endpoint failed"
+            }
+        }
+        catch {
+            Write-Warn "Could not find user object ID using any method"
+            Write-Warn ""
+            Write-Warn "This can happen with:"
+            Write-Warn "  - Visual Studio subscriptions with Microsoft Accounts"
+            Write-Warn "  - Personal Azure subscriptions"
+            Write-Warn "  - Limited directory permissions"
+            Write-Warn ""
+            Write-Warn "MANUAL ROLE ASSIGNMENT REQUIRED:"
+            Write-Warn "Run this command to get your Object ID:"
+            Write-Warn "  az rest --method GET --url `"https://graph.microsoft.com/v1.0/me`" --query id -o tsv"
+            Write-Warn ""
+            Write-Warn "Then assign the role manually or see the troubleshooting guide:"
+            Write-Warn "  docs/TROUBLESHOOTING-DEPLOYMENT.md"
+            return
+        }
     }
-    
-    Write-Info "User Object ID: $userObjectId"
+    else {
+        Write-Info "User Object ID: $userObjectId"
+    }
     
     # Check if role assignment already exists
     $existingAssignment = az rest --method GET --url "https://graph.microsoft.com/v1.0/servicePrincipals/$($script:ENTRA_APP_SP_OBJECT_ID)/appRoleAssignedTo" --query "value[?principalId=='$userObjectId' && appRoleId=='$($script:ENTRA_APP_ROLE_ID_BY_VALUE)']" | ConvertFrom-Json
