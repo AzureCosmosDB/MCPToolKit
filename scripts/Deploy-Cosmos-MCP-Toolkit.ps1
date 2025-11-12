@@ -109,6 +109,12 @@ function Show-Usage {
 }
 
 function Parse-Arguments {
+    # Set script-level variables for use in all functions
+    $script:RESOURCE_GROUP = $ResourceGroup
+    $script:LOCATION = $Location
+    $script:CosmosAccountName = $CosmosAccountName
+    $script:ContainerAppName = $ContainerAppName
+    
     Write-Info "Using Azure Resource Group: $ResourceGroup"
     Write-Info "Using Location: $Location"
     Write-Info "Using Cosmos Account Name: $CosmosAccountName"
@@ -352,13 +358,21 @@ For more information: https://aka.ms/service-management-reference-error
     Write-Info "Getting Entra App Service Principal Object ID..."
     
     # Try to show the SP directly by appId (fastest method)
-    $ENTRA_APP_SP_OBJECT_ID = az ad sp show --id $ENTRA_APP_CLIENT_ID --query "id" -o tsv 2>$null
+    # Suppress error output properly
+    $ErrorActionPreference = 'SilentlyContinue'
+    $ENTRA_APP_SP_OBJECT_ID = az ad sp show --id $ENTRA_APP_CLIENT_ID --query "id" -o tsv 2>&1 | Where-Object { $_ -notmatch "ERROR" }
+    $ErrorActionPreference = 'Continue'
     
     if (-not $ENTRA_APP_SP_OBJECT_ID -or $ENTRA_APP_SP_OBJECT_ID -eq "null" -or $ENTRA_APP_SP_OBJECT_ID -eq "") {
-        Write-Info "Entra App Service Principal not found, creating one..."
-        az ad sp create --id $ENTRA_APP_CLIENT_ID | Out-Null
+        Write-Info "Service Principal not found, creating one..."
+        
+        $createResult = az ad sp create --id $ENTRA_APP_CLIENT_ID 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Failed to create Service Principal, it may already exist"
+        }
+        
         Start-Sleep -Seconds 5  # Wait for SP to propagate
-        $ENTRA_APP_SP_OBJECT_ID = az ad sp show --id $ENTRA_APP_CLIENT_ID --query "id" -o tsv 2>$null
+        $ENTRA_APP_SP_OBJECT_ID = az ad sp show --id $ENTRA_APP_CLIENT_ID --query "id" -o tsv 2>&1 | Where-Object { $_ -notmatch "ERROR" }
     }
     
     if (-not $ENTRA_APP_SP_OBJECT_ID -or $ENTRA_APP_SP_OBJECT_ID -eq "null" -or $ENTRA_APP_SP_OBJECT_ID -eq "") {
@@ -576,7 +590,7 @@ function Build-And-Push-Image {
 
     try {
         # Login to ACR - specify resource group to avoid auto-discovery issues
-        az acr login --name $ACR_NAME --resource-group $RESOURCE_GROUP
+        az acr login --name $ACR_NAME --resource-group $script:RESOURCE_GROUP
         
         if ($LASTEXITCODE -ne 0) {
             throw "ACR login failed with exit code $LASTEXITCODE"
