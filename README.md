@@ -199,6 +199,16 @@ curl https://YOUR-CONTAINER-APP.azurecontainerapps.io/health
 
 All connection details are saved in `deployment-info.json` for reference.
 
+## Troubleshooting
+
+If you encounter issues during deployment or testing, see the comprehensive [Troubleshooting Guide](docs/TROUBLESHOOTING-DEPLOYMENT.md).
+
+**Common issues:**
+- ⚠️ [Invalid or expired token (HTTP 401)](docs/TROUBLESHOOTING-DEPLOYMENT.md#invalid-or-expired-token-http-401-when-testing) - Role assignment required
+- ⚠️ [Service management reference error](docs/TROUBLESHOOTING-DEPLOYMENT.md#1-entra-app-creation-fails---service-management-reference-required) - Manual app creation steps
+- ⚠️ [ACR login fails](docs/TROUBLESHOOTING-DEPLOYMENT.md#3-acr-login-fails---resource-not-found) - Resource group mismatch
+- ⚠️ [Docker push fails](docs/TROUBLESHOOTING-DEPLOYMENT.md#docker-push-fails---networkssl-errors) - Network connectivity
+
 ## AI Foundry Integration  
 
 To connect your MCP server to an Azure AI Foundry project:
