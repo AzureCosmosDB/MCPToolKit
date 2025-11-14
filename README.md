@@ -340,7 +340,7 @@ To use with GitHub Copilot or other VS Code MCP clients:
 
 ## Security
 
-> **⚠️ IMPORTANT**: The MCP Server has read access to all databases and containers in the associated Cosmos DB account. Any agent or application that successfully authenticates with the server can execute read operations on the Cosmos DB databases and containers. Ensure you only grant access to trusted users and applications.
+> **⚠️ IMPORTANT**: After granting permissions, the MCP Server will have read access to all databases and containers in the associated Cosmos DB account. Any agent or application that successfully authenticates with the server can execute read operations on the Cosmos DB databases and containers. Ensure you only grant access to trusted users and applications.
 
 ### Authentication
 
