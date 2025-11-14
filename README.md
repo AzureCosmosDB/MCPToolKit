@@ -74,7 +74,7 @@ Choose **ONE** of the following methods to deploy the infrastructure:
 
 Click the Deploy to Azure button to create all required Azure resources:
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzureCosmosDB%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjcodella%2FMCPToolKit%2Fmain%2Finfrastructure%2Fdeploy-all-resources.json)
 
 **What gets deployed:**
 - Azure Container Apps environment
