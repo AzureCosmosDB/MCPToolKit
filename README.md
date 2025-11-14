@@ -106,8 +106,8 @@ azd env set COSMOS_ENDPOINT "https://<your-cosmos-account>.documents.azure.com:4
 azd env set AIF_PROJECT_ENDPOINT "https://<aifoundry-project-name>.<region>.api.azureml.ms/"
 azd env set EMBEDDING_DEPLOYMENT_NAME "text-embedding-ada-002"
 
-# Optional: Set embedding dimensions
-# azd env set EMBEDDING_DIMENSIONS "1536"  # For text-embedding-3-large/small
+# Optional: Set embedding dimensions (default is 0, which uses the model's native dimensions)
+# azd env set EMBEDDING_DIMENSIONS "1536"  # For text-embedding-3-large/small with specific dimensions
 
 # Optional: Set AI Foundry project resource ID for automatic RBAC setup
 azd env set AIF_PROJECT_RESOURCE_ID "/subscriptions/<subscription-id>/resourceGroups/<aifoundry-resource-group>/providers/Microsoft.MachineLearningServices/workspaces/<aifoundry-project-name>"

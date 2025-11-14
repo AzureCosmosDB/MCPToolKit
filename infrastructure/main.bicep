@@ -41,7 +41,7 @@ param openAIEndpoint string = ''
 param embeddingDeploymentName string = ''
 
 @description('Embedding dimensions (optional). For text-embedding-3-large/small models')
-param embeddingDimensions int = 1536
+param embeddingDimensions int = 0
 
 // NOTE: Entra App creation has been moved to the Setup-Permissions.ps1 script
 // for better reliability. The script will create the app if it doesn't exist.
