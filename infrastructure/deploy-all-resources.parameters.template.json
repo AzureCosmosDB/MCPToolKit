@@ -27,7 +27,7 @@
       }
     },
     "embeddingDimensions": {
-      "value": 1536,
+      "value": "",
       "metadata": {
         "description": "Embedding dimensions (optional). Example: 1536 for text-embedding-ada-002, 3072 for text-embedding-3-large"
       }
