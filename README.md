@@ -1,4 +1,4 @@
-﻿# Azure Cosmos DB MCP Toolkit
+# Azure Cosmos DB MCP Toolkit
 
 A Model Context Protocol (MCP) server that enables AI agents to interact with Azure Cosmos DB through natural language queries. Features enterprise-grade security with Azure Entra ID authentication, document operations, vector search, and schema discovery.
 
@@ -105,6 +105,9 @@ azd env set COSMOS_ENDPOINT "https://<your-cosmos-account>.documents.azure.com:4
 # Set the environment variables to match the AI Foundry resource you want to use
 azd env set AIF_PROJECT_ENDPOINT "https://<aifoundry-project-name>.<region>.api.azureml.ms/"
 azd env set EMBEDDING_DEPLOYMENT_NAME "text-embedding-ada-002"
+
+# Optional: Set embedding dimensions
+# azd env set EMBEDDING_DIMENSIONS "1536"  # For text-embedding-3-large/small
 
 # Optional: Set AI Foundry project resource ID for automatic RBAC setup
 azd env set AIF_PROJECT_RESOURCE_ID "/subscriptions/<subscription-id>/resourceGroups/<aifoundry-resource-group>/providers/Microsoft.MachineLearningServices/workspaces/<aifoundry-project-name>"
@@ -337,12 +340,16 @@ To use with GitHub Copilot or other VS Code MCP clients:
 
 ## Security
 
+> **⚠️ IMPORTANT**: The MCP Server has read access to all databases and containers in the associated Cosmos DB account. Any agent or application that successfully authenticates with the server can execute read operations on the Cosmos DB databases and containers. Ensure you only grant access to trusted users and applications.
+
 ### Authentication
 
 - **JWT Bearer Tokens**: All requests require valid Microsoft Entra ID tokens
 - **Audience Validation**: Tokens must be issued for your Entra App
 - **Managed Identity**: Container App uses managed identity for Cosmos DB access
 - **RBAC**: Least-privilege role assignments
+
+
 
 ## Additional Resources
 
