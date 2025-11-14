@@ -29,7 +29,7 @@
     "embeddingDimensions": {
       "value": 0,
       "metadata": {
-        "description": "Embedding dimensions (optional). Example: 1536 for text-embedding-ada-002, 3072 for text-embedding-3-large"
+        "description": "Embedding dimensions (optional). Example: 1536 for text-embedding-ada-002, 3072 for text-embedding-3-large. Leave empty of  0 for text-embedding-ada-002"
       }
     },
     "entraAppDisplayName": {
