@@ -40,6 +40,9 @@ param openAIEndpoint string = ''
 @description('Azure OpenAI embedding deployment name')
 param embeddingDeploymentName string = ''
 
+@description('Embedding dimensions (optional). For text-embedding-3-large/small models')
+param embeddingDimensions int = 0
+
 // NOTE: Entra App creation has been moved to the Setup-Permissions.ps1 script
 // for better reliability. The script will create the app if it doesn't exist.
 
@@ -136,6 +139,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'OPENAI_EMBEDDING_DEPLOYMENT'
               value: embeddingDeploymentName
+            }
+            {
+              name: 'OPENAI_EMBEDDING_DIMENSIONS'
+              value: string(embeddingDimensions)
             }
             // NOTE: AzureAd__ClientId and AzureAd__Audience will be set by deployment script
             // after the Entra app is created

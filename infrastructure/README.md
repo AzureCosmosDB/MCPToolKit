@@ -44,7 +44,8 @@ az deployment group create \
   --parameters \
     "cosmosEndpoint=https://yourcosmosdb.documents.azure.com:443/" \
     "aifProjectEndpoint=https://your-aif-project.openai.azure.com/" \
-    "embeddingDeploymentName=text-embedding-ada-002"
+    "embeddingDeploymentName=text-embedding-ada-002" \
+    "embeddingDimensions=1536"  # Optional: defaults to 1536 if not specified
 ```
 
 ## Post-Deployment Steps

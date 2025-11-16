@@ -285,6 +285,7 @@ public class CosmosDbToolsService
             // Get configuration values
             var openaiEndpoint = _configuration["OPENAI_ENDPOINT"] ?? Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
             var embeddingDeployment = _configuration["OPENAI_EMBEDDING_DEPLOYMENT"] ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
+            var embeddingDimensionsStr = _configuration["OPENAI_EMBEDDING_DIMENSIONS"] ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DIMENSIONS");
 
             // Validate environment variables
             if (string.IsNullOrWhiteSpace(openaiEndpoint))
@@ -294,6 +295,13 @@ public class CosmosDbToolsService
             if (string.IsNullOrWhiteSpace(embeddingDeployment))
             {
                 return new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." };
+            }
+
+            // Parse embedding dimensions if provided (must be a positive number to be valid)
+            int? embeddingDimensions = null;
+            if (!string.IsNullOrWhiteSpace(embeddingDimensionsStr) && int.TryParse(embeddingDimensionsStr, out int parsedDimensions) && parsedDimensions > 0)
+            {
+                embeddingDimensions = parsedDimensions;
             }
 
             // Validate parameters
@@ -346,8 +354,13 @@ public class CosmosDbToolsService
                 _logger.LogInformation("Getting embedding client for deployment: {Deployment}", embeddingDeployment);
                 var embeddingClient = openaiClient.GetEmbeddingClient(embeddingDeployment);
                 
-                _logger.LogInformation("Generating embedding for text: {Text}", searchText);
-                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(searchText, cancellationToken: cancellationToken);
+                _logger.LogInformation("Generating embedding for text: {Text}{DimensionsInfo}", 
+                    searchText, 
+                    embeddingDimensions.HasValue ? $" with {embeddingDimensions.Value} dimensions" : "");
+                // Generate embedding with optional dimensions parameter
+                var embeddingResponse = embeddingDimensions.HasValue
+                    ? await embeddingClient.GenerateEmbeddingAsync(searchText, new OpenAI.Embeddings.EmbeddingGenerationOptions { Dimensions = embeddingDimensions.Value }, cancellationToken)
+                    : await embeddingClient.GenerateEmbeddingAsync(searchText, cancellationToken: cancellationToken);
                 
                 embedding = embeddingResponse.Value.ToFloats().ToArray();
                 _logger.LogInformation("Generated embedding with {Dimensions} dimensions", embedding.Length);
