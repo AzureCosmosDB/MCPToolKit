@@ -1,6 +1,6 @@
 extension microsoftGraphV1
 
-@description('AI Foundry project resource ID')
+@description('Microsoft Foundry project resource ID')
 param aifProjectResourceId string
 
 @description('Entra App Service Principal Object ID (resourceId in Graph API)')

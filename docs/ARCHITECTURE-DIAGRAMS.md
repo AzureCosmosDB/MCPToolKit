@@ -6,7 +6,7 @@
 graph TB
     subgraph "Client Applications"
         WebUI[Web Browser UI<br/>Test Interface]
-        AIFoundry[AI Foundry<br/>Agent Builder]
+        AIFoundry[Microsoft Foundry<br/>Agent Builder]
         MCPClient[MCP Client<br/>Claude, etc.]
     end
 

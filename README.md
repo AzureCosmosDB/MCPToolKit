@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 
 - Azure subscription ([Free account](https://azure.microsoft.com/free/))
 - **Azure Cosmos DB account** ([Create account](https://learn.microsoft.com/azure/cosmos-db/nosql/quickstart-portal))
-- **Azure OpenAI or Azure AI Foundry project** ([Create Azure OpenAI](https://learn.microsoft.com/azure/ai-services/openai/how-to/create-resource) or [Create AI Foundry project](https://learn.microsoft.com/azure/ai-studio/how-to/create-projects)) (required for vector search with embeddings)
+- **Azure OpenAI or Microsoft Foundry project** ([Create Azure OpenAI](https://learn.microsoft.com/azure/ai-services/openai/how-to/create-resource) or [Create Microsoft Foundry project](https://learn.microsoft.com/azure/ai-studio/how-to/create-projects)) (required for vector search with embeddings)
 - Azure CLI ([Install](https://docs.microsoft.com/cli/azure/install-azure-cli)) installed and authenticated
 - PowerShell 7+ ([Install](https://docs.microsoft.com/powershell/scripting/install/installing-powershell)) (for deployment scripts)
 - **Docker Desktop** ([Install](https://www.docker.com/products/docker-desktop/)) installed and running
@@ -20,7 +20,7 @@ This toolkit provides:
 
 - **Secure MCP Server**: JWT-authenticated endpoint for AI agents
 - **Azure Cosmos DB Integration**: Full CRUD operations, vector search, and schema discovery
-- **AI Foundry Ready**: Optional one-step integration with Azure AI Foundry projects
+- **Microsoft Foundry Ready**: Optional one-step integration with Microsoft Foundry projects
 - **Enterprise Security**: Azure Entra ID, Managed Identity, RBAC
 - **Production Ready**: Container Apps hosting with auto-scaling
 - **Local Development**: Docker Compose and .NET dev options
@@ -51,13 +51,13 @@ MCPToolKit/
 ├── scripts/                           # Deployment automation
 │   ├── Deploy-Cosmos-MCP-Toolkit.ps1 # One-step deployment (recommended)
 │   └── Setup-AIFoundry-Connection.ps1
-├── client/                            # Python AI Foundry client example
+├── client/                            # Python Microsoft Foundry client example
 └── docs/                              # Additional documentation
 ```
 
 ## Quick Start
 
-> Ensure all resources (Azure Cosmos DB, AI Foundry Project, Container App) are created in the same resource group and that Docker is running before starting the deployment.
+> Ensure all resources (Azure Cosmos DB, Microsoft Foundry Project, Container App) are created in the same resource group and that Docker is running before starting the deployment.
 
 **First, clone the repository:**
 
@@ -235,9 +235,9 @@ If you encounter issues during deployment or testing, see the comprehensive [Tro
 - ⚠️ [ACR login fails](docs/TROUBLESHOOTING-DEPLOYMENT.md#3-acr-login-fails---resource-not-found) - Resource group mismatch
 - ⚠️ [Docker push fails](docs/TROUBLESHOOTING-DEPLOYMENT.md#docker-push-fails---networkssl-errors) - Network connectivity
 
-## AI Foundry Integration  
+## Microsoft Foundry Integration  
 
-To connect your MCP server to an Azure AI Foundry project:
+To connect your MCP server to a Microsoft Foundry project:
 
 **Option 1: Using Resource ID**
 
@@ -255,13 +255,13 @@ To connect your MCP server to an Azure AI Foundry project:
   -ResourceGroup "YOUR-RESOURCE-GROUP"
 ```
 
-This assigns the necessary roles for AI Foundry to call your MCP server.
+This assigns the necessary roles for Microsoft Foundry to call your MCP server.
 
-### Use Azure Cosmos DB MCP in AI Foundry
+### Use Azure Cosmos DB MCP in Microsoft Foundry
 
-**Via Azure AI Foundry UI:**
+**Via Microsoft Foundry UI:**
 
-1. Navigate to your Azure AI Foundry project
+1. Navigate to your Microsoft Foundry project
 2. Go to **Build** → **Create agent**  
 3. Select the **+ Add** in the tools section
 4. Select the **Catalog** tab 
@@ -293,7 +293,7 @@ This assigns the necessary roles for AI Foundry to call your MCP server.
     "learn": true
     ```
 
-9. Test MCP server in AI Foundry Playground using natural language queries:
+9. Test MCP server in Microsoft Foundry Playground using natural language queries:
     ```
     List all databases in my Cosmos DB account
     ```
@@ -314,7 +314,7 @@ This assigns the necessary roles for AI Foundry to call your MCP server.
 
 **Python Test Client:**
 
-See the [Python Client README](client/README.md) for a complete example of using the MCP server with Azure AI Foundry agents.
+See the [Python Client README](client/README.md) for a complete example of using the MCP server with Microsoft Foundry agents.
 
 ## Configuration
 

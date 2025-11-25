@@ -313,8 +313,8 @@ public static class CosmosDbTools
 {
     // Environment variables used:
     // COSMOS_ENDPOINT - Cosmos DB account endpoint
-    // OPENAI_ENDPOINT - AI Foundry project endpoint (or legacy Azure OpenAI endpoint)
-    // OPENAI_EMBEDDING_DEPLOYMENT - Embedding model deployment name in AI Foundry/OpenAI
+    // OPENAI_ENDPOINT - Microsoft Foundry project endpoint (or legacy Azure OpenAI endpoint)
+    // OPENAI_EMBEDDING_DEPLOYMENT - Embedding model deployment name in Microsoft Foundry/OpenAI
     // Auth uses Entra ID via DefaultAzureCredential (supports Managed Identity and service principals).
 
     [McpServerTool, Description("Lists databases available in the Cosmos DB account.")]
@@ -715,8 +715,8 @@ public static class CosmosDbTools
         {
             // Validate environment variables
             var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-            // OPENAI_ENDPOINT can be either an AI Foundry project endpoint or legacy Azure OpenAI endpoint
-            // AI Foundry projects expose OpenAI-compatible endpoints (recommended)
+            // OPENAI_ENDPOINT can be either a Microsoft Foundry project endpoint or legacy Azure OpenAI endpoint
+            // Microsoft Foundry projects expose OpenAI-compatible endpoints (recommended)
             var openaiEndpoint = Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
             var embeddingDeployment = Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
 

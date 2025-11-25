@@ -112,7 +112,7 @@ Create a `.env` file or set these additional environment variables for local dev
 | `DEV_BYPASS_AUTH` | Bypass authentication | `true` |
 | `COSMOS_ENDPOINT` | Cosmos DB endpoint | `https://localhost:8081/` (emulator) |
 | `COSMOS_KEY` | Cosmos DB key (emulator only) | Emulator default key |
-| `OPENAI_ENDPOINT` | AI Foundry/OpenAI endpoint | Your Azure OpenAI endpoint |
+| `OPENAI_ENDPOINT` | Microsoft Foundry/OpenAI endpoint | Your Azure OpenAI endpoint |
 | `OPENAI_EMBEDDING_DEPLOYMENT` | Embedding model name | `text-embedding-ada-002` |
 
 ## Using Cosmos DB Emulator
