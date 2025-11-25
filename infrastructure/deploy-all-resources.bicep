@@ -13,6 +13,9 @@ param aifProjectEndpoint string
 @description('Embedding model deployment name in AI Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002')
 param embeddingDeploymentName string
 
+@description('Embedding dimensions (optional). For text-embedding-3-large/small models. Leave as 0 or blank for text-embedding-ada-002.')
+param embeddingDimensions int = 0
+
 @description('Container app name')
 param containerAppName string = '${resourcePrefix}-app'
 
@@ -116,6 +119,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'OPENAI_EMBEDDING_DEPLOYMENT'
               value: embeddingDeploymentName
+            }
+            {
+              name: 'OPENAI_EMBEDDING_DIMENSIONS'
+              value: string(embeddingDimensions)
             }
             // ASP.NET Core configuration
             {
