@@ -2,7 +2,7 @@
 
 import os, time
 from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
+from azure.identity import AzureCliCredential
 from azure.ai.agents.models import (
     ListSortOrder,
     SubmitToolOutputsAction,
@@ -17,12 +17,12 @@ model_deployment = os.getenv("MODEL_DEPLOYMENT_NAME")
 connection_name = os.getenv("CONNECTION_NAME")
 
 # Get MCP server configuration from environment variables
-mcp_server_url = os.environ.get("MCP_SERVER_URL", "https://mcp-toolkit-app.wittywave-32c6208c.eastus.azurecontainerapps.io/mcp")
+mcp_server_url = os.environ.get("MCP_SERVER_URL", "https://mcp-toolkit-app.icywave-532ba7dd.westus2.azurecontainerapps.io/mcp")
 mcp_server_label = os.environ.get("MCP_SERVER_LABEL", "cosmosdb")
 
 project_client = AIProjectClient(
-    endpoint=os.environ["PROJECT_ENDPOINT"],
-    credential=DefaultAzureCredential(),
+    endpoint=project_endpoint,
+    credential=AzureCliCredential(),
 )
 
 # Initialize agent MCP tool
@@ -52,7 +52,7 @@ with project_client:
     # Create a new agent.
     # NOTE: To reuse existing agent, fetch it with get_agent(agent_id)
     agent = agents_client.create_agent(
-        model=os.environ["MODEL_DEPLOYMENT_NAME"],
+        model=model_deployment,
         name="cosmosdb-demo-agent-mcp",
         instructions="""
         You are a helpful agent that can use MCP tools to assist users with Azure Cosmos DB queries.

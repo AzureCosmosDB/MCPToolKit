@@ -1,0 +1,21 @@
+# Runtime-only Dockerfile for pre-built binaries
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
+WORKDIR /app
+EXPOSE 8080
+ENV ASPNETCORE_URLS=http://+:8080
+
+# Install curl for health checks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Copy pre-built application
+COPY src/AzureCosmosDB.MCP.Toolkit/bin/publish .
+
+# Create non-root user
+RUN adduser --disabled-password --gecos "" --uid 1000 appuser && chown -R appuser /app
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["dotnet", "AzureCosmosDB.MCP.Toolkit.dll"]
