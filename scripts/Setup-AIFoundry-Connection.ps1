@@ -1,20 +1,20 @@
 <#
 .SYNOPSIS
-    Create a managed identity connection in AI Foundry project and assign Entra App role for Cosmos DB MCP Toolkit.
+    Create a managed identity connection in Microsoft Foundry project and assign Entra App role for Cosmos DB MCP Toolkit.
 
 .DESCRIPTION
     This script:
     1. Reads deployment information from deployment-info.json
-    2. Retrieves AI Foundry project managed identity details
-    3. Creates a managed identity connection in AI Foundry for the Cosmos DB MCP Toolkit server
-    4. Assigns the Entra App role to the AI Foundry project managed identity
+    2. Retrieves Microsoft Foundry project managed identity details
+    3. Creates a managed identity connection in Microsoft Foundry for the Cosmos DB MCP Toolkit server
+    4. Assigns the Entra App role to the Microsoft Foundry project managed identity
 
 .PARAMETER AIFoundryProjectResourceId
-    Resource ID of AI Foundry project.
+    Resource ID of Microsoft Foundry project.
     Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.CognitiveServices/accounts/{account}/projects/{project}
 
 .PARAMETER ConnectionName
-    Name for the connection in AI Foundry (e.g., "cosmos-mcp-connection")
+    Name for the connection in Microsoft Foundry (e.g., "cosmos-mcp-connection")
 
 .EXAMPLE
     .\Setup-AIFoundry-Connection.ps1 -AIFoundryProjectResourceId "/subscriptions/xxxxx/resourceGroups/my-rg/providers/Microsoft.CognitiveServices/accounts/my-account/projects/my-project" -ConnectionName "cosmos-mcp-connection"
@@ -23,7 +23,7 @@
     Prerequisites:
     - Azure CLI installed and authenticated
     - deployment-info.json must exist in the same directory (created by Deploy-Cosmos-MCP-Toolkit.ps1)
-    - Appropriate permissions to manage AI Foundry projects and Entra ID app role assignments
+    - Appropriate permissions to manage Microsoft Foundry projects and Entra ID app role assignments
 #>
 
 param(
@@ -66,7 +66,7 @@ function Print-Usage {
     Write-Host @"
 Usage: .\Setup-AIFoundry-Connection.ps1 -ConnectionName <name> [OPTIONS]
 
-Create a managed identity connection in AI Foundry project and assign Entra App role.
+Create a managed identity connection in Microsoft Foundry project and assign Entra App role.
 
 REQUIRED PARAMETERS:
   -ConnectionName <name>
@@ -75,14 +75,14 @@ REQUIRED PARAMETERS:
 OPTIONS (choose one):
   Option 1: Use Resource ID
     -AIFoundryProjectResourceId <resource-id>
-                          Full resource ID of AI Foundry project
+                          Full resource ID of Microsoft Foundry project
                           Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.CognitiveServices/accounts/{account}/projects/{project}
 
   Option 2: Use Project Name and Account Name
     -AIFoundryProjectName <project-name>
-                          Name of the AI Foundry project
+                          Name of the Microsoft Foundry project
     -AIFoundryAccountName <account-name>
-                          Name of the AI Foundry account (hub)
+                          Name of the Microsoft Foundry account (hub)
     -ResourceGroup <rg-name>
                           Resource group name (optional, will auto-detect if not provided)
 
@@ -109,7 +109,7 @@ function Validate-AIFoundryProjectResourceId {
     
     $pattern = "^/subscriptions/[a-fA-F0-9-]+/resourceGroups/[^/]+/providers/Microsoft\.CognitiveServices/accounts/[^/]+/projects/[^/]+$"
     if ($ResourceId -notmatch $pattern) {
-        Write-Error-Message "Invalid AI Foundry project resource ID format"
+        Write-Error-Message "Invalid Microsoft Foundry project resource ID format"
         Write-Error-Message "Expected format: /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.CognitiveServices/accounts/{accountName}/projects/{projectName}"
         Write-Error-Message "Provided: $ResourceId"
         exit 1
@@ -120,43 +120,43 @@ function Parse-Arguments {
     # Check if using Resource ID or individual parameters
     if ($AIFoundryProjectResourceId) {
         # Option 1: Parse from Resource ID
-        Write-Info "Using AI Foundry Project Resource ID"
+        Write-Info "Using Microsoft Foundry Project Resource ID"
         Validate-AIFoundryProjectResourceId -ResourceId $AIFoundryProjectResourceId
         
         # Extract components from resource ID
         if ($AIFoundryProjectResourceId -match "/subscriptions/([^/]+)/") {
             $script:AI_FOUNDRY_SUBSCRIPTION_ID = $Matches[1]
         } else {
-            Write-Error-Message "Failed to extract subscription ID from AI Foundry project resource ID"
+            Write-Error-Message "Failed to extract subscription ID from Microsoft Foundry project resource ID"
             exit 1
         }
         
         if ($AIFoundryProjectResourceId -match "/resourceGroups/([^/]+)/") {
             $script:AI_FOUNDRY_RESOURCE_GROUP = $Matches[1]
         } else {
-            Write-Error-Message "Failed to extract resource group from AI Foundry project resource ID"
+            Write-Error-Message "Failed to extract resource group from Microsoft Foundry project resource ID"
             exit 1
         }
         
         if ($AIFoundryProjectResourceId -match "/accounts/([^/]+)/projects/") {
             $script:AI_FOUNDRY_ACCOUNT_NAME = $Matches[1]
         } else {
-            Write-Error-Message "Failed to extract account name from AI Foundry project resource ID"
+            Write-Error-Message "Failed to extract account name from Microsoft Foundry project resource ID"
             exit 1
         }
         
         if ($AIFoundryProjectResourceId -match "/projects/([^/]+)$") {
             $script:AI_FOUNDRY_PROJECT_NAME = $Matches[1]
         } else {
-            Write-Error-Message "Failed to extract project name from AI Foundry project resource ID"
+            Write-Error-Message "Failed to extract project name from Microsoft Foundry project resource ID"
             exit 1
         }
         
-        Write-Info "[OK] AI Foundry Project Resource ID: $AIFoundryProjectResourceId"
+        Write-Info "[OK] Microsoft Foundry Project Resource ID: $AIFoundryProjectResourceId"
     }
     elseif ($AIFoundryProjectName -and $AIFoundryAccountName) {
         # Option 2: Use project name and account name
-        Write-Info "Using AI Foundry Project Name and Account Name"
+        Write-Info "Using Microsoft Foundry Project Name and Account Name"
         $script:AI_FOUNDRY_PROJECT_NAME = $AIFoundryProjectName
         $script:AI_FOUNDRY_ACCOUNT_NAME = $AIFoundryAccountName
         
@@ -166,14 +166,14 @@ function Parse-Arguments {
         
         # If resource group not provided, try to find it
         if (-not $ResourceGroup) {
-            Write-Info "Resource group not provided, searching for AI Foundry account..."
+            Write-Info "Resource group not provided, searching for Microsoft Foundry account..."
             $accountList = az cognitiveservices account list --query "[?name=='$AIFoundryAccountName'].{name:name, resourceGroup:resourceGroup}" -o json | ConvertFrom-Json
             
             if ($accountList -and $accountList.Count -gt 0) {
                 $script:AI_FOUNDRY_RESOURCE_GROUP = $accountList[0].resourceGroup
-                Write-Info "[OK] Found AI Foundry account in resource group: $script:AI_FOUNDRY_RESOURCE_GROUP"
+                Write-Info "[OK] Found Microsoft Foundry account in resource group: $script:AI_FOUNDRY_RESOURCE_GROUP"
             } else {
-                Write-Error-Message "Could not find AI Foundry account '$AIFoundryAccountName' in subscription. Please provide -ResourceGroup parameter."
+                Write-Error-Message "Could not find Microsoft Foundry account '$AIFoundryAccountName' in subscription. Please provide -ResourceGroup parameter."
                 exit 1
             }
         } else {
@@ -194,9 +194,9 @@ function Parse-Arguments {
     
     Write-Info "[OK] Connection Name: $ConnectionName"
     Write-Info "[OK] Using Azure Subscription: $script:AI_FOUNDRY_SUBSCRIPTION_ID"
-    Write-Info "[OK] Using AI Foundry Account: $script:AI_FOUNDRY_ACCOUNT_NAME"
-    Write-Info "[OK] Using AI Foundry Resource Group: $script:AI_FOUNDRY_RESOURCE_GROUP"
-    Write-Info "[OK] Using AI Foundry Project: $script:AI_FOUNDRY_PROJECT_NAME"
+    Write-Info "[OK] Using Microsoft Foundry Account: $script:AI_FOUNDRY_ACCOUNT_NAME"
+    Write-Info "[OK] Using Microsoft Foundry Resource Group: $script:AI_FOUNDRY_RESOURCE_GROUP"
+    Write-Info "[OK] Using Microsoft Foundry Project: $script:AI_FOUNDRY_PROJECT_NAME"
     
     # Load deployment info file from same directory as script
     $script:DEPLOYMENT_INFO_FILE = Join-Path $SCRIPT_DIR "deployment-info.json"
@@ -274,7 +274,7 @@ function Get-AccessToken {
 }
 
 function Get-AIFoundryProjectMI {
-    Write-Info "Fetching AI Foundry account region..."
+    Write-Info "Fetching Microsoft Foundry account region..."
     
     $accountJson = az cognitiveservices account show `
         --name $script:AI_FOUNDRY_ACCOUNT_NAME `
@@ -282,20 +282,20 @@ function Get-AIFoundryProjectMI {
         -o json | ConvertFrom-Json
     
     if ($LASTEXITCODE -ne 0) {
-        Write-Error-Message "Failed to get AI Foundry account details"
+        Write-Error-Message "Failed to get Microsoft Foundry account details"
         exit 1
     }
     
     $script:AI_FOUNDRY_REGION = $accountJson.location.ToLower() -replace '\s', ''
     
     if (-not $script:AI_FOUNDRY_REGION) {
-        Write-Error-Message "Failed to extract region from AI Foundry account"
+        Write-Error-Message "Failed to extract region from Microsoft Foundry account"
         exit 1
     }
     
     $armAccessToken = Get-AccessToken -ResourceUri "https://management.azure.com"
     
-    Write-Info "Fetching AI Foundry project details..."
+    Write-Info "Fetching Microsoft Foundry project details..."
     
     $apiEndpoint = "https://$($script:AI_FOUNDRY_REGION).management.azure.com:443/subscriptions/$($script:AI_FOUNDRY_SUBSCRIPTION_ID)/resourcegroups/$($script:AI_FOUNDRY_RESOURCE_GROUP)/providers/Microsoft.CognitiveServices/accounts/$($script:AI_FOUNDRY_ACCOUNT_NAME)/projects/$($script:AI_FOUNDRY_PROJECT_NAME)?api-version=2025-04-01-preview"
     
@@ -313,7 +313,7 @@ function Get-AIFoundryProjectMI {
     
     $script:AI_FOUNDRY_PROJECT_MI_PRINCIPAL_ID = $response.identity.principalId
     if (-not $script:AI_FOUNDRY_PROJECT_MI_PRINCIPAL_ID) {
-        Write-Error-Message "Failed to extract project MI Principal ID from AI Foundry project"
+        Write-Error-Message "Failed to extract project MI Principal ID from Microsoft Foundry project"
         Write-Error-Message "Response: $($response | ConvertTo-Json)"
         exit 1
     }
@@ -321,12 +321,12 @@ function Get-AIFoundryProjectMI {
     $script:AI_FOUNDRY_PROJECT_MI_TENANT_ID = $response.identity.tenantId
     $script:AI_FOUNDRY_PROJECT_MI_TYPE = $response.identity.type
     
-    Write-Info "[OK] AI Foundry Project MI Principal ID: $script:AI_FOUNDRY_PROJECT_MI_PRINCIPAL_ID"
-    Write-Info "[OK] AI Foundry Project MI Type: $script:AI_FOUNDRY_PROJECT_MI_TYPE"
+    Write-Info "[OK] Microsoft Foundry Project MI Principal ID: $script:AI_FOUNDRY_PROJECT_MI_PRINCIPAL_ID"
+    Write-Info "[OK] Microsoft Foundry Project MI Type: $script:AI_FOUNDRY_PROJECT_MI_TYPE"
 }
 
 function Set-AIFoundryMIRoleAssignment {
-    Write-Info "Assigning app role to AI Foundry project MI..."
+    Write-Info "Assigning app role to Microsoft Foundry project MI..."
     
     $graphAccessToken = Get-AccessToken -ResourceUri "https://graph.microsoft.com"
     

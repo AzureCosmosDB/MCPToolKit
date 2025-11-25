@@ -123,10 +123,10 @@ A secure MCP server that provides:
 
 ---
 
-### Scenario 5: AI Foundry Integration (Optional)
-**Objective:** Test MCP server integration with Azure AI Foundry agents
+### Scenario 5: Microsoft Foundry Integration (Optional)
+**Objective:** Test MCP server integration with Microsoft Foundry agents
 
-> ⚠️ **IMPORTANT:** AI Foundry integration is OPTIONAL and requires subscription whitelisting. Please **reach out to me with your subscription ID** if you want to test this scenario.
+> ⚠️ **IMPORTANT:** Microsoft Foundry integration is OPTIONAL and requires subscription whitelisting. Please **reach out to me with your subscription ID** if you want to test this scenario.
 
 **Test URL:** 
 https://eastus2euap.ai.azure.com/nextgen/
@@ -165,7 +165,7 @@ Please log issues for:
 - ❌ Performance problems (slow queries, timeouts)
 - ❌ Documentation gaps or unclear instructions
 - ❌ Vector search not returning relevant results
-- ❌ AI Foundry integration failures
+- ❌ Microsoft Foundry integration failures
 
 ---
 
@@ -192,4 +192,4 @@ Please log issues for:
 
 **Thank you for helping us ensure a high-quality release!** 🚀
 
-**Remember:** AI Foundry testing is optional - reach out if you want your subscription whitelisted!
+**Remember:** Microsoft Foundry testing is optional - reach out if you want your subscription whitelisted!

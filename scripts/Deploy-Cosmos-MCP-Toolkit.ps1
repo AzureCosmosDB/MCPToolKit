@@ -9,7 +9,7 @@
     3. Builds and pushes Docker image
     4. Assigns necessary permissions (Cosmos DB, Container Registry)
     5. Updates container app with new image and authentication
-    6. Creates deployment-info.json for AI Foundry integration
+    6. Creates deployment-info.json for Microsoft Foundry integration
 .PARAMETER ResourceGroup
     Azure Resource Group name for deployment (REQUIRED)
 .PARAMETER Location
@@ -704,7 +704,7 @@ function Update-Container-App {
         Write-Info "Container App is already using SystemAssigned managed identity"
     }
     
-    # Get existing environment variables to extract AI Foundry and embedding settings
+    # Get existing environment variables to extract Microsoft Foundry and embedding settings
     $existingEnvVars = $containerApp.properties.template.containers[0].env
     $aifProjectEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value
     $embeddingDeployment = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_EMBEDDING_DEPLOYMENT" }).value
@@ -713,7 +713,7 @@ function Update-Container-App {
         Write-Warn "OPENAI_ENDPOINT not found in existing container app configuration"
         Write-Warn "Please set this manually using: az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars 'OPENAI_ENDPOINT=<your-endpoint>'"
     } else {
-        Write-Info "AI Foundry Endpoint: $aifProjectEndpoint"
+        Write-Info "Microsoft Foundry Endpoint: $aifProjectEndpoint"
     }
     
     if (-not $embeddingDeployment) {
@@ -964,7 +964,7 @@ function Assign-Cosmos-RBAC {
 }
 
 function Assign-AI-Foundry-RBAC {
-    Write-Info "Assigning AI Foundry / Azure OpenAI permissions to Container App Managed Identity..."
+    Write-Info "Assigning Microsoft Foundry / Azure OpenAI permissions to Container App Managed Identity..."
 
     # Get Container App to extract OpenAI endpoint
     $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
@@ -972,14 +972,14 @@ function Assign-AI-Foundry-RBAC {
     $aifProjectEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value
     
     if (-not $aifProjectEndpoint) {
-        Write-Warn "OPENAI_ENDPOINT not configured. Skipping AI Foundry RBAC assignment."
+        Write-Warn "OPENAI_ENDPOINT not configured. Skipping Microsoft Foundry RBAC assignment."
         return
     }
     
     Write-Info "AI Foundry Endpoint: $aifProjectEndpoint"
     
     # Search for Cognitive Services accounts in the resource group
-    Write-Info "Searching for Cognitive Services / AI Foundry resources in resource group..."
+    Write-Info "Searching for Cognitive Services / Microsoft Foundry resources in resource group..."
     $cognitiveAccounts = az cognitiveservices account list --resource-group $ResourceGroup | ConvertFrom-Json
     
     if (-not $cognitiveAccounts -or $cognitiveAccounts.Count -eq 0) {
@@ -1000,7 +1000,7 @@ function Assign-AI-Foundry-RBAC {
         foreach ($account in $cognitiveAccounts) {
             if ($account.kind -eq "OpenAI" -or $account.properties.endpoint -match "openai\.azure\.com") {
                 $matchingAccount = $account
-                Write-Info "Found OpenAI account for AI Foundry project: $($account.name)"
+                Write-Info "Found OpenAI account for Microsoft Foundry project: $($account.name)"
                 break
             }
         }

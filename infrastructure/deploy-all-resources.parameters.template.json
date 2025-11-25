@@ -17,13 +17,13 @@
     "aifProjectEndpoint": {
       "value": "",
       "metadata": {
-        "description": "AI Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Examples: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/"
+        "description": "Microsoft Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Examples: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/"
       }
     },
     "embeddingDeploymentName": {
       "value": "text-embedding-ada-002",
       "metadata": {
-        "description": "Embedding model deployment name in your AI Foundry project or Azure OpenAI. Common values: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002"
+        "description": "Embedding model deployment name in your Microsoft Foundry project or Azure OpenAI. Common values: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002"
       }
     },
     "entraAppDisplayName": {
@@ -32,7 +32,7 @@
     "aifProjectResourceId": {
       "value": "",
       "metadata": {
-        "description": "Optional: AI Foundry project resource ID for assigning Entra App role. Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.MachineLearningServices/workspaces/{project}"
+        "description": "Optional: Microsoft Foundry project resource ID for assigning Entra App role. Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.MachineLearningServices/workspaces/{project}"
       }
     }
   }

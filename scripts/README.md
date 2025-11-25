@@ -25,7 +25,7 @@ The main deployment script that provisions all Azure resources and deploys the M
 
 ### Setup-AIFoundry-Connection.ps1
 
-Configures AI Foundry (Azure ML) connections for the deployed MCP Toolkit.
+Configures Microsoft Foundry (Azure ML) connections for the deployed MCP Toolkit.
 
 **Usage:**
 ```powershell

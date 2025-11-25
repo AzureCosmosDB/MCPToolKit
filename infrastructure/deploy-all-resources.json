@@ -32,13 +32,13 @@
     "aifProjectEndpoint": {
       "type": "string",
       "metadata": {
-        "description": "AI Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Example: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/"
+        "description": "Microsoft Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Example: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/"
       }
     },
     "embeddingDeploymentName": {
       "type": "string",
       "metadata": {
-        "description": "Embedding model deployment name in AI Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002"
+        "description": "Embedding model deployment name in Microsoft Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002"
       }
     },
     "containerAppName": {

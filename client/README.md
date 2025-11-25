@@ -1,6 +1,6 @@
 # Azure Cosmos DB MCP Client
 
-This client demonstrates how to use Azure AI Foundry agents with the Cosmos DB MCP Toolkit.
+This client demonstrates how to use Microsoft Foundry agents with the Cosmos DB MCP Toolkit.
 
 ## Setup
 
@@ -25,7 +25,7 @@ This client demonstrates how to use Azure AI Foundry agents with the Cosmos DB M
    pip install -r requirements.txt
    ```
 
-4. **Make sure you have the MCP connection configured in AI Foundry**:
+4. **Make sure you have the MCP connection configured in Microsoft Foundry**:
    - Connection Name: `<YOUR-MCP-CONNECTION-NAME>`
    - Target URL: `https://<YOUR-CONTAINER-APP-URL>/mcp`
    - Audience: `<YOUR-ENTRA-APP-CLIENT-ID>`
@@ -67,7 +67,7 @@ Change `content=input_text[0]` to test different questions (e.g., `input_text[1]
 
 If you see "network error":
 1. Check container app logs: `az containerapp logs show --name <YOUR-CONTAINER-APP-NAME> --resource-group <YOUR-RESOURCE-GROUP> --tail 50`
-2. Verify the MCP connection in AI Foundry has the correct audience
+2. Verify the MCP connection in Microsoft Foundry has the correct audience
 3. Make sure the agent has access to the connection
 
 If authentication fails:

@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Host in Azure Container Apps (or Azure Functions)
 - Expose an MCP Server endpoint from hosting platform (ACA, AF)
 - Authenticate to MCP Server via EntraID/MI
-- Test via Azure AI Foundry Agents Service
+- Test via Microsoft Foundry Agents Service
 
 ## [1.0.0] - 2025-09-15
 

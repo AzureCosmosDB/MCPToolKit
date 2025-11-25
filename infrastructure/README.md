@@ -15,9 +15,9 @@ The infrastructure templates create only the necessary resources for running the
 
 You must already have:
 - **Azure Cosmos DB** account with your data
-- **AI Foundry project** with an embedding model deployment (e.g., text-embedding-ada-002 or text-embedding-3-small)
+- **Microsoft Foundry project** with an embedding model deployment (e.g., text-embedding-ada-002 or text-embedding-3-small)
 
-> **Note**: The AI Foundry project endpoint follows the format: `https://<your-project-name>.<region>.api.azureml.ms/` or the inference endpoint from your AI Foundry project settings. You can find this in the AI Foundry portal under your project's Settings → Endpoints.
+> **Note**: The Microsoft Foundry project endpoint follows the format: `https://<your-project-name>.<region>.api.azureml.ms/` or the inference endpoint from your Microsoft Foundry project settings. You can find this in the Microsoft Foundry portal under your project's Settings → Endpoints.
 
 ## Deployment Options
 

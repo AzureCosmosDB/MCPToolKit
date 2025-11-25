@@ -41,7 +41,7 @@ Have you considered any alternative solutions or workarounds? Describe them here
 ## Benefits
 
 Who would benefit from this feature?
-- [ ] AI Foundry users
+- [ ] Microsoft Foundry users
 - [ ] MCP client developers
 - [ ] Enterprise deployments
 - [ ] Local development

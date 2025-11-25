@@ -22,7 +22,7 @@ param containerRegistryName string = '${replace(resourcePrefix, '-', '')}acr${un
 @description('Entra App display name')
 param entraAppDisplayName string = '${resourcePrefix}-entra-app'
 
-@description('AI Foundry project resource ID (optional - only needed if assigning Entra App role to AIF project MI)')
+@description('Microsoft Foundry project resource ID (optional - only needed if assigning Entra App role to AIF project MI)')
 param aifProjectResourceId string = ''
 
 // Variables
@@ -106,9 +106,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'COSMOS_ENDPOINT'
               value: cosmosEndpoint
             }
-            // AI Foundry / Azure OpenAI configuration
-            // OPENAI_ENDPOINT: AI Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint
-            // The Azure.AI.OpenAI SDK works seamlessly with both AI Foundry and legacy endpoints
+            // Microsoft Foundry / Azure OpenAI configuration
+            // OPENAI_ENDPOINT: Microsoft Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint
+            // The Azure.AI.OpenAI SDK works seamlessly with both Microsoft Foundry and legacy endpoints
             {
               name: 'OPENAI_ENDPOINT'
               value: aifProjectEndpoint

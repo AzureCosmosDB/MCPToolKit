@@ -14,7 +14,7 @@ Describe the issue with the documentation.
 
 Where is the documentation issue?
 - **File/Page**: [e.g., README.md, docs/AUTHENTICATION-SETUP.md]
-- **Section**: [e.g., "Quick Start", "AI Foundry Integration"]
+- **Section**: [e.g., "Quick Start", "Microsoft Foundry Integration"]
 - **URL**: [If applicable]
 
 ## Issue Type

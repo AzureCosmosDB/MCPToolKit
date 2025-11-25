@@ -183,7 +183,7 @@ Use these for:
 
 After successful web testing:
 
-1. **Integrate with AI Foundry** - Connect as MCP server
+1. **Integrate with Microsoft Foundry** - Connect as MCP server
 2. **Automate with scripts** - Use generated cURL commands
 3. **Deploy to production** - Scale your MCP server
 4. **Monitor usage** - Check Microsoft Entra logs and Container App metrics
