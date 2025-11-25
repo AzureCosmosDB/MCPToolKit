@@ -65,8 +65,21 @@ if (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(c
 
             options.TokenValidationParameters = new TokenValidationParameters
             {
+                // Multi-tenant support: Accept tokens from any Azure AD tenant
                 ValidateIssuer = true,
-                ValidIssuer = $"https://login.microsoftonline.com/{tenantId}/v2.0",
+                // Accept both v1.0 and v2.0 tokens from any tenant
+                IssuerValidator = (issuer, securityToken, validationParameters) =>
+                {
+                    // Accept issuers matching either pattern from any tenant:
+                    // v2.0: https://login.microsoftonline.com/{tenantId}/v2.0
+                    // v1.0: https://sts.windows.net/{tenantId}/
+                    if (issuer.StartsWith("https://login.microsoftonline.com/") && issuer.EndsWith("/v2.0") ||
+                        issuer.StartsWith("https://sts.windows.net/") && issuer.EndsWith("/"))
+                    {
+                        return issuer;
+                    }
+                    throw new SecurityTokenInvalidIssuerException($"Invalid issuer: {issuer}");
+                },
 
                 ValidateAudience = true,
                 ValidAudiences = validAudiences,
