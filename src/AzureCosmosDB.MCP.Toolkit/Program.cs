@@ -220,13 +220,9 @@ builder.Services.AddSingleton(sp =>
     
     var credential = new DefaultAzureCredential();
     
-    // Get version for User-Agent tracking in Cosmos DB diagnostics
-    var version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "1.0.0";
-    var applicationName = $"azurecosmosdb-mcp-kit/{version}";
-    
     return new CosmosClient(endpoint, credential, new CosmosClientOptions
     {
-        ApplicationName = applicationName,
+        ApplicationName = "AzureCosmosDBMCP",
         // Enable detailed logging for diagnostics
         EnableContentResponseOnWrite = false,
         RequestTimeout = TimeSpan.FromSeconds(60)
