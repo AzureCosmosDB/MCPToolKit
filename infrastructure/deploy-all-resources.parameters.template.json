@@ -21,9 +21,15 @@
       }
     },
     "embeddingDeploymentName": {
-      "value": "text-embedding-ada-002",
+      "value": "text-embedding-3-large",
       "metadata": {
         "description": "Embedding model deployment name in your AI Foundry project or Azure OpenAI. Common values: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002"
+      }
+    },
+    "embeddingDimensions": {
+      "value": 0,
+      "metadata": {
+        "description": "Embedding dimensions (optional). Example: 1536 for text-embedding-ada-002, 3072 for text-embedding-3-large. Leave empty of  0 for text-embedding-ada-002"
       }
     },
     "entraAppDisplayName": {

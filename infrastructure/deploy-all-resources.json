@@ -38,7 +38,14 @@
     "embeddingDeploymentName": {
       "type": "string",
       "metadata": {
-        "description": "Embedding model deployment name in AI Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002"
+        "description": "Embedding model deployment name in AI Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002. "
+      }
+    },
+    "embeddingDimensions": {
+      "type": "int",
+      "defaultValue": 0,
+      "metadata": {
+        "description": "Embedding dimensions (optional) for text-embedding-3-large or text-embedding-3-small models. Leave as 0 or blank for text-embedding-ada-002."
       }
     },
     "containerAppName": {
@@ -142,6 +149,10 @@
                 {
                   "name": "OPENAI_EMBEDDING_DEPLOYMENT",
                   "value": "[parameters('embeddingDeploymentName')]"
+                },
+                {
+                  "name": "OPENAI_EMBEDDING_DIMENSIONS",
+                  "value": "[string(parameters('embeddingDimensions'))]"
                 },
                 {
                   "name": "ASPNETCORE_ENVIRONMENT",
