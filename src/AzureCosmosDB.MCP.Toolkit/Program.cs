@@ -219,9 +219,17 @@ builder.Services.AddSingleton(sp =>
     }
     
     var credential = new DefaultAzureCredential();
+    
+    // Get version for User-Agent tracking in Cosmos DB diagnostics
+    var version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "1.0.0";
+    var applicationName = $"azurecosmosdb-mcp-kit/{version}";
+    
     return new CosmosClient(endpoint, credential, new CosmosClientOptions
     {
-        ApplicationName = "AzureCosmosDBMCP"
+        ApplicationName = applicationName,
+        // Enable detailed logging for diagnostics
+        EnableContentResponseOnWrite = false,
+        RequestTimeout = TimeSpan.FromSeconds(60)
     });
 });
 
@@ -249,24 +257,39 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Add early middleware to log ALL incoming headers BEFORE any processing
+// Add request logging middleware with User-Agent tracking
 app.Use(async (context, next) =>
 {
-    if (context.Request.Path.StartsWithSegments("/mcp"))
+    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+    var path = context.Request.Path.Value ?? "";
+    var method = context.Request.Method;
+    var userAgent = context.Request.Headers["User-Agent"].ToString();
+    var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    
+    // Log all requests with User-Agent for analytics
+    logger.LogInformation(
+        "Request: {Method} {Path} | User-Agent: {UserAgent} | Client-IP: {ClientIp}", 
+        method, path, string.IsNullOrEmpty(userAgent) ? "Not-Specified" : userAgent, clientIp);
+    
+    // Detailed logging for MCP endpoints
+    if (path.StartsWith("/mcp", StringComparison.OrdinalIgnoreCase))
     {
-        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
-        logger.LogWarning("=== INCOMING REQUEST TO /mcp ===");
-        logger.LogWarning("Method: {Method}, Path: {Path}", context.Request.Method, context.Request.Path);
-        logger.LogWarning("ALL RAW HEADERS:");
-        foreach (var header in context.Request.Headers)
-        {
-            var value = header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase)
-                ? (header.Value.ToString().Length > 30 ? header.Value.ToString().Substring(0, 30) + "..." : header.Value.ToString())
-                : header.Value.ToString();
-            logger.LogWarning("  {Key}: {Value}", header.Key, value);
-        }
-        logger.LogWarning("=== END HEADERS ===");
+        logger.LogInformation("=== MCP REQUEST DETAILS ===");
+        logger.LogInformation("Method: {Method}, Path: {Path}", method, path);
+        logger.LogInformation("User-Agent: {UserAgent}", string.IsNullOrEmpty(userAgent) ? "Not-Specified" : userAgent);
+        logger.LogInformation("Client-IP: {ClientIp}", clientIp);
+        
+        // Log other relevant headers (excluding sensitive data)
+        if (context.Request.Headers.ContainsKey("Content-Type"))
+            logger.LogInformation("Content-Type: {ContentType}", context.Request.Headers["Content-Type"].ToString());
+        if (context.Request.Headers.ContainsKey("Accept"))
+            logger.LogInformation("Accept: {Accept}", context.Request.Headers["Accept"].ToString());
+        if (context.Request.Headers.ContainsKey("Referer"))
+            logger.LogInformation("Referer: {Referer}", context.Request.Headers["Referer"].ToString());
+        
+        logger.LogInformation("=== END MCP REQUEST ===");
     }
+    
     await next();
 });
 
