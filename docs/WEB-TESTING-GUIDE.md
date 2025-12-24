@@ -15,33 +15,50 @@ The Azure Cosmos DB MCP Toolkit includes an enhanced web interface that provides
 
 ## 📥 Getting Started
 
-### Step 1: Download the Web Client
+### Option 1: Use the Deployed Web Interface (Recommended)
 
-```bash
-# Download the enhanced web interface
-curl -O https://raw.githubusercontent.com/AzureCosmosDB/MCPToolKit/main/cosmos-mcp-client.html
+The web interface is **automatically deployed** with your Container App:
 
-# Or clone the entire repository
-git clone https://github.com/AzureCosmosDB/MCPToolKit.git
-cd MCPToolKit
+1. **Find your Container App URL** from deployment output or `scripts/deployment-info.json`
+2. **Open in browser**: `https://your-container-app-url.azurecontainerapps.io/`
+3. **Start testing** - No additional setup required!
+
+Example:
+```
+https://mcp-toolkit-app.icywave-532ba7dd.westus2.azurecontainerapps.io/
 ```
 
-### Step 2: Start Local Server
+### Option 2: Test Locally (Development)
+
+If you want to test against your local development server:
 
 ```bash
+# Clone the repository
+git clone https://github.com/AzureCosmosDB/MCPToolKit.git
+cd MCPToolKit
+
+# Run the application locally
+cd src/AzureCosmosDB.MCP.Toolkit
+dotnet run
+
+# Open browser to local URL
+# http://localhost:8080/
+```
+
+### Option 3: Standalone HTML File
+
+To use the web interface without running the full application:
+
+```bash
+# Copy the HTML file from the repository
+cp src/AzureCosmosDB.MCP.Toolkit/wwwroot/index.html cosmos-mcp-client.html
+
 # Start a simple HTTP server
 python -m http.server 3000
 
-# Alternative with Node.js
-npx http-server -p 3000
-
-# Alternative with PHP
-php -S localhost:3000
+# Open browser
+# http://localhost:3000/cosmos-mcp-client.html
 ```
-
-### Step 3: Open the Interface
-
-Open your browser to: **http://localhost:3000/cosmos-mcp-client.html**
 
 ## 🔐 Authentication Setup
 

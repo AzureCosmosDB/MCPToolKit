@@ -247,13 +247,16 @@ To connect your MCP server to a Microsoft Foundry project:
   -ConnectionName "cosmos-mcp-connection"
 ```
 
-**Option 2: Using Project Name**
+**Option 2: Using Project Name and Account Name**
 
 ```powershell
 .\scripts\Setup-AIFoundry-Connection.ps1 `
   -AIFoundryProjectName "YOUR-PROJECT-NAME" `
+  -AIFoundryAccountName "YOUR-ACCOUNT-NAME" `
   -ResourceGroup "YOUR-RESOURCE-GROUP"
 ```
+
+> **Note**: The account name is your Microsoft Foundry hub/account name (not the project name). If you omit `-ResourceGroup`, the script will attempt to auto-detect it.
 
 This assigns the necessary roles for Microsoft Foundry to call your MCP server.
 
@@ -322,8 +325,52 @@ See the [Python Client README](client/README.md) for a complete example of using
 
 To use with GitHub Copilot or other VS Code MCP clients:
 
-1. Get your MCP server URL from `deployment-info.json`
-2. Add to VS Code settings:
+#### Step 1: Get Your MCP Server URL
+
+Find your Container App URL in `deployment-info.json`:
+
+```powershell
+Get-Content deployment-info.json | ConvertFrom-Json | Select-Object -ExpandProperty containerAppUrl
+```
+
+Or from Azure Portal: **Container Apps** → Your app → **Overview** → **Application Url**
+
+#### Step 2: Get Your JWT Bearer Token
+
+You need a valid Azure AD token for authentication. Use Azure CLI:
+
+```bash
+# Get the Entra App Client ID from deployment-info.json
+az login
+
+# Get a token for your MCP server
+# Replace YOUR-ENTRA-APP-CLIENT-ID with the value from deployment-info.json
+az account get-access-token --resource YOUR-ENTRA-APP-CLIENT-ID --query accessToken -o tsv
+```
+
+**Quick command to get Client ID:**
+
+```powershell
+# Get the Client ID
+$clientId = (Get-Content deployment-info.json | ConvertFrom-Json).entraAppClientId
+Write-Host "Your Entra App Client ID: $clientId"
+
+# Get the token (copy the output)
+az account get-access-token --resource $clientId --query accessToken -o tsv
+```
+
+**Alternative - Use API URI:**
+
+```bash
+# If you configured a custom API URI, you can also use that
+az account get-access-token --resource "api://YOUR-ENTRA-APP-CLIENT-ID" --query accessToken -o tsv
+```
+
+> **Note**: JWT tokens typically expire after 1 hour. You'll need to refresh the token periodically by running the command again.
+
+#### Step 3: Add to VS Code Settings
+
+Add the configuration to your VS Code `settings.json`:
 
 ```json
 {
@@ -337,6 +384,30 @@ To use with GitHub Copilot or other VS Code MCP clients:
   }
 }
 ```
+
+**Complete example with real values:**
+
+```json
+{
+  "mcp.servers": {
+    "cosmosdb": {
+      "url": "https://mcp-toolkit-app.icywave-532ba7dd.westus2.azurecontainerapps.io/mcp",
+      "headers": {
+        "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGc..."
+      }
+    }
+  }
+}
+```
+
+#### Troubleshooting Token Issues
+
+If you get authentication errors:
+
+1. **Token Expired**: Get a fresh token using the `az account get-access-token` command
+2. **Invalid Audience**: Ensure the `--resource` parameter matches your Entra App Client ID
+3. **User Not Assigned Role**: Run `.\scripts\Assign-Role-To-Current-User.ps1` to assign the required role
+4. **Wrong Client ID**: Verify the Client ID in `deployment-info.json` matches what you're using
 
 ## Security
 
