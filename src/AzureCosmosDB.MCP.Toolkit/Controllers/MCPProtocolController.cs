@@ -11,15 +11,18 @@ namespace AzureCosmosDB.MCP.Toolkit.Controllers;
 public class MCPProtocolController : ControllerBase
 {
     private readonly CosmosDbToolsService _cosmosDbTools;
+    private readonly CopyJobService _copyJobService;
     private readonly AuthenticationService _authService;
     private readonly ILogger<MCPProtocolController> _logger;
 
     public MCPProtocolController(
-        CosmosDbToolsService cosmosDbTools, 
+        CosmosDbToolsService cosmosDbTools,
+        CopyJobService copyJobService,
         AuthenticationService authService,
         ILogger<MCPProtocolController> logger)
     {
         _cosmosDbTools = cosmosDbTools;
+        _copyJobService = copyJobService;
         _authService = authService;
         _logger = logger;
     }
@@ -232,6 +235,93 @@ public class MCPProtocolController : ControllerBase
                                         },
                                         required = new string[] { "databaseId", "containerId", "searchText", "vectorProperty", "selectProperties", "topN" }
                                     }
+                                },
+                                // Copy Job tools (ARM management plane)
+                                new {
+                                    name = "create_copy_job",
+                                    description = "Creates a Cosmos DB container copy job. Supports NoSQL, Cassandra, and Mongo copy types, as well as backup/restore to Azure Blob Storage.",
+                                    inputSchema = new {
+                                        type = "object",
+                                        properties = new {
+                                            subscriptionId = new { type = "string", description = "Azure subscription ID" },
+                                            jobName = new { type = "string", description = "Unique name for the copy job" },
+                                            jobProperties = new { type = "string", description = "JSON string describing copy source/destination. Example for NoSQL: {\"jobType\":\"NoSqlRUToNoSqlRU\",\"source\":{\"databaseName\":\"srcDb\",\"containerName\":\"srcContainer\"},\"destination\":{\"databaseName\":\"destDb\",\"containerName\":\"destContainer\"}}" },
+                                            mode = new { type = "string", description = "Copy mode: 'Offline' (default) or 'Online' (continuous)" },
+                                            workerCount = new { type = "integer", description = "Number of worker threads (default determined by service)" }
+                                        },
+                                        required = new string[] { "subscriptionId", "jobName", "jobProperties" }
+                                    }
+                                },
+                                new {
+                                    name = "get_copy_job",
+                                    description = "Gets the status and details of a specific Cosmos DB copy job.",
+                                    inputSchema = new {
+                                        type = "object",
+                                        properties = new {
+                                            subscriptionId = new { type = "string", description = "Azure subscription ID" },
+                                            jobName = new { type = "string", description = "Name of the copy job to retrieve" }
+                                        },
+                                        required = new string[] { "subscriptionId", "jobName" }
+                                    }
+                                },
+                                new {
+                                    name = "list_copy_jobs",
+                                    description = "Lists all Cosmos DB copy jobs for the current account.",
+                                    inputSchema = new {
+                                        type = "object",
+                                        properties = new {
+                                            subscriptionId = new { type = "string", description = "Azure subscription ID" }
+                                        },
+                                        required = new string[] { "subscriptionId" }
+                                    }
+                                },
+                                new {
+                                    name = "cancel_copy_job",
+                                    description = "Cancels a running Cosmos DB copy job.",
+                                    inputSchema = new {
+                                        type = "object",
+                                        properties = new {
+                                            subscriptionId = new { type = "string", description = "Azure subscription ID" },
+                                            jobName = new { type = "string", description = "Name of the copy job to cancel" }
+                                        },
+                                        required = new string[] { "subscriptionId", "jobName" }
+                                    }
+                                },
+                                new {
+                                    name = "pause_copy_job",
+                                    description = "Pauses a running Cosmos DB copy job.",
+                                    inputSchema = new {
+                                        type = "object",
+                                        properties = new {
+                                            subscriptionId = new { type = "string", description = "Azure subscription ID" },
+                                            jobName = new { type = "string", description = "Name of the copy job to pause" }
+                                        },
+                                        required = new string[] { "subscriptionId", "jobName" }
+                                    }
+                                },
+                                new {
+                                    name = "resume_copy_job",
+                                    description = "Resumes a paused Cosmos DB copy job.",
+                                    inputSchema = new {
+                                        type = "object",
+                                        properties = new {
+                                            subscriptionId = new { type = "string", description = "Azure subscription ID" },
+                                            jobName = new { type = "string", description = "Name of the copy job to resume" }
+                                        },
+                                        required = new string[] { "subscriptionId", "jobName" }
+                                    }
+                                },
+                                new {
+                                    name = "complete_copy_job",
+                                    description = "Completes an Online Cosmos DB copy job, flushing remaining changes from source to destination.",
+                                    inputSchema = new {
+                                        type = "object",
+                                        properties = new {
+                                            subscriptionId = new { type = "string", description = "Azure subscription ID" },
+                                            jobName = new { type = "string", description = "Name of the Online copy job to complete" }
+                                        },
+                                        required = new string[] { "subscriptionId", "jobName" }
+                                    }
                                 }
                             }
                         }
@@ -394,6 +484,41 @@ public class MCPProtocolController : ControllerBase
                 GetStringArg(args, "vectorProperty"),
                 GetStringArg(args, "selectProperties"),
                 GetRequiredIntArg(args, "topN"),
+                cancellationToken),
+            // Copy Job tools
+            "create_copy_job" => await _copyJobService.CreateCopyJob(
+                GetStringArg(args, "subscriptionId"),
+                GetStringArg(args, "jobName"),
+                GetStringArg(args, "jobProperties"),
+                GetStringArg(args, "mode"),
+                args.ContainsKey("workerCount") ? GetIntArg(args, "workerCount") : null,
+                cancellationToken),
+            "get_copy_job" => await _copyJobService.GetCopyJob(
+                GetStringArg(args, "subscriptionId"),
+                GetStringArg(args, "jobName"),
+                cancellationToken),
+            "list_copy_jobs" => await _copyJobService.ListCopyJobs(
+                GetStringArg(args, "subscriptionId"),
+                cancellationToken),
+            "cancel_copy_job" => await _copyJobService.CopyJobAction(
+                GetStringArg(args, "subscriptionId"),
+                GetStringArg(args, "jobName"),
+                "cancel",
+                cancellationToken),
+            "pause_copy_job" => await _copyJobService.CopyJobAction(
+                GetStringArg(args, "subscriptionId"),
+                GetStringArg(args, "jobName"),
+                "pause",
+                cancellationToken),
+            "resume_copy_job" => await _copyJobService.CopyJobAction(
+                GetStringArg(args, "subscriptionId"),
+                GetStringArg(args, "jobName"),
+                "resume",
+                cancellationToken),
+            "complete_copy_job" => await _copyJobService.CopyJobAction(
+                GetStringArg(args, "subscriptionId"),
+                GetStringArg(args, "jobName"),
+                "complete",
                 cancellationToken),
             _ => throw new ArgumentException($"Unknown tool: {toolName}")
         };
