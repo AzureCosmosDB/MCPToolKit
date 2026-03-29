@@ -232,6 +232,8 @@ builder.Services.AddSingleton(sp =>
 // Register services for dependency injection
 builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.CosmosDbToolsService>();
 builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.AuthenticationService>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.CopyJobService>();
 
 // Configure forwarded headers for proxy scenarios
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
