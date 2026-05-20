@@ -25,7 +25,7 @@
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.3.0-preview.4" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.53.0" />
-    <PackageReference Include="Azure.Identity" Version="1.12.0" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Azure.AI.OpenAI" Version="2.0.0" />
     <PackageReference Include="OpenAI" Version="2.0.0" />
