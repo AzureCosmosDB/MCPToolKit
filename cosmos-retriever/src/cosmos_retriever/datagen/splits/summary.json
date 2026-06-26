@@ -1,0 +1,34 @@
+[
+  {
+    "dataset": "browsecompplus",
+    "total": 830,
+    "train": 664,
+    "test": 166,
+    "sft": 199,
+    "rl": 465
+  },
+  {
+    "dataset": "sec",
+    "total": 4084,
+    "train": 3453,
+    "test": 1216,
+    "sft": 1035,
+    "rl": 2418
+  },
+  {
+    "dataset": "patents",
+    "total": 3107,
+    "train": 2518,
+    "test": 718,
+    "sft": 755,
+    "rl": 1763
+  },
+  {
+    "dataset": "web",
+    "total": 2351,
+    "train": 2224,
+    "test": 554,
+    "sft": 667,
+    "rl": 1557
+  }
+]

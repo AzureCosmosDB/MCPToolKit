@@ -1,0 +1,37 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Virtual envs ---
+.venv/
+venv/
+env/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+
+# --- Secrets / local config ---
+.env
+.env.local
+.env.*.local
+
+# --- Logs / scratch ---
+*.log
+tmp/
+runs/
+
+# --- Build artefacts ---
+src/*.egg-info/

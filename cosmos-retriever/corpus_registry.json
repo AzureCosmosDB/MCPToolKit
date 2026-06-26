@@ -1,0 +1,17 @@
+{
+  "browsecomp_corpus_container": {
+    "account_uri":  "https://aryans-internship-cosmos.documents.azure.com:443/",
+    "database":     "search_retrieval_database",
+    "embed_base_url": "https://embedding-west-us-resource.services.ai.azure.com/openai/v1",
+    "embed_api_key_env": "AZURE_OPENAI_EMBED_API_KEY",
+    "embed_model":  "text-embedding-3-small"
+  },
+  "enterprise_ragbench_corpus": {
+    "account_uri":  "https://aryans-internship-cosmos-prov.documents.azure.com:443/",
+    "database":     "search_retrieval_database",
+    "embed_base_url": "http://172.17.0.2:8002/v1",
+    "embed_api_key_env": null,
+    "embed_model":  "qwen3-embed",
+    "embed_query_instruction": "Given a question, retrieve documents that answer it"
+  }
+}
