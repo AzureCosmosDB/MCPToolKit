@@ -58,6 +58,13 @@ public sealed class McpToolRequestValidator
                 ["vectorProperty"] = ToolArgumentSchema.String(required: true, maxLength: 256),
                 ["selectProperties"] = ToolArgumentSchema.String(required: true, maxLength: 512),
                 ["topN"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 50)
+            }),
+            ["agentic_search"] = new(new Dictionary<string, ToolArgumentSchema>(StringComparer.Ordinal)
+            {
+                ["query"] = ToolArgumentSchema.String(required: true, maxLength: 4096),
+                ["maxDocuments"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 30),
+                ["database"] = ToolArgumentSchema.String(required: false, maxLength: 256),
+                ["container"] = ToolArgumentSchema.String(required: false, maxLength: 256)
             })
         };
 
@@ -68,7 +75,9 @@ public sealed class McpToolRequestValidator
             throw new ToolInputValidationException("'params' must be a JSON object.");
         }
 
-        RejectUnknownProperties(paramsElement, ["name", "arguments"], "params");
+        // `_meta` is a standard MCP field clients may attach to params (e.g. progress
+        // tokens); accept and ignore it rather than rejecting the request.
+        RejectUnknownProperties(paramsElement, ["name", "arguments", "_meta"], "params");
 
         if (!paramsElement.TryGetProperty("name", out var toolNameElement) || toolNameElement.ValueKind != JsonValueKind.String)
         {

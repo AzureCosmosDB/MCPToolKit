@@ -259,6 +259,21 @@ public class MCPProtocolController : ControllerBase
                                         required = new string[] { "databaseId", "containerId", "searchText", "textProperty", "vectorProperty", "selectProperties" },
                                         additionalProperties = false
                                     }
+                                },
+                                new {
+                                    name = "agentic_search",
+                                    description = "Runs the Harness-1 multi-turn retrieval agent (pat-jj/harness-1) against a Cosmos DB corpus and returns ranked, curated documents. Pass `container=<name>` to target a registered corpus (see CORPUS_REGISTRY env var on the host): the matching Cosmos account + database + embedding model is picked automatically per call. With no `container` the default-corpus env vars are used.",
+                                    inputSchema = new {
+                                        type = "object",
+                                        properties = new {
+                                            query = new { type = "string", description = "Natural-language information need to retrieve documents for", maxLength = 4096 },
+                                            maxDocuments = new { type = "integer", description = "Maximum number of curated documents to return (1-30, default 20)", minimum = 1, maximum = 30, @default = 20 },
+                                            database = new { type = "string", description = "Optional Cosmos database override (else COSMOS_DATABASE env var)", maxLength = 256 },
+                                            container = new { type = "string", description = "Optional Cosmos corpus container override (else COSMOS_CORPUS_CONTAINER env var)", maxLength = 256 }
+                                        },
+                                        required = new string[] { "query" },
+                                        additionalProperties = false
+                                    }
                                 }
                             }
                         }
@@ -452,6 +467,12 @@ public class MCPProtocolController : ControllerBase
                 GetStringArg(args, "selectProperties"),
                 GetOptionalIntArg(args, "topN", 10),
                 cancellationToken),
+            "agentic_search" => await _cosmosDbTools.AgenticSearch(
+                GetStringArg(args, "query"),
+                GetOptionalIntArg(args, "maxDocuments", 20),
+                GetOptionalStringArg(args, "database"),
+                GetOptionalStringArg(args, "container"),
+                cancellationToken),
             _ => throw new ArgumentException($"Unknown tool: {toolName}")
         };
     }
@@ -459,6 +480,13 @@ public class MCPProtocolController : ControllerBase
     private static string GetStringArg(Dictionary<string, object> args, string key)
     {
         return args.TryGetValue(key, out var value) ? value?.ToString() ?? "" : "";
+    }
+
+    private static string? GetOptionalStringArg(Dictionary<string, object> args, string key)
+    {
+        if (!args.TryGetValue(key, out var value)) return null;
+        var s = value?.ToString();
+        return string.IsNullOrWhiteSpace(s) ? null : s;
     }
 
     private static int GetRequiredIntArg(Dictionary<string, object> args, string key)

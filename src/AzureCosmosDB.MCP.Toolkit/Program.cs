@@ -243,6 +243,7 @@ var app = builder.Build();
 
 // Store configuration in static state for access by static tool methods
 AppState.Configuration = builder.Configuration;
+AppState.LoggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 
 // Add security headers middleware to allow MSAL authentication
 app.Use(async (context, next) =>
@@ -345,6 +346,7 @@ app.Run();
 internal static class AppState
 {
     public static IConfiguration? Configuration { get; set; }
+    public static ILoggerFactory? LoggerFactory { get; set; }
 }
 
 public partial class Program
@@ -1092,5 +1094,27 @@ public static class CosmosDbTools
         {
             return JsonSerializer.Serialize(new { error = ex.Message });
         }
+    }
+
+    [McpServerTool, Description("Runs the Harness-1 multi-turn retrieval agent (pat-jj/harness-1 served by vLLM) against a Cosmos DB corpus and returns ranked, curated documents that best answer the query. The agent internally issues hybrid (vector + full-text) RRF searches, optionally reranks with Qwen3-Reranker-8B, reads documents, and prunes its context across multiple turns. Pass `container=<name>` to target a registered corpus (see CORPUS_REGISTRY env var on the host): the right Cosmos account + database + embedding model is picked automatically per call. With no `container` arg the default-corpus env vars are used.")]
+    public static async Task<string> AgenticSearch(
+        [Description("Natural-language information need to retrieve documents for.")] string query,
+        [Description("Maximum number of curated documents to return (1-30, default 20).")] int maxDocuments = 20,
+        [Description("Optional Cosmos database name override (else COSMOS_DATABASE env var).")] string? database = null,
+        [Description("Optional Cosmos corpus container name override (else COSMOS_CORPUS_CONTAINER env var).")] string? container = null)
+    {
+        var logger = (AppState.LoggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
+            .CreateLogger("AzureCosmosDB.MCP.Toolkit.CosmosDbTools.AgenticSearch");
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'query' is required and must be non-empty." });
+        }
+        if (maxDocuments < 1 || maxDocuments > 30)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'maxDocuments' must be between 1 and 30." });
+        }
+
+        return await AgenticSearchExecutor.RunAsync(query, maxDocuments, logger, database, container);
     }
 }

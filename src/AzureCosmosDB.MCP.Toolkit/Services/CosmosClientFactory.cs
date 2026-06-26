@@ -74,7 +74,14 @@ public static class CosmosClientFactory
         }
 
         logger.LogInformation("Creating CosmosClient using Azure credentials (cloud mode)");
-        var credential = new DefaultAzureCredential();
+        // Exclude ManagedIdentityCredential: on Azure VMs MSI_ENDPOINT/IMDS is present
+        // but the managed identity often lacks Cosmos RBAC (SSO failure). Skipping it
+        // lets the chain fall through to the Azure CLI login (az login), which the
+        // Python retriever uses successfully.
+        var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+        {
+            ExcludeManagedIdentityCredential = true,
+        });
 
         return new CosmosClient(endpoint, credential, BuildClientOptions(configuration, logger, useGatewayMode: false));
     }
