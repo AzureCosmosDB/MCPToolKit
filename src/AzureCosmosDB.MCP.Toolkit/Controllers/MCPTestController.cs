@@ -73,7 +73,7 @@ public class MCPTestController : ControllerBase
             new { name = "text_search", description = "Select TOP N documents where a given property contains the provided search string. N must be between 1-20" },
             new { name = "vector_search", description = "Performs vector search on Cosmos DB using Azure OpenAI embeddings" },
             new { name = "get_approximate_schema", description = "Approximates a container schema by sampling up to 10 documents" },
-                new { name = "agentic_search", description = "Runs the Harness-1 multi-turn retrieval agent (pat-jj/harness-1) via the cosmos-retriever HTTP service and returns ranked, curated documents." }
+                new { name = "agentic_search", description = "Runs an autonomous multi-turn retrieval agent against a Cosmos DB corpus and returns ranked, curated documents that best answer the query." }
         };
 
         return Ok(new { tools, count = tools.Length, timestamp = DateTime.UtcNow });

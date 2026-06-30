@@ -62,7 +62,7 @@ public sealed class McpToolRequestValidator
             ["agentic_search"] = new(new Dictionary<string, ToolArgumentSchema>(StringComparer.Ordinal)
             {
                 ["query"] = ToolArgumentSchema.String(required: true, maxLength: 4096),
-                ["maxDocuments"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 30),
+                ["maxDocuments"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 50),
                 ["database"] = ToolArgumentSchema.String(required: false, maxLength: 256),
                 ["container"] = ToolArgumentSchema.String(required: false, maxLength: 256)
             })

@@ -10,11 +10,10 @@ namespace AzureCosmosDB.MCP.Toolkit.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The Python helper runs the trained Harness-1 multi-turn retrieval agent
-/// (<c>pat-jj/harness-1</c> served by vLLM) against an Azure Cosmos DB corpus
-/// and returns a JSON document of curated, ranked results. It is started once
-/// (<c>python -m cosmos_retriever serve</c>) and kept warm so the heavy
-/// clients (Cosmos SDK, embeddings, Harmony encoder) are not re-initialised
+/// The Python helper runs a multi-turn retrieval agent against an Azure Cosmos
+/// DB corpus and returns a JSON document of curated, ranked results. It is
+/// started once (<c>python -m cosmos_retriever serve</c>) and kept warm so the
+/// heavy clients (Cosmos SDK, embeddings, model encoder) are not re-initialised
 /// on every call.
 /// </para>
 ///
@@ -35,7 +34,7 @@ namespace AzureCosmosDB.MCP.Toolkit.Services;
 /// </list>
 ///
 /// <para>
-/// The retriever service owns its own configuration (<c>VLLM_BASE_URL</c>,
+/// The retriever service owns its own configuration (model endpoint,
 /// <c>ACCOUNT_URI</c>, <c>COSMOS_DATABASE</c>, <c>COSMOS_CORPUS_CONTAINER</c>,
 /// <c>CORPUS_REGISTRY_FILE</c>, <c>AZURE_OPENAI_*</c>, etc.) read from its own
 /// environment / <c>.env</c> file; none of it flows through this process.
@@ -65,7 +64,7 @@ public static class AgenticSearchExecutor
     /// <c>POST /search</c> endpoint.
     /// </summary>
     /// <param name="query">Natural-language information need.</param>
-    /// <param name="maxDocuments">Cap on the number of curated docs returned (1–30).</param>
+    /// <param name="maxDocuments">Cap on the number of curated docs returned (1–50).</param>
     /// <param name="logger">Logger for request lifecycle events.</param>
     /// <param name="database">Optional Cosmos database override.</param>
     /// <param name="container">Optional Cosmos container override.</param>

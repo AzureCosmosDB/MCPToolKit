@@ -262,12 +262,12 @@ public class MCPProtocolController : ControllerBase
                                 },
                                 new {
                                     name = "agentic_search",
-                                    description = "Runs the Harness-1 multi-turn retrieval agent (pat-jj/harness-1) against a Cosmos DB corpus and returns ranked, curated documents. Pass `container=<name>` to target a registered corpus (see CORPUS_REGISTRY env var on the host): the matching Cosmos account + database + embedding model is picked automatically per call. With no `container` the default-corpus env vars are used.",
+                                    description = "PREFERRED tool for answering knowledge questions from a Cosmos DB corpus. Runs an autonomous multi-turn retrieval agent that plans sub-queries, issues several vector/keyword searches, follows leads across documents, reranks candidates, and returns a curated, ranked set of the most relevant documents with their content. Use this for anything beyond a trivial lookup: complex, ambiguous, multi-part, or multi-hop questions; or whenever one-shot vector_search/text_search might miss relevant context. It is more thorough (but slower) than the single-shot search tools, so prefer it when answer quality matters more than latency. Just pass a natural-language `query`; the agent handles query planning and ranking for you. Optionally pass `container=<name>` to target a registered corpus (see the CORPUS_REGISTRY env var on the host): the matching Cosmos account + database + embedding model is selected automatically per call. With no `container`, the default-corpus env vars are used. Use `maxDocuments` to cap how many curated documents are returned.",
                                     inputSchema = new {
                                         type = "object",
                                         properties = new {
                                             query = new { type = "string", description = "Natural-language information need to retrieve documents for", maxLength = 4096 },
-                                            maxDocuments = new { type = "integer", description = "Maximum number of curated documents to return (1-30, default 20)", minimum = 1, maximum = 30, @default = 20 },
+                                            maxDocuments = new { type = "integer", description = "Maximum number of curated documents to return (1-50, default 20)", minimum = 1, maximum = 50, @default = 20 },
                                             database = new { type = "string", description = "Optional Cosmos database override (else COSMOS_DATABASE env var)", maxLength = 256 },
                                             container = new { type = "string", description = "Optional Cosmos corpus container override (else COSMOS_CORPUS_CONTAINER env var)", maxLength = 256 }
                                         },

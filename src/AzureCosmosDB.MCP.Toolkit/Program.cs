@@ -1096,10 +1096,10 @@ public static class CosmosDbTools
         }
     }
 
-    [McpServerTool, Description("Runs the Harness-1 multi-turn retrieval agent (pat-jj/harness-1 served by vLLM) against a Cosmos DB corpus and returns ranked, curated documents that best answer the query. The agent internally issues hybrid (vector + full-text) RRF searches, optionally reranks with Qwen3-Reranker-8B, reads documents, and prunes its context across multiple turns. Pass `container=<name>` to target a registered corpus (see CORPUS_REGISTRY env var on the host): the right Cosmos account + database + embedding model is picked automatically per call. With no `container` arg the default-corpus env vars are used.")]
+    [McpServerTool, Description("PREFERRED tool for answering knowledge questions from a Cosmos DB corpus. Runs an autonomous multi-turn retrieval agent that plans sub-queries, issues several vector/keyword searches, follows leads across documents, reranks candidates, and returns a curated, ranked set of the most relevant documents with their content. Use this for anything beyond a trivial lookup: complex, ambiguous, multi-part, or multi-hop questions; or whenever one-shot vector_search/text_search might miss relevant context. It is more thorough (but slower) than the single-shot search tools, so prefer it when answer quality matters more than latency. Just pass a natural-language `query`; the agent handles query planning and ranking for you. Optionally pass `container=<name>` to target a registered corpus (see the CORPUS_REGISTRY env var on the host): the matching Cosmos account + database + embedding model is selected automatically per call. With no `container` the default-corpus env vars are used. Use `maxDocuments` to cap how many curated documents are returned.")]
     public static async Task<string> AgenticSearch(
         [Description("Natural-language information need to retrieve documents for.")] string query,
-        [Description("Maximum number of curated documents to return (1-30, default 20).")] int maxDocuments = 20,
+        [Description("Maximum number of curated documents to return (1-50, default 20).")] int maxDocuments = 20,
         [Description("Optional Cosmos database name override (else COSMOS_DATABASE env var).")] string? database = null,
         [Description("Optional Cosmos corpus container name override (else COSMOS_CORPUS_CONTAINER env var).")] string? container = null)
     {
@@ -1110,9 +1110,9 @@ public static class CosmosDbTools
         {
             return JsonSerializer.Serialize(new { error = "Parameter 'query' is required and must be non-empty." });
         }
-        if (maxDocuments < 1 || maxDocuments > 30)
+        if (maxDocuments < 1 || maxDocuments > 50)
         {
-            return JsonSerializer.Serialize(new { error = "Parameter 'maxDocuments' must be between 1 and 30." });
+            return JsonSerializer.Serialize(new { error = "Parameter 'maxDocuments' must be between 1 and 50." });
         }
 
         return await AgenticSearchExecutor.RunAsync(query, maxDocuments, logger, database, container);
