@@ -1,13 +1,17 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import time
-from typing import Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 import requests
 import structlog
-from baseten_performance_client import ClassificationResponse, PerformanceClient
 
 from cosmos_retriever.config import get_config
+
+if TYPE_CHECKING:
+    from baseten_performance_client import ClassificationResponse, PerformanceClient
 
 logger = structlog.get_logger("search_agent.rerank")
 
@@ -172,7 +176,10 @@ class BasetenReranker(Reranker):
         super().__init__(token_counter=token_counter, max_tokens=max_tokens)
         if client is None:
             config = get_config()
-            client = config.get_baseten_client()
+            client = config.get_baseten_client()  # type: ignore[assignment]
+
+
+            
         self.client = client
         self.batch_size = batch_size
         self.max_concurrent_requests = max_concurrent_requests

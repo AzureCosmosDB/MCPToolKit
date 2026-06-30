@@ -206,8 +206,8 @@ class CosmosRetriever:
     ) -> RetrievalResult:
         """Drive the upstream ``SlidingWindowSearchEnv`` for one query.
 
-        Mirrors ``inference/evaluate_harness1_vllm.py:run_single_episode`` from
-        the upstream harness-1 repo so that recall on BrowseComp+ matches the
+        Mirrors ``inference/vllm_policy.py:run_single_episode`` from the
+        upstream harness-1 repo so that recall on BrowseComp+ matches the
         published Harness-1 numbers (the env owns the ``WorkingMemory`` /
         ``curate`` / ``fan_out_search`` machinery the trained model relies on).
         """
@@ -220,7 +220,7 @@ class CosmosRetriever:
         from cosmos_retriever.env_rl import (  # noqa: PLC0415 — heavy, harmony-only
             SlidingWindowSearchEnv,
         )
-        from cosmos_retriever.inference.evaluate_harness1_vllm import (  # noqa: PLC0415
+        from cosmos_retriever.inference.vllm_policy import (  # noqa: PLC0415
             VllmTokenCompleter,
             run_single_episode,
         )
@@ -381,6 +381,7 @@ class CosmosRetriever:
             num_turns=chat_result.num_turns,
             final_text=chat_result.final_text,
             elapsed_s=round(elapsed, 3),
+            pool_doc_ids=chat_result.pool_doc_ids,
             metadata=chat_result.metadata,
         )
         logger.info(

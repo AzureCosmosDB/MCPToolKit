@@ -73,6 +73,7 @@ class ChatSearchResult:
     documents: list[ChatDocument]
     num_turns: int
     final_text: str = ""
+    pool_doc_ids: list[str] = field(default_factory=list)
     metadata: dict[str, str | int | float] = field(default_factory=dict)
 
 
@@ -343,18 +344,24 @@ def run_responses_search(
 
     documents = _extract_documents(final_text, doc_text, max_documents)
 
+    # Every chunk surfaced by any tool call across the whole trajectory lands in
+    # ``doc_text``; its doc-level projection is the "pool" used for trajectory_recall.
+    pool_doc_ids = sorted({cid.split("__")[0] for cid in doc_text})
+
     logger.info(
         "responses_search_complete",
         model=model,
         num_turns=num_turns,
         num_documents=len(documents),
         tool_calls=tool_call_count,
+        pool_size=len(pool_doc_ids),
     )
 
     return ChatSearchResult(
         documents=documents,
         num_turns=num_turns,
         final_text=final_text,
+        pool_doc_ids=pool_doc_ids,
         metadata={
             "backend": "openai_responses",
             "model": model,

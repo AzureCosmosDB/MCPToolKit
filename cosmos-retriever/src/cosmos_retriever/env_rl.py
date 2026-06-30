@@ -13,9 +13,9 @@ Drives the trained Harness-1 policy over a corpus for a single query: it owns
 the ``WorkingMemory`` / ``curate`` / ``fan_out_search`` machinery and renders
 budget-bounded context each turn via ``ultra_core``. There is no gold data,
 reward computation, or RL training here — recall is scored externally by the
-caller (e.g. ``scripts/bench_erag.py``) against ``env.wm.curated_ids``.
+caller against ``env.wm.curated_ids``.
 
-Consumed by ``retriever.py`` and ``inference/evaluate_harness1_vllm.py``.
+Consumed by ``retriever.py`` and ``inference/vllm_policy.py``.
 """
 
 import asyncio
