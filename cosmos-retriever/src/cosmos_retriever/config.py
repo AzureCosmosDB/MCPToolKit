@@ -439,9 +439,6 @@ def get_settings() -> RetrieverSettings:
     return settings
 
 
-# Upstream Harness-1 modules (rerank.py, agent.py, datagen/) call ``get_config()``
-# and treat its return value as a ``Config`` with ``get_baseten_client`` etc.
-# We forward to the same singleton so those modules import cleanly.
 def get_config() -> "RetrieverSettings":
     return get_settings()
 

@@ -17,7 +17,6 @@ import structlog
 
 if TYPE_CHECKING:
     from harness.config import Config
-    from datagen.search_dataset import SearchDataset
 
 logger = structlog.get_logger("search_agent.agent")
 
@@ -297,7 +296,7 @@ class SearchTaskEvaluationOutput(BaseModel):
     def from_search_task_output(
         cls,
         output: SearchTaskOutput,
-        dataset: "SearchDataset",
+        dataset: "Any",
     ) -> "SearchTaskEvaluationOutput":
         """Create an evaluation output from a SearchTaskOutput and dataset.
 
@@ -345,7 +344,7 @@ class SearchTaskEvaluationOutput(BaseModel):
     @staticmethod
     def _calculate_prune_accuracy(
         output: SearchTaskOutput,
-        dataset: "SearchDataset",
+        dataset: "Any",
     ) -> Optional[float]:
         """Calculate prune accuracy for a search task output.
 
@@ -379,7 +378,7 @@ class SearchTaskEvaluationOutput(BaseModel):
     @staticmethod
     def _calculate_rerank_metrics(
         output: SearchTaskOutput,
-        dataset: "SearchDataset",
+        dataset: "Any",
     ) -> tuple[Optional[float], Optional[int]]:
         """Calculate reranker metrics for a search task output.
 
