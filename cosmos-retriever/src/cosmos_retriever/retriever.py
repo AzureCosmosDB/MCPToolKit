@@ -69,6 +69,11 @@ class RetrievalResult:
     pool_doc_ids: list[str] = field(default_factory=list)
     elapsed_s: float = 0.0
     metadata: dict[str, str | int | float] = field(default_factory=dict)
+    # Per-query trajectory: the agent's step-by-step actions (search queries
+    # issued, per-turn tool calls, programmatic turn summaries, and the final
+    # importance tags assigned during curation). Populated by the harmony_vllm
+    # backend; empty for backends that don't expose turn-level state.
+    trajectory: dict[str, object] = field(default_factory=dict)
 
 
 class CosmosRetriever:
@@ -267,6 +272,19 @@ class CosmosRetriever:
                 )
             )
 
+        trajectory = {
+            "search_history": list(getattr(env.wm, "search_history", []) or []),
+            "turn_summaries": list(getattr(env, "_result_summaries", []) or []),
+            "curated_importance": dict(getattr(env.wm, "curated_importance", {}) or {}),
+            "turn_tools": [
+                [
+                    getattr(getattr(t, "tool_schema", None), "name", type(t).__name__)
+                    for t in getattr(action, "tools", [])
+                ]
+                for action in getattr(env, "_all_actions", []) or []
+            ],
+        }
+
         result = RetrievalResult(
             query=query,
             documents=documents,
@@ -274,6 +292,7 @@ class CosmosRetriever:
             final_text="",
             elapsed_s=round(elapsed, 3),
             pool_doc_ids=sorted({cid.split("__")[0] for cid in env.wm.pool_ids}),
+            trajectory=trajectory,
             metadata={
                 "n_pool": len(env.wm.pool_ids),
                 "n_curated": len(env.wm.curated_ids),
