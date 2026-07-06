@@ -48,7 +48,7 @@ from azure.cosmos import CosmosClient, DatabaseProxy
 from azure.identity import AzureCliCredential, DefaultAzureCredential
 from dotenv import load_dotenv
 from openai import OpenAI
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 if TYPE_CHECKING:
@@ -130,27 +130,30 @@ class RetrieverSettings(BaseSettings):
     )
 
     # --- Inference backend selection --------------------------------------
-    # "harmony_vllm" (default): the fine-tuned pat-jj/harness-1 checkpoint
-    #   served by vLLM, driven with raw Harmony token-IDs.
-    # "openai_chat": ANY OpenAI-compatible chat model (Azure AI Foundry
-    #   deployment, OpenAI, local server, ...) driven with standard
-    #   /chat/completions function/tool calling. Set the CHAT_* vars below.
-    # "openai_responses": same, but via the /responses API (required by
-    #   reasoning models like gpt-5.x that are only exposed there).
+    # The agent is driven by any OpenAI-compatible model via standard
+    # function/tool calling over the four real Cosmos tools
+    # (search_corpus, grep_corpus, read_document, prune_chunks):
+    # "openai_responses" (default): the /responses API, required by reasoning
+    #   models such as gpt-5.x that are only exposed there.
+    # "openai_chat": the /chat/completions API for standard chat models.
+    # Configure the endpoint with the CHAT_* vars below.
     inference_backend: str = Field(
-        default="harmony_vllm",
-        description='Inference backend: "harmony_vllm", "openai_chat", or "openai_responses".',
+        default="openai_responses",
+        description='Inference backend: "openai_responses" or "openai_chat".',
     )
 
-    # --- vLLM serving the Harness-1 model (harmony_vllm backend) ------------
-    vllm_base_url: str = Field(
-        default="http://127.0.0.1:8000",
-        description="OpenAI-compatible vLLM endpoint serving pat-jj/harness-1.",
-    )
-    vllm_model_name: str = Field(default="harness-1")
-    vllm_timeout_s: float = Field(default=900.0, ge=1.0)
+    @field_validator("inference_backend")
+    @classmethod
+    def _validate_inference_backend(cls, v: str) -> str:
+        normalized = (v or "").strip().lower()
+        allowed = {"openai_chat", "openai_responses"}
+        if normalized not in allowed:
+            raise ValueError(
+                f"INFERENCE_BACKEND must be one of {sorted(allowed)}, got {v!r}."
+            )
+        return normalized
 
-    # --- Generic chat LLM endpoint (openai_chat backend) -------------------
+    # --- Generic chat LLM endpoint -----------------------------------------
     # Any OpenAI-compatible chat-completions endpoint. For Azure AI Foundry,
     # CHAT_BASE_URL is the deployment's OpenAI-compatible URL (or set
     # CHAT_API_VERSION to use the Azure OpenAI client) and CHAT_MODEL is the

@@ -677,85 +677,6 @@ class UserTextTool(Tool):
 
 
 # ============================================================================
-# Stub tools used by the ultra_core working-memory env
-# ----------------------------------------------------------------------------
-# These tools are *registered* on the toolset so the model sees their
-# schemas, but their actual behaviour is dispatched by
-# :class:`cosmos_retriever.env.UltraSearchEnv` (which has access to the
-# cross-turn :class:`WorkingMemory`).
-# ============================================================================
-
-
-def _stub_tool(name_for_error: str):
-    def _impl(self, params, overrides=None):
-        raise NotImplementedError(
-            f"{name_for_error} is dispatched by UltraSearchEnv, not the tool itself"
-        )
-    return _impl
-
-
-class FanOutSearchTool(Tool):
-    """Stub: dispatched by env. Runs N parallel ``search_corpus`` calls."""
-
-    tool_schema: ToolSchema
-
-    def __init__(self) -> None:
-        from cosmos_retriever.ultra_core import FAN_OUT_SEARCH_SCHEMA
-        super().__init__(tool_schema=FAN_OUT_SEARCH_SCHEMA)
-
-    __call__ = _stub_tool("fan_out_search")
-
-
-class CurateTool(Tool):
-    """Stub: dispatched by env. Updates :class:`WorkingMemory.curated_ids`."""
-
-    tool_schema: ToolSchema
-
-    def __init__(self) -> None:
-        from cosmos_retriever.ultra_core import CURATE_SCHEMA
-        super().__init__(tool_schema=CURATE_SCHEMA)
-
-    __call__ = _stub_tool("curate")
-
-
-class EndSearchTool(Tool):
-    """Sentinel tool — when called, the env terminates the episode."""
-
-    tool_schema: ToolSchema
-
-    def __init__(self) -> None:
-        from cosmos_retriever.ultra_core import END_SEARCH_SCHEMA
-        super().__init__(tool_schema=END_SEARCH_SCHEMA)
-
-    def __call__(self, params, overrides=None):
-        return "Search concluded.", None
-
-
-class ReviewDocsTool(Tool):
-    """Stub: dispatched by env. Returns full text of previously-found docs."""
-
-    tool_schema: ToolSchema
-
-    def __init__(self) -> None:
-        from cosmos_retriever.ultra_core import REVIEW_DOCS_SCHEMA
-        super().__init__(tool_schema=REVIEW_DOCS_SCHEMA)
-
-    __call__ = _stub_tool("review_docs")
-
-
-class VerifyTool(Tool):
-    """Stub: dispatched by env (v8d). Verifies a claim against doc IDs."""
-
-    tool_schema: ToolSchema
-
-    def __init__(self) -> None:
-        from cosmos_retriever.ultra_core import VERIFY_SCHEMA
-        super().__init__(tool_schema=VERIFY_SCHEMA)
-
-    __call__ = _stub_tool("verify")
-
-
-# ============================================================================
 # ToolSet
 # ============================================================================
 
@@ -799,20 +720,13 @@ class ToolSet(BaseModel):
         max_tokens: int | None = None,
         search_limit: int = 50,
         search_display_limit: int = 10,
-        include_ultra_tools: bool = False,
         name: str | None = None,
     ) -> ToolSet:
         """Build a fully-wired retrieval :class:`ToolSet`.
 
         Returns a :class:`ToolSet` containing :class:`SearchCorpusTool`,
         :class:`GrepCorpusTool`, :class:`ReadDocumentTool`, and
-        :class:`PruneChunksTool` — exactly the four tools the trained
-        Harness-1 model expects to see on its developer message.
-
-        When ``include_ultra_tools`` is true, also registers the stub
-        ``fan_out_search``, ``curate``, ``review_docs``, and
-        ``end_search`` tools used by
-        :class:`cosmos_retriever.env.UltraSearchEnv`.
+        :class:`PruneChunksTool` — the four tools the agent drives.
         """
 
         toolset = cls(name=name)
@@ -845,11 +759,6 @@ class ToolSet(BaseModel):
             )
         )
         toolset.add_tool(PruneChunksTool())
-        if include_ultra_tools:
-            toolset.add_tool(FanOutSearchTool())
-            toolset.add_tool(CurateTool())
-            toolset.add_tool(ReviewDocsTool())
-            toolset.add_tool(EndSearchTool())
         return toolset
 
 

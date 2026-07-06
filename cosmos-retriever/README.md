@@ -23,10 +23,7 @@ provided for local testing.
   cosmos_retriever  (this package, FastAPI + uvicorn)
    ├─ TokenBudgetRetrievalSubagent
    ├─ SearchCorpus / Grep / ReadDocument / PruneChunks tools
-   └─ VLLMHarmonyInferenceModel  ──► vLLM /v1/completions (token-IDs)
-                                     Cosmos DB hybrid RRF
-                                     Azure OpenAI embeddings
-                                     Qwen3-Reranker (Baseten or local vLLM)
+    └─ OpenAI-compatible model  ──► /responses or /chat/completions
 ```
 
 ## Install
@@ -87,22 +84,22 @@ at the repo root). Required:
 
 | Variable | Purpose |
 |---|---|
-| `VLLM_BASE_URL` | OpenAI-compatible vLLM endpoint serving Harness-1 |
+| `CHAT_BASE_URL` / `CHAT_MODEL` / `CHAT_API_KEY` | OpenAI-compatible model endpoint |
 | `ACCOUNT_URI` / `COSMOS_DATABASE` / `COSMOS_CORPUS_CONTAINER` | Cosmos target |
 | `OPENAI_API_KEY` *(or `AZURE_OPENAI_*`)* | Embeddings backend |
 
 ### Inference backend
 
-`INFERENCE_BACKEND` selects what drives the retrieval agent:
+`INFERENCE_BACKEND` selects which OpenAI-compatible API surface drives the
+retrieval agent over the four Cosmos tools:
 
-| Value | Model | Endpoint vars |
+| Value | API | Endpoint vars |
 |---|---|---|
-| `harmony_vllm` *(default)* | The fine-tuned `pat-jj/harness-1` checkpoint, driven with raw Harmony token-IDs. | `VLLM_BASE_URL`, `VLLM_MODEL_NAME` |
-| `openai_chat` | **Any** OpenAI-compatible chat model (Azure AI Foundry deployment, OpenAI, local server, ...), driven with standard function/tool calling. | `CHAT_BASE_URL`, `CHAT_API_KEY`, `CHAT_MODEL`, optional `CHAT_API_VERSION` |
+| `openai_responses` *(default)* | The `/responses` API, required by reasoning models such as gpt-5.x. | `CHAT_BASE_URL`, `CHAT_API_KEY`, `CHAT_MODEL`, optional `CHAT_API_VERSION`, `CHAT_REASONING_EFFORT` |
+| `openai_chat` | The `/chat/completions` API for standard chat models. | `CHAT_BASE_URL`, `CHAT_API_KEY`, `CHAT_MODEL`, optional `CHAT_API_VERSION` |
 
-With `openai_chat` the agent uses the same Cosmos tools, so retrieval quality
-depends on the chosen model's tool-use ability rather than the Harness-1
-checkpoint. Example (Azure AI Foundry):
+Either way the agent uses the same Cosmos tools, so retrieval quality depends on
+the chosen model's tool-use ability. Example (Azure AI Foundry):
 
 ```bash
 INFERENCE_BACKEND=openai_chat \
@@ -132,13 +129,10 @@ src/cosmos_retriever/
   __main__.py        # `python -m cosmos_retriever {search,serve}`
   server.py          # FastAPI app: GET /health + POST /search
   retriever.py       # CosmosRetriever facade
-  agent.py           # 3 agent classes + prune_chunks_from_trajectory
   tools.py           # SearchCorpus / Grep / ReadDocument / PruneChunks
-  trajectory.py      # Action / Observation / Trajectory + Harmony rendering
   rerank.py          # Reranker ABC + Baseten + local-vLLM
   inference/
-    base.py          # AgentInferenceModel ABC
-    vllm.py          # VLLMHarmonyInferenceModel (httpx → /v1/completions)
+    openai_chat.py   # run_chat_search / run_responses_search (4-tool)
   prompts.py         # retrieval subagent system prompt
   config.py          # RetrieverSettings (pydantic-settings)
   utils.py
