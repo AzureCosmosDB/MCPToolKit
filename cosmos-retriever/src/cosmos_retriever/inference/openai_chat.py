@@ -24,7 +24,7 @@ Both follow the same loop:
    each with the chunk text seen during searches.
 
 The loop is fully synchronous (the Cosmos SDK + OpenAI SDK calls are sync), so
-the FastAPI server runs it on a worker thread just like the Harmony path.
+the FastAPI server runs it on a worker thread.
 """
 
 from __future__ import annotations

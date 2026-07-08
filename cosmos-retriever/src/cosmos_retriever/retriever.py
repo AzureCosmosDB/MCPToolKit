@@ -1,6 +1,6 @@
 """High-level facade: ``CosmosRetriever().search(query)`` returns docs.
 
-Wraps the agent state machine, tool-set wiring, and Harmony token counter into
+Wraps the agent loop, tool-set wiring, and token counter into
 a single synchronous object that the CLI (and any in-process caller) drives
 directly. The agent loop is synchronous end-to-end (Cosmos SDK + httpx +
 tiktoken are all sync); there is no async surface here on purpose so that
