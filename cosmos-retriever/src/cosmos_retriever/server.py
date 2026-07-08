@@ -143,7 +143,7 @@ def create_app(settings: RetrieverSettings | None = None) -> FastAPI:
     app = FastAPI(
         title="Cosmos Retriever",
         version="0.1.0",
-        description="HTTP service running the Harness-1 multi-turn search agent.",
+        description="HTTP service running the multi-turn Cosmos search agent.",
         lifespan=lifespan,
     )
 

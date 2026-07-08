@@ -1,9 +1,9 @@
 # Cosmos Retriever (Python helper)
 
-A Python library + FastAPI service that runs the **Harness-1** multi-turn
-search agent (`pat-jj/harness-1`, a fine-tuned `openai/gpt-oss-20b` served by
-vLLM) against an Azure Cosmos DB corpus and returns the curated documents as
-JSON.
+A Python library + FastAPI service that runs a multi-turn search agent — driven
+by any OpenAI-compatible model (Azure AI Foundry, OpenAI, or a local
+OpenAI-compatible server) over four Cosmos tools — against an Azure Cosmos DB
+corpus and returns the curated documents as JSON.
 
 The [Azure Cosmos DB MCP Toolkit](../MCPToolKit/)'s `agentic_search` tool
 calls this service's `POST /search` endpoint over HTTP. A one-shot CLI is also
@@ -112,14 +112,6 @@ python -m cosmos_retriever serve
 Optional reranker (pick at most one):
 - `BASETEN_API_KEY` + `BASETEN_MODEL_URL` — Baseten Qwen3-Reranker-8B classify
 - `VLLM_RERANKER_URL` — local vLLM `/score` endpoint with Qwen3-Reranker-8B
-
-A bundled wrapper script reads `../harness-1/.env.local` (the upstream repo's
-local config) and re-exports under our variable names:
-
-```bash
-scripts/run_with_upstream_env.sh \
-  python -m cosmos_retriever search --query "..."
-```
 
 ## Layout
 

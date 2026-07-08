@@ -1,15 +1,15 @@
-"""Tool implementations for the Harness-1 retrieval agent.
+"""Tool implementations for the Cosmos retrieval agent.
 
 The corpus lives in Azure Cosmos DB for NoSQL and is queried with hybrid
 RRF search (vector + full-text) plus an optional reranker. There are five
-tools (matching the trained model's output schema):
+tools:
 
 * :class:`SearchCorpusTool` — hybrid vector + FTS search over the corpus.
 * :class:`GrepCorpusTool` — BM25-narrowed regex search.
 * :class:`ReadDocumentTool` — fetch all chunks of a document by its docid.
 * :class:`PruneChunksTool` — record chunk-ids whose context should be removed.
-* :class:`MultiToolUseTool` — wraps a parallel tool-call bundle (the trained
-  model emits a single ``functions.multi_tool_use`` call to fan out).
+* :class:`MultiToolUseTool` — wraps a parallel tool-call bundle for models that
+  emit a single ``functions.multi_tool_use`` call to fan out.
 
 Plus :class:`UserTextTool`, the sentinel tool for assistant text in the
 trajectory, and :class:`SerializedTool`, a placeholder used by tests/round-trips.
@@ -627,7 +627,7 @@ _ToolSetT: TypeAlias = "ToolSet"
 class MultiToolUseTool(Tool):
     """Wraps a parallel tool-call bundle for models without native parallel calls.
 
-    The trained Harness-1 model emits a single ``functions.multi_tool_use``
+    A model emits a single ``functions.multi_tool_use``
     call with a list of inner ``{tool_name, parameters}`` entries; the inner
     tools are dispatched serially against the bound :class:`ToolSet`.
     """

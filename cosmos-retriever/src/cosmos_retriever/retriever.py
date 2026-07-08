@@ -52,7 +52,7 @@ class RetrievalResult:
 
 
 class CosmosRetriever:
-    """Drive the trained Harness-1 agent against a Cosmos DB corpus.
+    """Drive an OpenAI-compatible retrieval agent against a Cosmos DB corpus.
 
     Construct once per process; reuse for many ``search`` calls. The internal
     Cosmos and OpenAI clients are kept open for the lifetime of the instance.
@@ -179,8 +179,7 @@ class CosmosRetriever:
 
         Used when ``INFERENCE_BACKEND=openai_chat``. The chat agent talks to
         the same Cosmos :class:`ToolSet`, so retrieval quality depends on the
-        chosen model's tool-use ability rather than the fine-tuned Harness-1
-        checkpoint.
+        chosen model's tool-use ability.
         """
 
         from cosmos_retriever.inference.openai_chat import (  # noqa: PLC0415

@@ -30,7 +30,7 @@ from dataclasses import asdict
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cosmos-retriever",
-        description="Run the Harness-1 multi-turn retrieval agent and emit JSON.",
+        description="Run the multi-turn Cosmos retrieval agent and emit JSON.",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 

@@ -1,11 +1,11 @@
 [project]
 name = "cosmos-retriever"
 version = "0.1.0"
-description = "Multi-turn search agent (Harness-1) as a Python library + CLI, designed to be invoked by the Azure Cosmos DB MCP Toolkit's `agentic_search` tool."
+description = "Multi-turn Cosmos DB search agent (driven by any OpenAI-compatible model) as a Python library + CLI, designed to be invoked by the Azure Cosmos DB MCP Toolkit's `agentic_search` tool."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-authors = [{ name = "Harness-1 Contributors" }]
+authors = [{ name = "Cosmos Retriever Contributors" }]
 keywords = ["retrieval", "rag", "cosmos-db", "vllm", "agent"]
 classifiers = [
   "Development Status :: 4 - Beta",
