@@ -414,9 +414,13 @@ public static class CosmosDbTools
             }
 
             var credential = new DefaultAzureCredential();
+            // ApplicationName is emitted in the Cosmos SDK UserAgent and surfaces in
+            // DailyUserAgentSummary telemetry. Format: "AzureCosmosDBMCP-<kebab-tool-name>".
+            // When adding a new [McpServerTool], set its own suffix here so per-tool
+            // dashboards keep working. See docs/specs/tool-name-in-useragent.md.
             using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
             {
-                ApplicationName = "AzureCosmosDBMCP"
+                ApplicationName = "AzureCosmosDBMCP-list-databases"
             });
 
             var results = new List<string>();
@@ -462,7 +466,7 @@ public static class CosmosDbTools
             var credential = new DefaultAzureCredential();
             using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
             {
-                ApplicationName = "AzureCosmosDBMCP"
+                ApplicationName = "AzureCosmosDBMCP-list-collections"
             });
 
             var db = client.GetDatabase(databaseId);
@@ -514,7 +518,7 @@ public static class CosmosDbTools
             var credential = new DefaultAzureCredential();
             using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
             {
-                ApplicationName = "AzureCosmosDBMCP"
+                ApplicationName = "AzureCosmosDBMCP-get-recent-documents"
             });
 
             var container = client.GetContainer(databaseId, containerId);
@@ -586,7 +590,7 @@ public static class CosmosDbTools
             var credential = new DefaultAzureCredential();
             using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
             {
-                ApplicationName = "AzureCosmosDBMCP"
+                ApplicationName = "AzureCosmosDBMCP-text-search"
             });
 
             var container = client.GetContainer(databaseId, containerId);
@@ -644,7 +648,7 @@ public static class CosmosDbTools
             var credential = new DefaultAzureCredential();
             using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
             {
-                ApplicationName = "AzureCosmosDBMCP"
+                ApplicationName = "AzureCosmosDBMCP-find-document-by-id"
             });
 
             var container = client.GetContainer(databaseId, containerId);
@@ -694,7 +698,7 @@ public static class CosmosDbTools
             var credential = new DefaultAzureCredential();
             using var client = new CosmosClient(endpoint, credential, new CosmosClientOptions
             {
-                ApplicationName = "AzureCosmosDBMCP"
+                ApplicationName = "AzureCosmosDBMCP-get-approximate-schema"
             });
 
             var container = client.GetContainer(databaseId, containerId);
@@ -891,7 +895,7 @@ public static class CosmosDbTools
             // Perform vector search in Cosmos DB
             using var cosmosClient = new CosmosClient(cosmosEndpoint, credential, new CosmosClientOptions
             {
-                ApplicationName = "AzureCosmosDBMCP"
+                ApplicationName = "AzureCosmosDBMCP-vector-search"
             });
 
             var container = cosmosClient.GetContainer(databaseId, containerId);
@@ -1047,7 +1051,7 @@ public static class CosmosDbTools
             // Perform hybrid search in Cosmos DB
             using var cosmosClient = new CosmosClient(cosmosEndpoint, credential, new CosmosClientOptions
             {
-                ApplicationName = "AzureCosmosDBMCP"
+                ApplicationName = "AzureCosmosDBMCP-hybrid-search"
             });
 
             var container = cosmosClient.GetContainer(databaseId, containerId);
