@@ -39,8 +39,25 @@ public class MCPProtocolController : ControllerBase
 
     [HttpPost]
     [AllowAnonymous] // Allow request through, we'll validate manually
-    public async Task<IActionResult> HandleMCPRequest([FromBody] JsonElement requestJson)
+    public async Task<IActionResult> HandleMCPRequest([FromBody] JsonElement? requestJsonNullable)
     {
+        if (!requestJsonNullable.HasValue || requestJsonNullable.Value.ValueKind == JsonValueKind.Undefined)
+        {
+            return BadRequest(new MCPResponse
+            {
+                JsonRpc = "2.0",
+                Id = null,
+                Error = new
+                {
+                    code = -32700,
+                    message = "Parse error",
+                    data = "Request body must contain valid JSON."
+                }
+            });
+        }
+
+        var requestJson = requestJsonNullable.Value;
+
         // Parse request info for logging
         var method = requestJson.TryGetProperty("method", out var methodProp) ? methodProp.GetString() : null;
         var id = requestJson.TryGetProperty("id", out var idProp2) ? idProp2 : (JsonElement?)null;

@@ -1,415 +1,467 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Azure Cosmos DB MCP Server Test</title>
+    <title>Azure Cosmos DB MCP Toolkit</title>
     <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
     <style>
+        :root {
+            --primary: #0078d4;
+            --primary-dark: #106ebe;
+            --success: #107c10;
+            --danger: #d13438;
+            --warning: #ffb900;
+            --bg: #f9fafb;
+            --card: #ffffff;
+            --border: #e5e7eb;
+            --text: #1f2937;
+            --text-muted: #6b7280;
+            --radius: 10px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+            --shadow-lg: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
         }
-        .container {
-            background: white;
-            border-radius: 8px;
-            padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #0078d4;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .auth-section {
-            background: #e8f4fd;
-            border: 1px solid #0078d4;
-            border-radius: 6px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .section {
-            margin-bottom: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 6px;
-            border-left: 4px solid #0078d4;
-        }
-        .form-group {
-            margin-bottom: 20px;
-            clear: both;
-        }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #323130;
-        }
-        input[type="text"], input[type="url"], input[type="number"], select, textarea {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #d1d1d1;
-            border-radius: 4px;
-            font-size: 14px;
-            box-sizing: border-box;
-        }
-        input[type="text"]:focus, input[type="url"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: #0078d4;
-            box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
-        }
-        .button-group {
-            display: flex;
-            gap: 10px;
-            margin: 20px 0;
-            flex-wrap: wrap;
-        }
-        button {
-            background-color: #0078d4;
+        .header {
+            background: linear-gradient(135deg, #0078d4 0%, #005a9e 100%);
             color: white;
+            padding: 24px 0;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+        .header p { opacity: 0.85; font-size: 0.875rem; margin-top: 4px; }
+        .layout {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 860px) {
+            .layout { grid-template-columns: 1fr; }
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            background: #f8fafc;
+        }
+        .card-header h2 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .card-body { padding: 20px; }
+        .full-width { grid-column: 1 / -1; }
+        .badge {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+        .badge-success { background: #dcfce7; color: #166534; }
+        .badge-warning { background: #fef3c7; color: #92400e; }
+        .badge-danger { background: #fee2e2; color: #991b1b; }
+
+        /* Forms */
+        .form-group { margin-bottom: 16px; }
+        .form-group:last-child { margin-bottom: 0; }
+        .form-label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+            margin-bottom: 6px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.875rem;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            background: white;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.12);
+        }
+        select.form-input { cursor: pointer; }
+        .form-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 16px;
             border: none;
-            padding: 12px 24px;
-            border-radius: 4px;
+            border-radius: 6px;
+            font-size: 0.825rem;
+            font-weight: 600;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: background-color 0.2s;
+            transition: all 0.15s;
         }
-        button:hover:not(:disabled) {
-            background-color: #106ebe;
+        .btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+        .btn:active:not(:disabled) { transform: translateY(0); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover:not(:disabled) { background: #0e700e; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover:not(:disabled) { background: #b52d32; }
+        .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+        .btn-ghost:hover:not(:disabled) { background: #f3f4f6; color: var(--text); }
+        .btn-lg { padding: 12px 24px; font-size: 0.9rem; }
+        .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        /* Status bar */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            margin-bottom: 12px;
         }
-        button:disabled {
-            background-color: #a19f9d;
-            cursor: not-allowed;
+        .status-bar.disconnected {
+            background: #fef2f2;
+            border-color: #fecaca;
         }
-        .login-btn {
-            background-color: #107c10;
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            flex-shrink: 0;
         }
-        .login-btn:hover:not(:disabled) {
-            background-color: #0e700e;
-        }
-        .logout-btn {
-            background-color: #d13438;
-        }
-        .logout-btn:hover:not(:disabled) {
-            background-color: #b52d32;
-        }
-        .user-info {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-        }
-        .auth-status {
-            font-weight: 600;
-            margin-bottom: 10px;
-        }
-        .auth-status.authenticated {
-            color: #107c10;
-        }
-        .auth-status.unauthenticated {
-            color: #d13438;
-        }
-        .discover-btn {
-            background-color: #107c10;
-        }
-        .discover-btn:hover:not(:disabled) {
-            background-color: #0e700e;
-        }
-        .output {
-            background-color: #f8f8f8;
-            border: 1px solid #d1d1d1;
-            border-radius: 4px;
-            padding: 15px;
-            margin-top: 20px;
-            min-height: 200px;
-            max-height: 600px;
+        .status-bar.disconnected .status-dot { background: var(--danger); }
+
+        /* Output */
+        .output-panel {
+            background: #1e1e2e;
+            color: #cdd6f4;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            min-height: 240px;
+            max-height: 500px;
             overflow-y: auto;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
+            padding: 16px;
             white-space: pre-wrap;
             word-break: break-word;
-            line-height: 1.4;
         }
-        .loading {
-            color: #0078d4;
-            font-style: italic;
-        }
-        .error {
-            color: #d13438;
-            background-color: #fdf2f2;
-            border-color: #f1aeb5;
-        }
-        .success {
-            color: #107c10;
-        }
-        .info {
-            margin-bottom: 20px;
-            padding: 15px;
-            background-color: #e1f5fe;
-            border-left: 4px solid #0078d4;
-            border-radius: 4px;
-        }
-        .curl-example {
-            background-color: #2d2d30;
-            color: #cccccc;
-            padding: 15px;
-            border-radius: 4px;
-            margin: 10px 0;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
-            overflow-x: auto;
-            position: relative;
-        }
-        .curl-container {
-            position: relative;
-            margin: 10px 0;
-        }
-        .copy-btn {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background: #0078d4;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 11px;
-        }
-        .copy-btn:hover {
-            background: #106ebe;
-        }
-        .copy-btn.copied {
-            background: #107c10;
-        }
-        .collapsible {
-            background-color: #e1e1e1;
-            color: #0078d4;
-            cursor: pointer;
-            padding: 15px;
-            border: none;
-            text-align: left;
-            outline: none;
-            font-size: 16px;
-            font-weight: 600;
-            border-radius: 4px;
-            margin-bottom: 10px;
+        .output-panel.error { border: 2px solid var(--danger); }
+        .output-panel.success { border: 2px solid var(--success); }
+
+        /* Collapsible */
+        .collapse-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             width: 100%;
+            background: none;
+            border: none;
+            padding: 14px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            background: #f8fafc;
+            text-align: left;
+        }
+        .collapse-toggle h2 { font-size: 0.9rem; font-weight: 600; }
+        .collapse-toggle .chevron {
+            transition: transform 0.2s;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        .collapse-toggle.open .chevron { transform: rotate(180deg); }
+        .collapse-body { display: none; }
+        .collapse-body.open { display: block; }
+
+        /* Curl section */
+        .curl-block {
             position: relative;
+            background: #2d2d30;
+            color: #cccccc;
+            padding: 12px 14px;
+            padding-right: 60px;
+            border-radius: 6px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.75rem;
+            overflow-x: auto;
+            margin-top: 8px;
+            white-space: pre-wrap;
+            word-break: break-all;
         }
-        .collapsible:after {
-            content: '';
+        .curl-block .copy-btn {
             position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            transition: transform 0.3s;
+            top: 6px;
+            right: 6px;
+            background: rgba(255,255,255,0.1);
+            color: #ccc;
+            border: none;
+            padding: 3px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.65rem;
         }
-        .collapsible.collapsed:after {
-            transform: translateY(-50%) rotate(-90deg);
+        .curl-block .copy-btn:hover { background: rgba(255,255,255,0.2); }
+        .curl-block .copy-btn.copied { background: var(--success); color: white; }
+
+        /* Auth section */
+        .auth-config-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
         }
-        .collapsible-content {
-            overflow: hidden;
-            transition: max-height 0.3s ease;
+        @media (max-width: 600px) { .auth-config-row { grid-template-columns: 1fr; } }
+        .local-mode-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            margin-bottom: 16px;
+            cursor: pointer;
         }
-        .collapsible-content.collapsed {
-            max-height: 0;
+        .local-mode-toggle input { cursor: pointer; }
+
+        .user-info-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            margin-bottom: 12px;
         }
-        .collapsible-content:not(.collapsed) {
-            max-height: 1000px;
+
+        .alert {
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            margin-bottom: 12px;
         }
+        .alert-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Azure Cosmos DB MCP Server Test</h1>
-        
-        <div class="auth-section">
-            <h3> Microsoft Entra Authentication</h3>
+    <div class="header">
+        <h1>Azure Cosmos DB MCP Toolkit</h1>
+        <p>Test and explore your MCP server tools</p>
+    </div>
 
-            <div class="form-group">
-                <label style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
-                    <input type="checkbox" id="localMode" onchange="onModeChanged()" style="width: auto;">
-                    Local Emulator Mode (No Entra login required)
-                </label>
-                <small style="color: #666; display: block; margin-top: 4px;">
-                    Enable this when testing local MCP server with DEV_BYPASS_AUTH=true.
-                </small>
-            </div>
-            
-            <!-- Auth Error Display -->
-            <div id="authError" style="display: none; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
-                <strong> Authentication Error:</strong>
-                <div id="authErrorMessage" style="margin-top: 5px;"></div>
-            </div>
-            
-            <div id="authStatus" class="auth-status unauthenticated">
-                Not authenticated
-            </div>
-            
-            <div id="configSection">
-                <div class="form-group">
-                    <label for="clientId">Entra App Client ID:</label>
-                    <input type="text" id="clientId" placeholder="Enter your Entra App Client ID" value="">
-                    <small style="color: #666;">
-                        Get from deployment-info.json (ENTRA_APP_CLIENT_ID) or run:<br>
-                        <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">az ad app list --display-name "Azure Cosmos DB MCP Toolkit API" --query "[0].appId" -o tsv</code>
-                    </small>
+    <div class="layout">
+        <!-- Left Column: Connection + Tool Selection -->
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Connection Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Connection</h2>
+                    <span id="statusBadge" class="badge badge-warning">Not connected</span>
                 </div>
-                
-                <div class="form-group">
-                    <label for="tenantId">Tenant ID:</label>
-                    <input type="text" id="tenantId" placeholder="Enter your Microsoft Entra Tenant ID" value="">
-                    <small style="color: #666;">
-                        Get your Azure AD tenant ID by running:<br>
-                        <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">az account show --query "tenantId" -o tsv</code>
-                    </small>
-                </div>
-                
-                <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin-top: 15px;">
-                    <strong> Important:</strong> Client ID and Tenant ID must be <strong>different</strong> values. 
-                    Don't confuse them or swap their positions!
+                <div class="card-body">
+                    <div class="form-group">
+                        <label class="form-label" for="serverUrl">MCP Server URL</label>
+                        <input type="url" id="serverUrl" class="form-input" placeholder="https://your-app.azurecontainerapps.io" oninput="updateCurlExamples()">
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="listTools()" id="listToolsBtn">List Tools</button>
+                        <button class="btn btn-success" onclick="testTool()" id="testToolBtn">Quick Test</button>
+                    </div>
                 </div>
             </div>
-            
-            <div id="userInfo" class="user-info" style="display: none;">
-                <strong>Logged in as:</strong> <span id="userName"></span><br>
-                <strong>Tenant:</strong> <span id="userTenant"></span><br>
-                <strong>Roles:</strong> <span id="userRoles">Checking...</span>
-            </div>
-            
-            <div class="button-group">
-                <button id="loginBtn" class="login-btn" onclick="login()"> Sign In with Microsoft Entra</button>
-                <button id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none;"> Sign Out</button>
-                <button id="getTokenBtn" onclick="getTokenSilently()" style="display: none;"> Refresh Token</button>
-            </div>
-        </div>
 
-        <div class="section">
-            <h3>Configuration</h3>
-            <div class="form-group">
-                <label for="serverUrl">Azure Cosmos DB MCP Server URL:</label>
-                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="" oninput="updateCurlExamples()">
-            </div>
-        </div>
+            <!-- Tool Testing Card (visible by default) -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Test Tools</h2>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label class="form-label" for="toolSelect">Tool</label>
+                        <select id="toolSelect" class="form-input" onchange="updateToolParameters()">
+                            <option value="list_databases">List Databases</option>
+                            <option value="list_collections">List Collections</option>
+                            <option value="get_recent_documents">Get Recent Documents</option>
+                            <option value="find_document_by_id">Find Document by ID</option>
+                            <option value="text_search">Text Search</option>
+                            <option value="get_approximate_schema">Get Schema</option>
+                            <option value="vector_search">Vector Search</option>
+                            <option value="hybrid_search">Hybrid Search</option>
+                        </select>
+                    </div>
 
-        <div class="section">
-            <h3>Actions</h3>
-            <div class="button-group">
-                <button onclick="listTools()" id="listToolsBtn">List Tools</button>
-                <button onclick="testTool()" id="testToolBtn" class="discover-btn">Test Tool</button>
-                <button onclick="clearOutput()" style="background-color: #605e5c;">Clear Output</button>
-            </div>
-        </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cosmosDatabase">Database ID</label>
+                        <input type="text" id="cosmosDatabase" class="form-input" placeholder="e.g. RetailDB">
+                    </div>
 
-        <div class="section">
-            <h3 class="collapsible collapsed" onclick="toggleCollapse(this)">Test Cosmos DB Tools</h3>
-            
-            <div class="collapsible-content collapsed">
-                <div class="info">
-                    <span style="font-size: 11px;">Configure your Cosmos DB parameters below. If you've run deployment scripts, you can find these values in the Azure portal under your Cosmos DB account.</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="cosmosDatabase">Database ID:</label>
-                    <input type="text" id="cosmosDatabase" placeholder="your-database-name">
-                </div>
-                
-                <div class="form-group">
-                    <label for="cosmosContainer">Container ID:</label>
-                    <input type="text" id="cosmosContainer" placeholder="your-container-name">
-                </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cosmosContainer">Container ID</label>
+                        <input type="text" id="cosmosContainer" class="form-input" placeholder="e.g. inventory">
+                    </div>
 
-                <div class="form-group">
-                    <label for="toolSelect">Select Tool:</label>
-                    <select id="toolSelect" onchange="updateToolParameters()">
-                        <option value="">Select a tool...</option>
-                        <option value="list_databases">List Databases</option>
-                        <option value="list_collections">List Collections</option>
-                        <option value="get_recent_documents">Get Recent Documents</option>
-                        <option value="find_document_by_id">Find Document by ID</option>
-                        <option value="text_search">Text Search</option>
-                        <option value="vector_search">Vector Search</option>
-                        <option value="hybrid_search">Hybrid Search</option>
-                        <option value="get_approximate_schema">Get Schema</option>
-                    </select>
-                </div>
+                    <div id="toolParameters">
+                        <div class="form-group" id="docIdField" style="display: none;">
+                            <label class="form-label" for="docId">Document ID</label>
+                            <input type="text" id="docId" class="form-input" placeholder="document-id">
+                        </div>
+                        <div class="form-group" id="searchPropertyField" style="display: none;">
+                            <label class="form-label" for="searchProperty">Property</label>
+                            <input type="text" id="searchProperty" class="form-input" placeholder="name or description">
+                        </div>
+                        <div class="form-group" id="searchPhraseField" style="display: none;">
+                            <label class="form-label" for="searchPhrase">Search Phrase</label>
+                            <input type="text" id="searchPhrase" class="form-input" placeholder="Azure">
+                        </div>
+                        <div class="form-group" id="vectorSearchField" style="display: none;">
+                            <label class="form-label" for="vectorSearch">Search Text</label>
+                            <input type="text" id="vectorSearch" class="form-input" placeholder="machine learning algorithms">
+                        </div>
+                        <div class="form-group" id="vectorPropertyField" style="display: none;">
+                            <label class="form-label" for="vectorProperty">Vector Property</label>
+                            <input type="text" id="vectorProperty" class="form-input" placeholder="vector or embeddings">
+                        </div>
+                        <div class="form-group" id="textPropertyField" style="display: none;">
+                            <label class="form-label" for="textProperty">Text Property (full-text index)</label>
+                            <input type="text" id="textProperty" class="form-input" placeholder="content or text">
+                        </div>
+                        <div class="form-group" id="selectPropertiesField" style="display: none;">
+                            <label class="form-label" for="selectProperties">Select Properties</label>
+                            <input type="text" id="selectProperties" class="form-input" placeholder="id,title,content">
+                        </div>
+                        <div class="form-group" id="resultCountField" style="display: none;">
+                            <label class="form-label" for="resultCount">Number of Documents</label>
+                            <input type="number" id="resultCount" class="form-input" min="1" max="20" value="5">
+                        </div>
+                    </div>
 
-                <div id="toolParameters" style="display: none;">
-                    <div class="form-group" id="docIdField" style="display: none;">
-                        <label for="docId">Document ID:</label>
-                        <input type="text" id="docId" placeholder="document-id">
-                    </div>
-                    
-                    <div class="form-group" id="searchPropertyField" style="display: none;">
-                        <label for="searchProperty">Property:</label>
-                        <input type="text" id="searchProperty" placeholder="name or profile.description">
-                    </div>
-                    
-                    <div class="form-group" id="searchPhraseField" style="display: none;">
-                        <label for="searchPhrase">Search Phrase:</label>
-                        <input type="text" id="searchPhrase" placeholder="Azure">
-                    </div>
-                    
-                    <div class="form-group" id="vectorSearchField" style="display: none;">
-                        <label for="vectorSearch">Search Text:</label>
-                        <input type="text" id="vectorSearch" placeholder="machine learning algorithms">
-                    </div>
-                    
-                    <div class="form-group" id="vectorPropertyField" style="display: none;">
-                        <label for="vectorProperty">Vector Property:</label>
-                        <input type="text" id="vectorProperty" placeholder="vector or embeddings">
-                    </div>
-                    
-                    <div class="form-group" id="textPropertyField" style="display: none;">
-                        <label for="textProperty">Text Property (full-text index):</label>
-                        <input type="text" id="textProperty" placeholder="content or text">
-                    </div>
-                    
-                    <div class="form-group" id="selectPropertiesField" style="display: none;">
-                        <label for="selectProperties">Select Properties:</label>
-                        <input type="text" id="selectProperties" placeholder="id,title,content">
-                    </div>
-                    
-                    <div class="form-group" id="resultCountField" style="display: none;">
-                        <label for="resultCount">Number of Documents (1-20):</label>
-                        <input type="number" id="resultCount" min="1" max="20" value="5">
-                        <small style="color: #666; display: block; margin-top: 4px;">
-                            How many recent documents to retrieve
-                        </small>
-                    </div>
-                </div>
-                
-                <div class="button-group">
-                    <button onclick="testCosmosDbTool()" id="testCosmosBtn" style="background-color: #8a2be2;">Invoke Selected Tool</button>
+                    <button class="btn btn-primary btn-lg" onclick="testCosmosDbTool()" id="testCosmosBtn" style="width: 100%; justify-content: center; margin-top: 8px;">
+                        Invoke Tool
+                    </button>
                 </div>
             </div>
         </div>
 
-        <div class="section">
-            <h3>Azure Cosmos DB MCP Server Response</h3>
-            <div id="output" class="output">Ready to make requests...</div>
-        </div>
-
-        <div class="section">
-            <h3>Equivalent cURL Commands</h3>
-            <div id="curlExamples">
-                <p><strong>List Tools:</strong></p>
-                <div class="curl-container">
-                    <div class="curl-example" id="listToolsCurl">Configure server URL and token first</div>
-                    <button class="copy-btn" onclick="copyToClipboard('listToolsCurl', this)">Copy</button>
+        <!-- Right Column: Output + Auth -->
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Response Output -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Response</h2>
+                    <button class="btn btn-ghost" onclick="clearOutput()" style="padding: 4px 10px; font-size: 0.75rem;">Clear</button>
                 </div>
-                
-                <p><strong>Test Selected Tool:</strong></p>
-                <div class="curl-container">
-                    <div class="curl-example" id="testToolCurl">Configure server URL and token first</div>
-                    <button class="copy-btn" onclick="copyToClipboard('testToolCurl', this)">Copy</button>
+                <div class="card-body" style="padding: 12px;">
+                    <div id="output" class="output-panel">Ready to test. Select a tool and click "Invoke Tool".</div>
+                </div>
+            </div>
+
+            <!-- Auth (collapsed by default) -->
+            <div class="card">
+                <button class="collapse-toggle" id="authToggle" onclick="toggleSection('auth')">
+                    <h2>Authentication</h2>
+                    <span class="chevron">&#9660;</span>
+                </button>
+                <div class="collapse-body" id="authBody">
+                    <div class="card-body">
+                        <label class="local-mode-toggle">
+                            <input type="checkbox" id="localMode" onchange="onModeChanged()">
+                            <span><strong>Local Mode</strong> &mdash; skip Entra login (DEV_BYPASS_AUTH=true)</span>
+                        </label>
+
+                        <div id="authError" class="alert alert-error" style="display: none;">
+                            <strong>Error:</strong> <span id="authErrorMessage"></span>
+                        </div>
+
+                        <div id="authStatus" class="status-bar disconnected">
+                            <span class="status-dot"></span>
+                            <span id="authStatusText">Not authenticated</span>
+                        </div>
+
+                        <div id="userInfo" class="user-info-bar" style="display: none;">
+                            <span><strong><span id="userName"></span></strong> &bull; Tenant: <span id="userTenant"></span> &bull; Roles: <span id="userRoles">Checking...</span></span>
+                        </div>
+
+                        <div id="configSection">
+                            <div class="auth-config-row">
+                                <div class="form-group">
+                                    <label class="form-label" for="clientId">Client ID</label>
+                                    <input type="text" id="clientId" class="form-input" placeholder="Entra App Client ID">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="tenantId">Tenant ID</label>
+                                    <input type="text" id="tenantId" class="form-input" placeholder="Azure AD Tenant ID">
+                                </div>
+                            </div>
+                            <p class="form-hint" style="margin-bottom: 12px;">Find these in deployment-info.json or via <code>az account show</code></p>
+                        </div>
+
+                        <div class="btn-group">
+                            <button id="loginBtn" class="btn btn-success" onclick="login()">Sign In</button>
+                            <button id="logoutBtn" class="btn btn-danger" onclick="logout()" style="display: none;">Sign Out</button>
+                            <button id="getTokenBtn" class="btn btn-ghost" onclick="getTokenSilently()" style="display: none;">Refresh Token</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- cURL (collapsed by default) -->
+            <div class="card">
+                <button class="collapse-toggle" id="curlToggle" onclick="toggleSection('curl')">
+                    <h2>cURL Commands</h2>
+                    <span class="chevron">&#9660;</span>
+                </button>
+                <div class="collapse-body" id="curlBody">
+                    <div class="card-body">
+                        <p class="form-hint" style="margin-bottom: 8px;"><strong>List Tools</strong></p>
+                        <div class="curl-block">
+                            <span id="listToolsCurl">Configure server URL first</span>
+                            <button class="copy-btn" onclick="copyToClipboard('listToolsCurl', this)">Copy</button>
+                        </div>
+                        <p class="form-hint" style="margin-top: 14px; margin-bottom: 8px;"><strong>Test Tool</strong></p>
+                        <div class="curl-block">
+                            <span id="testToolCurl">Configure server URL first</span>
+                            <button class="copy-btn" onclick="copyToClipboard('testToolCurl', this)">Copy</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -421,64 +473,61 @@
         let currentAccount = null;
         let currentAccessToken = null;
 
+        function toggleSection(name) {
+            const toggle = document.getElementById(name + 'Toggle');
+            const body = document.getElementById(name + 'Body');
+            const isOpen = body.classList.contains('open');
+            if (isOpen) {
+                toggle.classList.remove('open');
+                body.classList.remove('open');
+            } else {
+                toggle.classList.add('open');
+                body.classList.add('open');
+            }
+        }
+
         // Initialize MSAL
         function initializeMsal() {
-            if (isLocalMode()) {
-                return true;
-            }
+            if (isLocalMode()) return true;
 
             const clientId = document.getElementById('clientId').value.trim();
             const tenantId = document.getElementById('tenantId').value.trim();
-            
+
             if (!clientId) {
-                showError('Please enter the Entra App Client ID. You can find this in the Azure Portal under your Entra ID app registration, or run: az ad app list --display-name "Azure Cosmos DB MCP Toolkit API" --query "[0].appId" -o tsv');
+                showError('Please enter the Entra App Client ID.');
                 return false;
             }
-
             if (!tenantId) {
-                showError('Please enter your Tenant ID. You can find it by running: az account show --query "tenantId" -o tsv');
+                showError('Please enter your Tenant ID.');
                 return false;
             }
 
-            // Validate that clientId and tenantId are GUIDs
             const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-            
             if (!guidPattern.test(clientId)) {
-                showError('Client ID must be a valid GUID (e.g., 12345678-1234-1234-1234-123456789abc). Please check your deployment-info.json for the correct ENTRA_APP_CLIENT_ID value.');
+                showError('Client ID must be a valid GUID.');
                 return false;
             }
-            
             if (!guidPattern.test(tenantId)) {
-                showError('Tenant ID must be a valid GUID. Run: az account show --query "tenantId" -o tsv');
+                showError('Tenant ID must be a valid GUID.');
                 return false;
             }
-
-            // Check if user accidentally swapped clientId and tenantId
             if (tenantId === clientId) {
-                showError('Client ID and Tenant ID should be different. Please verify you have the correct values from your deployment-info.json');
+                showError('Client ID and Tenant ID should be different values.');
                 return false;
             }
 
             const authority = `https://login.microsoftonline.com/${tenantId}`;
-
             const msalConfig = {
                 auth: {
                     clientId: clientId,
                     authority: authority,
                     redirectUri: window.location.origin + window.location.pathname
                 },
-                cache: {
-                    cacheLocation: "sessionStorage",
-                    storeAuthStateInCookie: false
-                }
+                cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false }
             };
 
             try {
                 msalInstance = new msal.PublicClientApplication(msalConfig);
-                console.log('MSAL initialized successfully');
-                console.log('Client ID:', clientId);
-                console.log('Tenant ID:', tenantId);
-                console.log('Authority:', authority);
                 return true;
             } catch (error) {
                 showError(`Failed to initialize MSAL: ${error.message}`);
@@ -486,185 +535,137 @@
             }
         }
 
-        // Login function
         async function login() {
             if (isLocalMode()) {
-                showError('Login is disabled in Local Emulator Mode. Turn it off to use Microsoft Entra authentication.');
+                showError('Login is disabled in Local Mode.');
                 return;
             }
-
             if (!initializeMsal()) return;
 
             const clientId = document.getElementById('clientId').value.trim();
-            
-            const loginRequest = {
-                scopes: [`${clientId}/.default`],
-                prompt: "select_account"
-            };
+            const loginRequest = { scopes: [`${clientId}/.default`], prompt: "select_account" };
 
             try {
                 showLoading('Redirecting to Microsoft Entra login...');
                 const response = await msalInstance.loginPopup(loginRequest);
-                
                 currentAccount = response.account;
                 currentAccessToken = response.accessToken;
-                
                 updateAuthUI(true);
                 updateCurlExamples();
                 showSuccess('Login successful!');
-                
             } catch (error) {
                 console.error('Login failed:', error);
-                
-                // Check for specific error about application not found
                 if (error.message && error.message.includes('was not found in the directory')) {
-                    showError(`Application not found in directory.\n\n This usually means:\n1. The Client ID is incorrect - verify it matches your deployment-info.json\n2. You may have entered the Tenant ID in the Client ID field\n3. The Entra App hasn't been created yet - run the deployment script\n\n To fix:\n- Get the correct Client ID: az ad app list --display-name "Azure Cosmos DB MCP Toolkit API" --query "[0].appId" -o tsv\n- Or check your deployment-info.json file for "ENTRA_APP_CLIENT_ID"\n\nOriginal error: ${error.message}`);
-                } else if (error.message && error.message.includes('wrong tenant')) {
-                    showError(`Wrong tenant error.\n\n You may have:\n1. Entered the wrong Tenant ID\n2. Swapped the Client ID and Tenant ID\n\n To fix:\n- Get your Tenant ID: az account show --query "tenantId" -o tsv\n- Verify Client ID and Tenant ID are different values\n\nOriginal error: ${error.message}`);
+                    showError(`Application not found. Verify your Client ID matches deployment-info.json.`);
                 } else {
-                    showError(`Login failed: ${error.message}\n\n Common issues:\n- Client ID is incorrect\n- Tenant ID is incorrect\n- App registration doesn't exist\n- Pop-up was blocked by browser`);
+                    showError(`Login failed: ${error.message}`);
                 }
                 updateAuthUI(false);
             }
         }
 
-        // Logout function
         async function logout() {
             if (!msalInstance) return;
-
             try {
-                await msalInstance.logoutPopup({
-                    account: currentAccount
-                });
-                
+                await msalInstance.logoutPopup({ account: currentAccount });
                 currentAccount = null;
                 currentAccessToken = null;
                 updateAuthUI(false);
                 showResponse('Logged out successfully');
-                
             } catch (error) {
-                console.error('Logout failed:', error);
                 showError(`Logout failed: ${error.message}`);
             }
         }
 
-        // Get token silently
         async function getTokenSilently(silent = false) {
             if (!msalInstance || !currentAccount) {
-                if (!silent) {
-                    showError('Please login first');
-                }
+                if (!silent) showError('Please login first');
                 return null;
             }
-
             const clientId = document.getElementById('clientId').value.trim();
-            
-            const tokenRequest = {
-                scopes: [`${clientId}/.default`],
-                account: currentAccount
-            };
+            const tokenRequest = { scopes: [`${clientId}/.default`], account: currentAccount };
 
             try {
                 const response = await msalInstance.acquireTokenSilent(tokenRequest);
                 currentAccessToken = response.accessToken;
-                
-                if (!silent) {
-                    showSuccess(`Token refreshed successfully!\nExpires: ${new Date(response.expiresOn)}`);
-                }
+                if (!silent) showSuccess(`Token refreshed. Expires: ${new Date(response.expiresOn).toLocaleTimeString()}`);
                 updateCurlExamples();
-                
                 return response.accessToken;
-                
             } catch (error) {
-                console.error('Silent token acquisition failed:', error);
-                
                 if (error instanceof msal.InteractionRequiredAuthError) {
-                    // Fallback to interactive token acquisition
                     try {
                         const response = await msalInstance.acquireTokenPopup(tokenRequest);
                         currentAccessToken = response.accessToken;
                         updateCurlExamples();
                         return response.accessToken;
                     } catch (interactiveError) {
-                        if (!silent) {
-                            showError(`Token acquisition failed: ${interactiveError.message}`);
-                        }
+                        if (!silent) showError(`Token acquisition failed: ${interactiveError.message}`);
                         return null;
                     }
-                } else {
-                    if (!silent) {
-                        showError(`Token acquisition failed: ${error.message}`);
-                    }
-                    return null;
                 }
+                if (!silent) showError(`Token acquisition failed: ${error.message}`);
+                return null;
             }
         }
 
-        // Update authentication UI
         function updateAuthUI(isAuthenticated) {
             const authStatus = document.getElementById('authStatus');
+            const authStatusText = document.getElementById('authStatusText');
             const loginBtn = document.getElementById('loginBtn');
             const logoutBtn = document.getElementById('logoutBtn');
             const getTokenBtn = document.getElementById('getTokenBtn');
             const userInfo = document.getElementById('userInfo');
             const configSection = document.getElementById('configSection');
+            const statusBadge = document.getElementById('statusBadge');
 
             if (isLocalMode()) {
-                authStatus.className = 'auth-status authenticated';
-                authStatus.textContent = ' Local mode enabled (authentication bypass)';
+                authStatus.className = 'status-bar';
+                authStatusText.textContent = 'Local mode (auth bypassed)';
                 loginBtn.style.display = 'none';
                 logoutBtn.style.display = 'none';
                 getTokenBtn.style.display = 'none';
                 userInfo.style.display = 'none';
                 configSection.style.display = 'none';
+                statusBadge.className = 'badge badge-success';
+                statusBadge.textContent = 'Local mode';
                 return;
             }
 
             if (isAuthenticated && currentAccount) {
-                authStatus.className = 'auth-status authenticated';
-                authStatus.textContent = ' Authenticated';
-                
+                authStatus.className = 'status-bar';
+                authStatusText.textContent = 'Authenticated';
                 loginBtn.style.display = 'none';
-                logoutBtn.style.display = 'inline-block';
-                getTokenBtn.style.display = 'inline-block';
-                
-                userInfo.style.display = 'block';
+                logoutBtn.style.display = 'inline-flex';
+                getTokenBtn.style.display = 'inline-flex';
+                userInfo.style.display = 'flex';
                 configSection.style.display = 'none';
-                
+                statusBadge.className = 'badge badge-success';
+                statusBadge.textContent = 'Authenticated';
                 document.getElementById('userName').textContent = currentAccount.name || currentAccount.username;
                 document.getElementById('userTenant').textContent = currentAccount.tenantId;
-                
-                // Check for roles in the token
+
                 if (currentAccessToken) {
                     try {
                         const tokenPayload = JSON.parse(atob(currentAccessToken.split('.')[1]));
                         const roles = tokenPayload.roles || [];
-                        document.getElementById('userRoles').textContent = roles.length > 0 ? roles.join(', ') : 'No roles found';
-                        
-                        // Log full token payload for debugging
-                        console.log('Token payload:', tokenPayload);
-                        console.log('Audience (aud):', tokenPayload.aud);
-                        console.log('Roles:', roles);
+                        document.getElementById('userRoles').textContent = roles.length > 0 ? roles.join(', ') : 'None';
                     } catch (e) {
-                        document.getElementById('userRoles').textContent = 'Unable to parse roles';
-                        console.error('Token parsing error:', e);
+                        document.getElementById('userRoles').textContent = 'N/A';
                     }
                 }
-                
             } else {
-                authStatus.className = 'auth-status unauthenticated';
-                authStatus.textContent = ' Not authenticated';
-                
-                loginBtn.style.display = 'inline-block';
+                authStatus.className = 'status-bar disconnected';
+                authStatusText.textContent = 'Not authenticated';
+                loginBtn.style.display = 'inline-flex';
                 logoutBtn.style.display = 'none';
                 getTokenBtn.style.display = 'none';
-                
                 userInfo.style.display = 'none';
                 configSection.style.display = 'block';
+                statusBadge.className = 'badge badge-warning';
+                statusBadge.textContent = 'Not connected';
             }
         }
 
-        // Check for existing session on page load
         window.addEventListener('load', async function() {
             const urlInput = document.getElementById('serverUrl');
             const localModeToggle = document.getElementById('localMode');
@@ -674,7 +675,6 @@
                     const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                     urlInput.value = isLocalHost ? 'http://localhost:8080' : window.location.origin;
                 }
-
                 if (urlInput.value.includes('localhost') || urlInput.value.includes('127.0.0.1')) {
                     localModeToggle.checked = true;
                 }
@@ -687,13 +687,14 @@
                     if (accounts.length > 0) {
                         currentAccount = accounts[0];
                         updateAuthUI(true);
-                        await getTokenSilently();
+                        await getTokenSilently(true);
                     }
                 } catch (error) {
                     console.error('Failed to check existing session:', error);
                 }
             }
             onModeChanged();
+            updateToolParameters();
             updateCurlExamples();
         });
 
@@ -706,10 +707,8 @@
                 currentAccount = null;
                 currentAccessToken = null;
                 updateAuthUI(false);
-                showSuccess('Local Emulator Mode enabled. You can now call /mcp/http without Entra Client ID or Tenant ID.');
             } else {
                 updateAuthUI(false);
-                showResponse('Cloud authentication mode enabled. Sign in with Microsoft Entra to continue.');
             }
             updateCurlExamples();
         }
@@ -718,74 +717,45 @@
             const serverUrl = document.getElementById('serverUrl').value;
             const accessToken = currentAccessToken || 'YOUR_ACCESS_TOKEN';
             const isLocal = isLocalMode();
-            
-            if (serverUrl) {
-                const authHeader = isLocal ? '' : ` -H "Authorization: Bearer ${accessToken}"`;
-                const listToolsCurl = `curl -v -X POST "${serverUrl}/mcp/http" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream"${authHeader} -d '{"jsonrpc": "2.0", "id": "test123", "method": "tools/list", "params": {}}'`;
-                
-                // Get current tool parameters for curl example
-                const database = document.getElementById('cosmosDatabase')?.value || 'sample-database';
-                const container = document.getElementById('cosmosContainer')?.value || 'sample-container';
-                const tool = document.getElementById('toolSelect')?.value || 'list_databases';
-                
-                let toolParams = { databaseId: database, containerId: container };
-                
-                if (tool === 'get_recent_documents') {
-                    toolParams.n = 5;
-                } else if (tool === 'find_document_by_id') {
-                    toolParams.id = document.getElementById('docId')?.value || 'sample-id';
-                } else if (tool === 'text_search') {
-                    toolParams.property = document.getElementById('searchProperty')?.value || 'name';
-                    toolParams.searchPhrase = document.getElementById('searchPhrase')?.value || 'Azure';
-                    toolParams.n = 5;
-                } else if (tool === 'vector_search') {
-                    toolParams.searchText = document.getElementById('vectorSearch')?.value || 'machine learning';
-                    toolParams.vectorProperty = document.getElementById('vectorProperty')?.value || 'vector';
-                    toolParams.selectProperties = document.getElementById('selectProperties')?.value || 'id,title';
-                    toolParams.topN = 10;
-                } else if (tool === 'hybrid_search') {
-                    toolParams.searchText = document.getElementById('vectorSearch')?.value || 'machine learning';
-                    toolParams.textProperty = document.getElementById('textProperty')?.value || 'content';
-                    toolParams.vectorProperty = document.getElementById('vectorProperty')?.value || 'vector';
-                    toolParams.selectProperties = document.getElementById('selectProperties')?.value || 'id,title';
-                    toolParams.topN = 10;
-                } else if (tool === 'list_databases') {
-                    toolParams = {}; // No parameters needed
-                } else if (tool === 'list_collections') {
-                    toolParams = { databaseId: database };
-                }
-                
-                const testToolCurl = `curl -s -X POST "${serverUrl}/mcp/http" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream"${authHeader} -d '{"jsonrpc":"2.0","id":"test-tool-123","method":"tools/call","params":{"name":"${tool}","arguments":${JSON.stringify(toolParams)}}}'`;
 
-                if (document.getElementById('listToolsCurl')) {
-                    document.getElementById('listToolsCurl').textContent = listToolsCurl;
+            if (serverUrl) {
+                const authHeader = isLocal ? '' : ` \\\n  -H "Authorization: Bearer ${accessToken}"`;
+                const listToolsCurl = `curl -X POST "${serverUrl}/mcp/http" \\\n  -H "Content-Type: application/json" \\\n  -H "Accept: application/json"${authHeader} \\\n  -d '{"jsonrpc":"2.0","id":"1","method":"tools/list","params":{}}'`;
+
+                const database = document.getElementById('cosmosDatabase')?.value || 'your-database';
+                const container = document.getElementById('cosmosContainer')?.value || 'your-container';
+                const tool = document.getElementById('toolSelect')?.value || 'list_databases';
+
+                let toolParams = {};
+                switch (tool) {
+                    case 'list_databases': toolParams = {}; break;
+                    case 'list_collections': toolParams = { databaseId: database }; break;
+                    case 'get_recent_documents': toolParams = { databaseId: database, containerId: container, n: 5 }; break;
+                    case 'find_document_by_id': toolParams = { databaseId: database, containerId: container, id: document.getElementById('docId')?.value || 'doc-id' }; break;
+                    case 'text_search': toolParams = { databaseId: database, containerId: container, property: document.getElementById('searchProperty')?.value || 'name', searchPhrase: document.getElementById('searchPhrase')?.value || 'search', n: 5 }; break;
+                    case 'vector_search': toolParams = { databaseId: database, containerId: container, searchText: document.getElementById('vectorSearch')?.value || 'query', vectorProperty: document.getElementById('vectorProperty')?.value || 'vector', selectProperties: document.getElementById('selectProperties')?.value || 'id,title', topN: 10 }; break;
+                    case 'hybrid_search': toolParams = { databaseId: database, containerId: container, searchText: document.getElementById('vectorSearch')?.value || 'query', textProperty: document.getElementById('textProperty')?.value || 'content', vectorProperty: document.getElementById('vectorProperty')?.value || 'vector', selectProperties: document.getElementById('selectProperties')?.value || 'id,title', topN: 10 }; break;
+                    default: toolParams = { databaseId: database, containerId: container }; break;
                 }
-                if (document.getElementById('testToolCurl')) {
-                    document.getElementById('testToolCurl').textContent = testToolCurl;
-                }
+
+                const testToolCurl = `curl -X POST "${serverUrl}/mcp/http" \\\n  -H "Content-Type: application/json" \\\n  -H "Accept: application/json"${authHeader} \\\n  -d '{"jsonrpc":"2.0","id":"2","method":"tools/call","params":{"name":"${tool}","arguments":${JSON.stringify(toolParams)}}}'`;
+
+                document.getElementById('listToolsCurl').textContent = listToolsCurl;
+                document.getElementById('testToolCurl').textContent = testToolCurl;
             }
         }
 
         function validateInputs() {
             const serverUrl = document.getElementById('serverUrl').value.trim();
-            
-            if (!serverUrl) {
-                showError('Please enter the server URL');
-                return false;
-            }
-            
+            if (!serverUrl) { showError('Please enter the server URL'); return false; }
             if (!isLocalMode() && !currentAccessToken) {
-                showError('Please login with Microsoft Entra first');
+                showError('Please sign in first (expand Authentication section)');
+                if (!document.getElementById('authBody').classList.contains('open')) {
+                    toggleSection('auth');
+                }
                 return false;
             }
-            
-            try {
-                new URL(serverUrl);
-            } catch (e) {
-                showError('Please enter a valid URL');
-                return false;
-            }
-            
+            try { new URL(serverUrl); } catch (e) { showError('Please enter a valid URL'); return false; }
             return true;
         }
 
@@ -794,54 +764,30 @@
 
             const serverUrl = document.getElementById('serverUrl').value.trim();
             const localMode = isLocalMode();
-            
-            // Try to get a fresh token, but use existing one if refresh fails
+
             let token = currentAccessToken;
-            console.log('makeRequest: currentAccessToken exists:', !!currentAccessToken);
-            
             if (!localMode && msalInstance && currentAccount) {
-                const freshToken = await getTokenSilently(true); // Silent mode - don't show errors
-                if (freshToken) {
-                    token = freshToken;
-                    console.log('makeRequest: using fresh token');
-                } else {
-                    console.log('makeRequest: silent token refresh failed, using existing token');
-                }
+                const freshToken = await getTokenSilently(true);
+                if (freshToken) token = freshToken;
             }
-            
             if (!localMode && !token) {
-                console.error('makeRequest: NO TOKEN AVAILABLE');
-                showError('Failed to get access token. Please login again.');
+                showError('No access token. Please sign in again.');
                 return;
             }
-            
-            if (!localMode && token) {
-                console.log('makeRequest: token available, length:', token.length);
-                console.log('makeRequest: Authorization header will be:', `Bearer ${token.substring(0, 20)}...`);
-            }
-            
-            showLoading(`Making ${actionName} request...`);
-            
-            // Disable buttons during request
+
+            showLoading(`${actionName}...`);
             document.getElementById('listToolsBtn').disabled = true;
             document.getElementById('testToolBtn').disabled = true;
             document.getElementById('testCosmosBtn').disabled = true;
-            
+
             try {
-                // In cloud mode, Azure Container Apps may strip Authorization header, so send token in query param too.
                 const urlWithToken = localMode
                     ? `${serverUrl}/mcp/http`
                     : `${serverUrl}/mcp/http?access_token=${encodeURIComponent(token)}`;
 
-                const requestHeaders = {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json, text/event-stream'
-                };
+                const requestHeaders = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
+                if (!localMode) requestHeaders['Authorization'] = `Bearer ${token}`;
 
-                if (!localMode) {
-                    requestHeaders['Authorization'] = `Bearer ${token}`;
-                }
-                
                 const response = await fetch(urlWithToken, {
                     method: 'POST',
                     headers: requestHeaders,
@@ -851,41 +797,28 @@
                 });
 
                 const responseText = await response.text();
-                
+
                 if (!response.ok) {
                     if (response.status === 401) {
-                        showError(`Authentication failed. Please check:\n1. You have the 'Mcp.Tool.Executor' role\n2. Your token is valid\n3. The Client ID is correct\n\nHTTP ${response.status}: ${responseText}`);
+                        showError(`Auth failed (401). Check Mcp.Tool.Executor role and token validity.\n\n${responseText}`);
                     } else if (response.status === 500) {
-                        showError(`Server Error (HTTP 500).\n\nThe MCP server encountered an internal error. This could be due to:\n1. Missing environment variables (COSMOS_ENDPOINT)\n2. Cosmos DB connection issues\n3. Insufficient permissions on Cosmos DB\n4. Invalid authentication configuration\n\nServer response:\n${responseText}\n\n Check the container app logs:\naz containerapp logs show --name <your-app-name> --resource-group <your-rg> --follow`);
+                        showError(`Server error (500). Check COSMOS_ENDPOINT env var and container logs.\n\n${responseText}`);
                     } else {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}\n\nResponse: ${responseText}`);
+                        showError(`HTTP ${response.status}: ${responseText}`);
                     }
                     return;
                 }
 
-                // Try to parse as JSON
                 let responseData;
-                try {
-                    responseData = JSON.parse(responseText);
-                } catch (e) {
-                    responseData = responseText;
-                }
-
+                try { responseData = JSON.parse(responseText); } catch (e) { responseData = responseText; }
                 showResponse(responseData);
-                
             } catch (error) {
-                console.error('Request failed:', error);
-                
-                // Check if it's a real CORS error (blocked by browser)
                 if (error.name === 'TypeError' && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-                    showError(`${actionName} failed - unable to reach the server.\n\nError: ${error.message}\n\n Possible causes:\n1. CORS is not configured on the Container App\n2. The server URL is incorrect\n3. The server is not running\n4. Network connectivity issues\n\nTo verify CORS configuration:\naz containerapp ingress cors show --name <your-app-name> --resource-group <your-rg>\n\nTo enable CORS:\naz containerapp ingress cors enable --name <your-app-name> --resource-group <your-rg> --allowed-origins "*"`);
-                } else if (error.message.includes('CORS')) {
-                    showError(`${actionName} failed due to CORS restrictions.\n\nError: ${error.message}\n\n Solutions:\n1. Configure CORS in your Azure Container App\n2. Use the cURL commands shown below`);
+                    showError(`Cannot reach server. Check URL, CORS, and that the server is running.\n\n${error.message}`);
                 } else {
                     showError(`${actionName} failed: ${error.message}`);
                 }
             } finally {
-                // Re-enable buttons
                 document.getElementById('listToolsBtn').disabled = false;
                 document.getElementById('testToolBtn').disabled = false;
                 document.getElementById('testCosmosBtn').disabled = false;
@@ -893,201 +826,83 @@
         }
 
         async function listTools() {
-            const payload = {
-                jsonrpc: "2.0",
-                id: "list-tools-" + Date.now(),
-                method: "tools/list",
-                params: {}
-            };
-            
-            await makeRequest(payload, "List Tools");
-        }
-
-        function expandCosmosToolsSection() {
-            const cosmosToolsHeader = document.querySelector('.section .collapsible');
-            if (!cosmosToolsHeader) {
-                return;
-            }
-
-            const cosmosToolsContent = cosmosToolsHeader.nextElementSibling;
-            if (!cosmosToolsContent) {
-                return;
-            }
-
-            cosmosToolsHeader.classList.remove('collapsed');
-            cosmosToolsContent.classList.remove('collapsed');
+            await makeRequest({ jsonrpc: "2.0", id: "list-" + Date.now(), method: "tools/list", params: {} }, "List Tools");
         }
 
         async function testTool() {
-            expandCosmosToolsSection();
-
-            const payload = {
-                jsonrpc: "2.0",
-                id: "test-" + Date.now(),
-                method: "tools/call",
-                params: {
-                    name: "list_databases",
-                    arguments: {}
-                }
-            };
-            
-            await makeRequest(payload, "Test List Databases");
+            await makeRequest({ jsonrpc: "2.0", id: "test-" + Date.now(), method: "tools/call", params: { name: "list_databases", arguments: {} } }, "Quick Test (list_databases)");
         }
 
         async function testCosmosDbTool() {
-            // Get values from form fields
             const database = document.getElementById('cosmosDatabase').value.trim();
             const container = document.getElementById('cosmosContainer').value.trim();
             const tool = document.getElementById('toolSelect').value;
-            
-            if (!tool) {
-                showError('Please select a tool first');
-                return;
-            }
+
+            if (!tool) { showError('Please select a tool'); return; }
 
             let toolParams = {};
-            
-            // Build parameters based on selected tool
             switch (tool) {
-                case 'list_databases':
-                    // No parameters needed
-                    break;
+                case 'list_databases': break;
                 case 'list_collections':
-                    if (!database) {
-                        showError('Database ID is required for list_collections');
-                        return;
-                    }
+                    if (!database) { showError('Database ID is required'); return; }
                     toolParams = { databaseId: database };
                     break;
                 case 'get_recent_documents':
-                    if (!database || !container) {
-                        showError('Database ID and Container ID are required');
-                        return;
-                    }
-                    toolParams = { 
-                        databaseId: database, 
-                        containerId: container,
-                        n: parseInt(document.getElementById('resultCount').value) || 5
-                    };
+                    if (!database || !container) { showError('Database ID and Container ID are required'); return; }
+                    toolParams = { databaseId: database, containerId: container, n: parseInt(document.getElementById('resultCount').value) || 5 };
                     break;
                 case 'find_document_by_id':
                     const docId = document.getElementById('docId').value.trim();
-                    if (!database || !container || !docId) {
-                        showError('Database ID, Container ID, and Document ID are required');
-                        return;
-                    }
-                    toolParams = { 
-                        databaseId: database, 
-                        containerId: container,
-                        id: docId
-                    };
+                    if (!database || !container || !docId) { showError('Database ID, Container ID, and Document ID are required'); return; }
+                    toolParams = { databaseId: database, containerId: container, id: docId };
                     break;
                 case 'text_search':
                     const property = document.getElementById('searchProperty').value.trim();
                     const phrase = document.getElementById('searchPhrase').value.trim();
-                    if (!database || !container || !property || !phrase) {
-                        showError('Database ID, Container ID, Property, and Search Phrase are required');
-                        return;
-                    }
-                    toolParams = { 
-                        databaseId: database, 
-                        containerId: container,
-                        property: property,
-                        searchPhrase: phrase,
-                        n: parseInt(document.getElementById('resultCount').value) || 5
-                    };
+                    if (!database || !container || !property || !phrase) { showError('All text search fields are required'); return; }
+                    toolParams = { databaseId: database, containerId: container, property: property, searchPhrase: phrase, n: parseInt(document.getElementById('resultCount').value) || 5 };
                     break;
                 case 'vector_search':
-                    const searchText = document.getElementById('vectorSearch').value.trim();
-                    const vectorProp = document.getElementById('vectorProperty').value.trim();
-                    const selectProps = document.getElementById('selectProperties').value.trim();
-                    if (!database || !container || !searchText || !vectorProp || !selectProps) {
-                        showError('Database ID, Container ID, Search Text, Vector Property, and Select Properties are required');
-                        return;
-                    }
-                    toolParams = { 
-                        databaseId: database, 
-                        containerId: container,
-                        searchText: searchText,
-                        vectorProperty: vectorProp,
-                        selectProperties: selectProps,
-                        topN: parseInt(document.getElementById('resultCount').value) || 10
-                    };
+                    const vs = document.getElementById('vectorSearch').value.trim();
+                    const vp = document.getElementById('vectorProperty').value.trim();
+                    const sp = document.getElementById('selectProperties').value.trim();
+                    if (!database || !container || !vs || !vp || !sp) { showError('All vector search fields are required'); return; }
+                    toolParams = { databaseId: database, containerId: container, searchText: vs, vectorProperty: vp, selectProperties: sp, topN: parseInt(document.getElementById('resultCount').value) || 10 };
                     break;
                 case 'hybrid_search':
-                    const hybridSearchText = document.getElementById('vectorSearch').value.trim();
-                    const hybridTextProp = document.getElementById('textProperty').value.trim();
-                    const hybridVectorProp = document.getElementById('vectorProperty').value.trim();
-                    const hybridSelectProps = document.getElementById('selectProperties').value.trim();
-                    if (!database || !container || !hybridSearchText || !hybridTextProp || !hybridVectorProp || !hybridSelectProps) {
-                        showError('Database ID, Container ID, Search Text, Text Property, Vector Property, and Select Properties are required');
-                        return;
-                    }
-                    toolParams = { 
-                        databaseId: database, 
-                        containerId: container,
-                        searchText: hybridSearchText,
-                        textProperty: hybridTextProp,
-                        vectorProperty: hybridVectorProp,
-                        selectProperties: hybridSelectProps,
-                        topN: parseInt(document.getElementById('resultCount').value) || 10
-                    };
+                    const hs = document.getElementById('vectorSearch').value.trim();
+                    const tp = document.getElementById('textProperty').value.trim();
+                    const hvp = document.getElementById('vectorProperty').value.trim();
+                    const hsp = document.getElementById('selectProperties').value.trim();
+                    if (!database || !container || !hs || !tp || !hvp || !hsp) { showError('All hybrid search fields are required'); return; }
+                    toolParams = { databaseId: database, containerId: container, searchText: hs, textProperty: tp, vectorProperty: hvp, selectProperties: hsp, topN: parseInt(document.getElementById('resultCount').value) || 10 };
                     break;
                 case 'get_approximate_schema':
-                    if (!database || !container) {
-                        showError('Database ID and Container ID are required');
-                        return;
-                    }
-                    toolParams = { 
-                        databaseId: database, 
-                        containerId: container
-                    };
+                    if (!database || !container) { showError('Database ID and Container ID are required'); return; }
+                    toolParams = { databaseId: database, containerId: container };
                     break;
             }
-            
-            const payload = {
-                jsonrpc: "2.0",
-                id: "test-cosmos-" + Date.now(),
-                method: "tools/call",
-                params: {
-                    name: tool,
-                    arguments: toolParams
-                }
-            };
-            
-            await makeRequest(payload, `Test ${tool}`);
+
+            await makeRequest({ jsonrpc: "2.0", id: "cosmos-" + Date.now(), method: "tools/call", params: { name: tool, arguments: toolParams } }, `${tool}`);
         }
 
         function clearOutput() {
             const output = document.getElementById('output');
-            output.className = 'output';
-            output.textContent = 'Output cleared. Ready for next request...';
+            output.className = 'output-panel';
+            output.textContent = 'Ready to test. Select a tool and click "Invoke Tool".';
         }
 
         function copyToClipboard(elementId, button) {
-            const element = document.getElementById(elementId);
-            const text = element.textContent;
-            
+            const text = document.getElementById(elementId).textContent;
             navigator.clipboard.writeText(text).then(() => {
-                const originalText = button.textContent;
                 button.textContent = 'Copied!';
                 button.classList.add('copied');
-                
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.classList.remove('copied');
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-                alert('Failed to copy to clipboard');
+                setTimeout(() => { button.textContent = 'Copy'; button.classList.remove('copied'); }, 2000);
             });
         }
 
         function updateToolParameters() {
             const tool = document.getElementById('toolSelect').value;
-            const toolParams = document.getElementById('toolParameters');
-            
-            // Hide all parameter fields first
             document.getElementById('docIdField').style.display = 'none';
             document.getElementById('searchPropertyField').style.display = 'none';
             document.getElementById('searchPhraseField').style.display = 'none';
@@ -1096,141 +911,70 @@
             document.getElementById('textPropertyField').style.display = 'none';
             document.getElementById('selectPropertiesField').style.display = 'none';
             document.getElementById('resultCountField').style.display = 'none';
-            
-            if (!tool) {
-                toolParams.style.display = 'none';
-                updateCurlExamples();
-                return;
-            }
-            
-            // Show the parameter container
-            toolParams.style.display = 'block';
-            
-            // Show relevant fields based on selected tool
+
             switch (tool) {
-                case 'list_databases':
-                    // No additional parameters needed
-                    break;
-                    
-                case 'list_collections':
-                    // Database ID is always shown, no additional parameters
-                    break;
-                    
-                case 'get_recent_documents':
-                    // Only this tool should show the Number of Documents field
-                    document.getElementById('resultCountField').style.display = 'block';
-                    break;
-                    
-                case 'find_document_by_id':
-                    document.getElementById('docIdField').style.display = 'block';
-                    break;
-                    
+                case 'get_recent_documents': document.getElementById('resultCountField').style.display = 'block'; break;
+                case 'find_document_by_id': document.getElementById('docIdField').style.display = 'block'; break;
                 case 'text_search':
                     document.getElementById('searchPropertyField').style.display = 'block';
                     document.getElementById('searchPhraseField').style.display = 'block';
-                    // text_search does NOT show resultCountField - uses fixed value of 5 or from input
                     break;
-                    
                 case 'vector_search':
                     document.getElementById('vectorSearchField').style.display = 'block';
                     document.getElementById('vectorPropertyField').style.display = 'block';
                     document.getElementById('selectPropertiesField').style.display = 'block';
-                    // vector_search does NOT show resultCountField - uses fixed value or topN
                     break;
-                    
                 case 'hybrid_search':
                     document.getElementById('vectorSearchField').style.display = 'block';
                     document.getElementById('textPropertyField').style.display = 'block';
                     document.getElementById('vectorPropertyField').style.display = 'block';
                     document.getElementById('selectPropertiesField').style.display = 'block';
                     break;
-                    
-                case 'get_approximate_schema':
-                    // Database ID and Container ID are always shown, no additional parameters
-                    break;
             }
-            
             updateCurlExamples();
         }
 
-        function toggleCollapse(element) {
-            const content = element.nextElementSibling;
-            const isCollapsed = element.classList.contains('collapsed');
-            
-            if (isCollapsed) {
-                element.classList.remove('collapsed');
-                content.classList.remove('collapsed');
-            } else {
-                element.classList.add('collapsed');
-                content.classList.add('collapsed');
-            }
-        }
-
-        // Show error message
         function showError(message) {
-            // If it's an auth-related error, show it in the auth section
-            if (message.includes('Client ID') || message.includes('login') || message.includes('Login') || 
-                message.includes('MSAL') || message.includes('Token') || message.includes('authentication')) {
+            if (message.includes('Client ID') || message.includes('login') || message.includes('MSAL') || message.includes('Token')) {
                 const authError = document.getElementById('authError');
-                const authErrorMessage = document.getElementById('authErrorMessage');
-                authErrorMessage.textContent = message;
+                document.getElementById('authErrorMessage').textContent = message;
                 authError.style.display = 'block';
-                
-                // Auto-hide after 10 seconds
-                setTimeout(() => {
-                    authError.style.display = 'none';
-                }, 10000);
+                if (!document.getElementById('authBody').classList.contains('open')) toggleSection('auth');
+                setTimeout(() => { authError.style.display = 'none'; }, 10000);
             } else {
-                // Show other errors in the output section
                 const output = document.getElementById('output');
-                output.className = 'output error';
-                output.textContent = ' Error: ' + message;
+                output.className = 'output-panel error';
+                output.textContent = 'Error: ' + message;
             }
         }
 
-        // Show loading message
         function showLoading(message) {
             const output = document.getElementById('output');
-            output.className = 'output';
-            output.textContent = ' ' + message;
+            output.className = 'output-panel';
+            output.textContent = message;
         }
 
-        // Show success message
         function showSuccess(message) {
             const output = document.getElementById('output');
-            output.className = 'output success';
-            output.textContent = ' ' + message;
+            output.className = 'output-panel success';
+            output.textContent = message;
         }
 
-        // Show response (general output)
         function showResponse(data) {
             const output = document.getElementById('output');
-            output.className = 'output';
-            
+            output.className = 'output-panel';
+
             if (typeof data === 'object') {
-                // Check if it's an MCP response with a result field
-                if (data.result && typeof data.result === 'object' && data.result.content) {
-                    // MCP tool response - extract the actual content
+                if (data.result && data.result.content) {
                     const content = data.result.content;
                     if (Array.isArray(content) && content.length > 0 && content[0].text !== undefined) {
                         const textContent = content[0].text;
-                        
-                        // Backend now returns structured data directly (not as JSON string)
-                        // So text is already an object/array or a plain value
                         if (typeof textContent === 'object') {
-                            // Already parsed - just stringify for display
                             output.textContent = JSON.stringify(textContent, null, 2);
                         } else if (typeof textContent === 'string') {
-                            // Check if it's a JSON string that needs parsing
-                            try {
-                                const parsed = JSON.parse(textContent);
-                                output.textContent = JSON.stringify(parsed, null, 2);
-                            } catch (e) {
-                                // Not JSON, display as-is
-                                output.textContent = textContent;
-                            }
+                            try { output.textContent = JSON.stringify(JSON.parse(textContent), null, 2); }
+                            catch (e) { output.textContent = textContent; }
                         } else {
-                            // Primitive value (number, boolean, etc.)
                             output.textContent = String(textContent);
                         }
                     } else {
@@ -1240,14 +984,8 @@
                     output.textContent = JSON.stringify(data, null, 2);
                 }
             } else if (typeof data === 'string') {
-                try {
-                    // Try to parse string as JSON
-                    const parsed = JSON.parse(data);
-                    output.textContent = JSON.stringify(parsed, null, 2);
-                } catch (e) {
-                    // Not JSON, display as-is
-                    output.textContent = data;
-                }
+                try { output.textContent = JSON.stringify(JSON.parse(data), null, 2); }
+                catch (e) { output.textContent = data; }
             } else {
                 output.textContent = data;
             }
@@ -1255,4 +993,3 @@
     </script>
 </body>
 </html>
-
