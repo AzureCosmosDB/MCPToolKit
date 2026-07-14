@@ -86,7 +86,6 @@ function Write-Warn { param($Message) Write-Host "[WARN] $Message" -ForegroundCo
 function Write-Error { param($Message) Write-Host "[ERROR] $Message" -ForegroundColor Red }
 
 function Auto-Detect-Resources {
-    Write-Info "Auto-detecting resources in resource group: $ResourceGroup"
     
     # Auto-detect Cosmos DB account
     if ([string]::IsNullOrEmpty($script:CosmosAccountName)) {
@@ -152,34 +151,19 @@ function Parse-Arguments {
     $script:ACR_NAME = $AcrName
     $script:USE_EXISTING_ACR = ($script:ACR_RESOURCE_GROUP -ne $ResourceGroup) -or (-not [string]::IsNullOrWhiteSpace($script:ACR_NAME))
     
-    Write-Info "Using Azure Resource Group: $ResourceGroup"
-    Write-Info "Using Location: $Location"
-    Write-Info "Using Cosmos Account Name: $CosmosAccountName"
-    Write-Info "Using Cosmos Resource Group: $($script:COSMOS_RESOURCE_GROUP)"
-    Write-Info "Using ACR Resource Group: $($script:ACR_RESOURCE_GROUP)"
-    Write-Info "Using Existing ACR: $($script:USE_EXISTING_ACR)"
-    if (-not [string]::IsNullOrWhiteSpace($script:ACR_NAME)) {
-        Write-Info "Using ACR Name: $($script:ACR_NAME)"
-    }
-    Write-Info "Using Container App Name: $ContainerAppName"
+    Write-Info "Resource Group: $ResourceGroup | Location: $Location | Cosmos RG: $($script:COSMOS_RESOURCE_GROUP)"
 }
 
 function Create-Entra-App {
-    Write-Info "Checking for existing Entra App registration: $ENTRA_APP_NAME"
+    Write-Info "Configuring Entra App: $ENTRA_APP_NAME"
 
     # Check if app already exists
     $existingApp = az ad app list --display-name $ENTRA_APP_NAME --query "[0]" | ConvertFrom-Json
     
     if ($existingApp -and $existingApp.appId) {
-        Write-Info "Found existing Entra App with name: $ENTRA_APP_NAME"
-        Write-Info "Using existing app registration (skipping ownership checks)"
-        
-        # Use existing app
         $ENTRA_APP_CLIENT_ID = $existingApp.appId
         $ENTRA_APP_OBJECT_ID = $existingApp.id
-        
-        Write-Info "ENTRA_APP_CLIENT_ID=$ENTRA_APP_CLIENT_ID"
-        Write-Info "ENTRA_APP_OBJECT_ID=$ENTRA_APP_OBJECT_ID"
+        Write-Info "Using existing app: ClientID=$ENTRA_APP_CLIENT_ID"
     }
     else {
         Write-Info "Creating new Entra App registration: $ENTRA_APP_NAME"
@@ -307,18 +291,15 @@ For more information: https://aka.ms/service-management-reference-error
             exit 1
         }
         
-        Write-Info "ENTRA_APP_CLIENT_ID=$ENTRA_APP_CLIENT_ID"
-        Write-Info "ENTRA_APP_OBJECT_ID=$ENTRA_APP_OBJECT_ID"
+        Write-Info "Created new app: ClientID=$ENTRA_APP_CLIENT_ID"
     }
 
     $GRAPH_BASE = "https://graph.microsoft.com/v1.0"
     $ENTRA_APP_URL = "$GRAPH_BASE/applications/$ENTRA_APP_OBJECT_ID"
     $ENTRA_APP_ROLE_ID = [guid]::NewGuid().ToString()
 
-    # Set Application ID (audience) URI for the Entra App
-    Write-Info "Setting Application ID URI..."
+    # Set Application ID (audience) URI
     try {
-        # Use az ad app update instead of az rest for better compatibility
         az ad app update --id $ENTRA_APP_CLIENT_ID --identifier-uris "api://$ENTRA_APP_CLIENT_ID" | Out-Null
     }
     catch {
@@ -326,8 +307,6 @@ For more information: https://aka.ms/service-management-reference-error
     }
 
     # Add OAuth2 permission scope and pre-authorize Azure CLI
-    # This is required for `az account get-access-token --resource <clientId>` to work
-    Write-Info "Configuring OAuth2 permission scope for token acquisition..."
     try {
         $appDetails = az rest --method GET --url $ENTRA_APP_URL | ConvertFrom-Json
         $existingScopes = $appDetails.api.oauth2PermissionScopes
@@ -357,14 +336,11 @@ For more information: https://aka.ms/service-management-reference-error
             $scopePayload | Out-File -FilePath $tempScopeFile -Encoding utf8 -NoNewline
             az rest --method PATCH --url $ENTRA_APP_URL --headers "Content-Type=application/json" --body "@$tempScopeFile" | Out-Null
             Remove-Item $tempScopeFile -Force
-            Write-Info "OAuth2 permission scope 'access_as_user' added successfully"
         } else {
             $scopeId = $hasAccessScope.id
-            Write-Info "OAuth2 permission scope 'access_as_user' already exists"
         }
 
         # Pre-authorize Azure CLI (04b07795-8ddb-461a-bbee-02f9e1bf7b46) for the scope
-        Write-Info "Pre-authorizing Azure CLI for token acquisition..."
         $azureCliAppId = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
 
         $refreshedApp = az rest --method GET --url $ENTRA_APP_URL | ConvertFrom-Json
@@ -386,9 +362,8 @@ For more information: https://aka.ms/service-management-reference-error
             $preAuthPayload | Out-File -FilePath $tempPreAuthFile -Encoding utf8 -NoNewline
             az rest --method PATCH --url $ENTRA_APP_URL --headers "Content-Type=application/json" --body "@$tempPreAuthFile" | Out-Null
             Remove-Item $tempPreAuthFile -Force
-            Write-Info "Azure CLI pre-authorized successfully"
         } else {
-            Write-Info "Azure CLI already pre-authorized"
+            # Already pre-authorized
         }
     }
     catch {
@@ -398,14 +373,11 @@ For more information: https://aka.ms/service-management-reference-error
     }
 
     # Define the app-role in the Entra App
-    Write-Info "Checking for existing app role: $ENTRA_APP_ROLE_VALUE"
-
-    # Check if the role already exists
     $appDetails = az rest --method GET --url $ENTRA_APP_URL | ConvertFrom-Json
     $existingRole = $appDetails.appRoles | Where-Object { $_.value -eq $ENTRA_APP_ROLE_VALUE }
 
     if (-not $existingRole) {
-        Write-Info "Role does not exist, adding app role: $ENTRA_APP_ROLE_VALUE"
+        Write-Info "Adding app role: $ENTRA_APP_ROLE_VALUE"
 
         # Prepare the app-roles payload by fetching existing roles, appending a new one
         $existingRoles = $appDetails.appRoles
@@ -432,21 +404,14 @@ For more information: https://aka.ms/service-management-reference-error
         # Clean up temp file
         Remove-Item $tempRolesFile -Force
 
-        Write-Info "App role added successfully"
         $script:ENTRA_APP_ROLE_ID_BY_VALUE = $ENTRA_APP_ROLE_ID
     }
     else {
-        Write-Info "App role '$ENTRA_APP_ROLE_VALUE' already exists, extracting role ID"
         $script:ENTRA_APP_ROLE_ID_BY_VALUE = $existingRole.id
     }
 
-    # Print the app-roles to verify
-    $appRoles = az rest --method GET --url $ENTRA_APP_URL --query appRoles | ConvertFrom-Json
-    Write-Info "Roles in Entra App:"
-    Write-Host ($appRoles | ConvertTo-Json)
-    
-    # Get the service principal object ID for the Entra App
-    Write-Info "Getting Entra App Service Principal Object ID..."
+    # Get the service principal object ID
+    Write-Info "Getting Entra App Service Principal..."
     
     # Helper function to look up SP object ID using multiple methods
     function Get-SpObjectId {
@@ -503,48 +468,28 @@ For more information: https://aka.ms/service-management-reference-error
     $ENTRA_APP_SP_OBJECT_ID = Get-SpObjectId -AppId $ENTRA_APP_CLIENT_ID
     
     if (-not $ENTRA_APP_SP_OBJECT_ID) {
-        Write-Info "Service Principal not found, creating one..."
-        
         $oldEAP = $ErrorActionPreference
         $ErrorActionPreference = 'SilentlyContinue'
         $createResult = az ad sp create --id $ENTRA_APP_CLIENT_ID 2>&1
         $createExitCode = $LASTEXITCODE
         $ErrorActionPreference = $oldEAP
         
-        if ($createExitCode -ne 0) {
-            $createResultStr = $createResult | Out-String
-            if ($createResultStr -match "already exists|conflicting object") {
-                Write-Info "Service Principal already exists (creation returned conflict). Retrying lookup..."
-            } else {
-                Write-Warn "az ad sp create returned non-zero exit code."
-                Write-Warn "Output: $createResultStr"
-                Write-Info "Will retry lookup in case the SP was created despite the error..."
-            }
-        } else {
-            Write-Info "Service Principal created successfully"
-            # If creation returned JSON output, try to extract the SP ID directly
-            if ($createResult) {
-                try {
-                    $createObj = ($createResult | Out-String) | ConvertFrom-Json
-                    if ($createObj -and $createObj.id) {
-                        $ENTRA_APP_SP_OBJECT_ID = $createObj.id
-                        Write-Info "Extracted SP Object ID from creation response: $ENTRA_APP_SP_OBJECT_ID"
-                    }
-                } catch { }
-            }
+        if ($createExitCode -eq 0 -and $createResult) {
+            try {
+                $createObj = ($createResult | Out-String) | ConvertFrom-Json
+                if ($createObj -and $createObj.id) {
+                    $ENTRA_APP_SP_OBJECT_ID = $createObj.id
+                }
+            } catch { }
         }
         
         # If we didn't extract the ID from the create response, retry lookup with increasing delays
         if (-not $ENTRA_APP_SP_OBJECT_ID) {
             $retryDelays = @(5, 10, 15)
             foreach ($delay in $retryDelays) {
-                Write-Info "Waiting $delay seconds for Service Principal to propagate..."
                 Start-Sleep -Seconds $delay
                 $ENTRA_APP_SP_OBJECT_ID = Get-SpObjectId -AppId $ENTRA_APP_CLIENT_ID
-                if ($ENTRA_APP_SP_OBJECT_ID) {
-                    Write-Info "Service Principal found after retry"
-                    break
-                }
+                if ($ENTRA_APP_SP_OBJECT_ID) { break }
             }
         }
     }
@@ -559,7 +504,7 @@ For more information: https://aka.ms/service-management-reference-error
         exit 1
     }
     
-    Write-Info "Entra App Service Principal Object ID: $ENTRA_APP_SP_OBJECT_ID"
+    Write-Info "Entra App SP Object ID: $ENTRA_APP_SP_OBJECT_ID"
 
     # Export variables for use in other functions
     $script:ENTRA_APP_CLIENT_ID = $ENTRA_APP_CLIENT_ID
@@ -568,114 +513,67 @@ For more information: https://aka.ms/service-management-reference-error
     $script:ENTRA_APP_SP_OBJECT_ID = $ENTRA_APP_SP_OBJECT_ID
 
     # Ensure current user is an owner of the app
-    Write-Info "Ensuring current user is an owner of the Entra App..."
     try {
         $currentUserEmail = az account show --query "user.name" -o tsv
         $currentUserObjectId = $null
         try {
             $currentUserObjectId = az ad user show --id $currentUserEmail --query "id" -o tsv 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                $currentUserObjectId = $null
-            }
-        } catch {
-            $currentUserObjectId = $null
-        }
+            if ($LASTEXITCODE -ne 0) { $currentUserObjectId = $null }
+        } catch { $currentUserObjectId = $null }
         
         if ($currentUserObjectId -and $currentUserObjectId -ne "null") {
-            # Check if user is already an owner
             $owners = az ad app owner list --id $ENTRA_APP_CLIENT_ID --query "[].id" -o tsv 2>$null
-            
             if ($owners -notcontains $currentUserObjectId) {
-                Write-Info "Adding current user as owner of the Entra App..."
                 az ad app owner add --id $ENTRA_APP_CLIENT_ID --owner-object-id $currentUserObjectId 2>$null
-                Write-Info "User added as owner successfully"
-            }
-            else {
-                Write-Info "Current user is already an owner of the Entra App"
             }
         }
     }
     catch {
         Write-Warn "Could not ensure user is owner of Entra App: $_"
-        Write-Warn "This may affect automatic role assignment"
     }
 
-    Write-Info "Entra App registration completed successfully!"
+    Write-Info "Entra App registration completed"
 }
 
 function Assign-Current-User-Role {
     Write-Info "Assigning Mcp.Tool.Executor role to current user..."
     
-    # Get current user
     $currentUserEmail = az account show --query "user.name" -o tsv
-    Write-Info "Current user: $currentUserEmail"
     
-    # Get user object ID - try standard method first (suppress errors)
+    # Get user object ID
     $userObjectId = $null
     try {
         $userObjectId = az ad user show --id $currentUserEmail --query "id" -o tsv 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            $userObjectId = $null
-        }
-    } catch {
-        $userObjectId = $null
-    }
+        if ($LASTEXITCODE -ne 0) { $userObjectId = $null }
+    } catch { $userObjectId = $null }
     
     if (-not $userObjectId -or $userObjectId -eq "null" -or $userObjectId -eq "") {
-        Write-Info "Standard user lookup failed, trying Graph API /me endpoint..."
-        Write-Info "(This is common for Visual Studio subscriptions, personal accounts, or guest users)"
-        
-        # Fallback: Use Graph API /me endpoint - works for all account types
+        # Fallback: Graph API /me endpoint
         try {
             $meResult = az rest --method GET --url "https://graph.microsoft.com/v1.0/me" 2>&1
-            
             if ($LASTEXITCODE -eq 0 -and $meResult) {
                 $meData = $meResult | ConvertFrom-Json
                 $userObjectId = $meData.id
-                $userDisplayName = $meData.displayName
-                $userUPN = $meData.userPrincipalName
-                
-                Write-Info "Found user via Graph API:"
-                Write-Info "  Display Name: $userDisplayName"
-                Write-Info "  UPN: $userUPN"
-                Write-Info "  Object ID: $userObjectId"
-            }
-            else {
+            } else {
                 throw "Graph API /me endpoint failed"
             }
         }
         catch {
-            Write-Warn "Could not find user object ID using any method"
-            Write-Warn ""
-            Write-Warn "This can happen with:"
-            Write-Warn "  - Visual Studio subscriptions with Microsoft Accounts"
-            Write-Warn "  - Personal Azure subscriptions"
-            Write-Warn "  - Limited directory permissions"
-            Write-Warn ""
-            Write-Warn "MANUAL ROLE ASSIGNMENT REQUIRED:"
-            Write-Warn "Run this command to get your Object ID:"
-            Write-Warn "  az rest --method GET --url `"https://graph.microsoft.com/v1.0/me`" --query id -o tsv"
-            Write-Warn ""
-            Write-Warn "Then assign the role manually or see the troubleshooting guide:"
-            Write-Warn "  docs/TROUBLESHOOTING-DEPLOYMENT.md"
+            Write-Warn "Could not find user object ID. Manual role assignment required."
+            Write-Warn "Get your Object ID: az rest --method GET --url `"https://graph.microsoft.com/v1.0/me`" --query id -o tsv"
+            Write-Warn "See: docs/TROUBLESHOOTING-DEPLOYMENT.md"
             return
         }
-    }
-    else {
-        Write-Info "User Object ID: $userObjectId"
     }
     
     # Check if role assignment already exists
     $existingAssignment = az rest --method GET --url "https://graph.microsoft.com/v1.0/servicePrincipals/$($script:ENTRA_APP_SP_OBJECT_ID)/appRoleAssignedTo" --query "value[?principalId=='$userObjectId' && appRoleId=='$($script:ENTRA_APP_ROLE_ID_BY_VALUE)']" | ConvertFrom-Json
     
     if ($existingAssignment -and $existingAssignment.Count -gt 0) {
-        Write-Info "User already has the Mcp.Tool.Executor role assigned"
         return
     }
     
     # Assign the role
-    Write-Info "Assigning role to user..."
-    
     $body = @{
         principalId = $userObjectId
         resourceId = $script:ENTRA_APP_SP_OBJECT_ID
@@ -692,29 +590,12 @@ function Assign-Current-User-Role {
         # Clean up temp file
         Remove-Item $tempBodyFile -Force
         
-        # Check if the command succeeded
         if ($LASTEXITCODE -eq 0) {
-            Write-Info "Successfully assigned Mcp.Tool.Executor role to $currentUserEmail"
-            Write-Info "Note: Sign out and sign in again in the browser for the role to take effect"
+            Write-Info "Role assigned to $currentUserEmail (sign out/in for it to take effect)"
         }
         else {
-            # Check if it's a permissions error
             if ($output -match "Authorization_RequestDenied|Insufficient privileges") {
-                Write-Warn "Insufficient permissions to assign the Entra App role automatically."
-                Write-Warn ""
-                Write-Warn "REQUIRED ACTION:"
-                Write-Warn "1. Ask an Azure AD administrator or application owner to assign you the role"
-                Write-Warn "2. They can use this command:"
-                Write-Warn "   az ad app permission grant --id $($script:ENTRA_APP_CLIENT_ID) --api 00000003-0000-0000-c000-000000000000 --scope AppRoleAssignment.ReadWrite.All"
-                Write-Warn ""
-                Write-Warn "OR manually assign the role in Azure Portal:"
-                Write-Warn "1. Go to Azure Portal > Enterprise Applications"
-                Write-Warn "2. Search for app: $($script:ENTRA_APP_NAME)"
-                Write-Warn "3. Go to 'Users and groups'"
-                Write-Warn "4. Click 'Add user/group'"
-                Write-Warn "5. Select your user ($currentUserEmail) and assign the 'Mcp.Tool.Executor' role"
-                Write-Warn ""
-                Write-Warn "Deployment will continue, but you won't be able to use the web UI until the role is assigned."
+                Write-Warn "Insufficient permissions. Assign 'Mcp.Tool.Executor' role manually in Azure Portal > Enterprise Applications > $($script:ENTRA_APP_NAME) > Users and groups"
             }
             else {
                 throw "Azure CLI command failed: $output"
@@ -722,59 +603,42 @@ function Assign-Current-User-Role {
         }
     }
     catch {
-        Write-Warn "Failed to assign role automatically: $_"
-        Write-Warn "Please assign the Mcp.Tool.Executor role manually in Azure Portal"
+        Write-Warn "Failed to assign role: $_. Assign 'Mcp.Tool.Executor' manually in Azure Portal."
     }
 }
 
 function Check-Prerequisites {
-    Write-Info "Checking prerequisites (az-cli, docker)..."
-
     if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
         Write-Error "Azure CLI is not installed. Please install it from https://docs.microsoft.com/en-us/cli/azure/install-azure-cli"
         exit 1
     }
-
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
         Write-Error "Docker is not installed. Please install Docker Desktop."
         exit 1
     }
-
-    Write-Info "Prerequisites satisfied."
 }
 
 function Login-Azure {
-    Write-Info "Checking az cli login status..."
-
     try {
         az account show | Out-Null
     }
     catch {
-        Write-Info "Not logged in to az-cli. running 'az login'..."
+        Write-Info "Not logged in. Running 'az login'..."
         az login
     }
-
     if ($SUBSCRIPTION_ID) {
-        Write-Info "Setting subscription to $SUBSCRIPTION_ID"
         az account set --subscription $SUBSCRIPTION_ID
     }
-
-    Write-Info "az cli login successful!"
 }
 
 function Verify-Resource-Group {
-    Write-Info "Verifying resource group exists: $ResourceGroup"
-    
     $rgExists = az group exists --name $ResourceGroup
     if ($rgExists -eq "false") {
-        Write-Error "Resource group '$ResourceGroup' does not exist. Please create it first or use an existing resource group."
+        Write-Error "Resource group '$ResourceGroup' does not exist."
         exit 1
     }
-    
-    Write-Info "Resource group verified successfully"
 
     if ($script:COSMOS_RESOURCE_GROUP -ne $ResourceGroup) {
-        Write-Info "Verifying Cosmos resource group exists: $($script:COSMOS_RESOURCE_GROUP)"
         $cosmosRgExists = az group exists --name $script:COSMOS_RESOURCE_GROUP
         if ($cosmosRgExists -eq "false") {
             Write-Error "Cosmos resource group '$($script:COSMOS_RESOURCE_GROUP)' does not exist."
@@ -783,7 +647,6 @@ function Verify-Resource-Group {
     }
 
     if ($script:ACR_RESOURCE_GROUP -ne $ResourceGroup) {
-        Write-Info "Verifying ACR resource group exists: $($script:ACR_RESOURCE_GROUP)"
         $acrRgExists = az group exists --name $script:ACR_RESOURCE_GROUP
         if ($acrRgExists -eq "false") {
             Write-Error "ACR resource group '$($script:ACR_RESOURCE_GROUP)' does not exist."
@@ -793,8 +656,6 @@ function Verify-Resource-Group {
 }
 
 function Deploy-Infrastructure {
-    Write-Info "Checking if Container App exists..."
-    
     try {
         $existingApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup 2>$null | ConvertFrom-Json
         if ($existingApp) {
@@ -804,12 +665,10 @@ function Deploy-Infrastructure {
         }
     }
     catch {
-        # Container app doesn't exist, need to deploy infrastructure
         $script:SKIP_INFRA = $false
     }
 
     Write-Info "Creating Azure Container resources..."
-    Write-Info "Note: Initial deployment may show as 'Failed' - this is expected and will be fixed after ACR permissions are assigned"
 
     if ($script:USE_EXISTING_ACR) {
         az deployment group create --resource-group $ResourceGroup --template-file "infrastructure/main.bicep" --parameters "useExistingAcr=true" "existingAcrName=$($script:ACR_NAME)" "existingAcrResourceGroup=$($script:ACR_RESOURCE_GROUP)" --output table
@@ -818,13 +677,10 @@ function Deploy-Infrastructure {
         az deployment group create --resource-group $ResourceGroup --template-file "infrastructure/main.bicep" --output table
     }
 
-    Write-Info "Azure Container resources deployment completed!"
+    Write-Info "Azure Container resources deployed"
 }
 
 function Get-Deployment-Outputs {
-    Write-Info "Getting deployment outputs..."
-
-    # Get ACR and Container App details
     $acrName = $script:ACR_NAME
     if ([string]::IsNullOrWhiteSpace($acrName)) {
         $acrName = az acr list --resource-group $script:ACR_RESOURCE_GROUP --query "[0].name" -o tsv
@@ -835,53 +691,38 @@ function Get-Deployment-Outputs {
     $script:CONTAINER_REGISTRY = "$acrName.azurecr.io"
     $script:CONTAINER_APP_URL = "https://$($containerApp.properties.configuration.ingress.fqdn)"
 
-    Write-Info "Container Registry: $script:CONTAINER_REGISTRY"
-    Write-Info "Container App URL: $script:CONTAINER_APP_URL"
+    Write-Info "Registry: $script:CONTAINER_REGISTRY | App URL: $script:CONTAINER_APP_URL"
 }
 
 function Build-And-Push-Image {
     Write-Info "Building and pushing container image..."
 
-    # Extract ACR name from login server
     $ACR_NAME = $script:CONTAINER_REGISTRY -replace '\.azurecr\.io$', ''
-    Write-Info "Logging into ACR: $ACR_NAME"
 
     try {
-        # Login to ACR - specify resource group to avoid auto-discovery issues
         az acr login --name $ACR_NAME --resource-group $script:ACR_RESOURCE_GROUP
         
         if ($LASTEXITCODE -ne 0) {
             throw "ACR login failed with exit code $LASTEXITCODE"
         }
 
-        # Build image
         $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
         $IMAGE_TAG = "$($script:CONTAINER_REGISTRY)/mcp-toolkit:$timestamp"
 
-        # Ensure we're in the root directory
         $rootDir = Split-Path -Parent $SCRIPT_DIR
         Push-Location $rootDir
         
         try {
-            Write-Info "Building .NET application from: $(Get-Location)"
             dotnet publish src/AzureCosmosDB.MCP.Toolkit/AzureCosmosDB.MCP.Toolkit.csproj -c Release -o src/AzureCosmosDB.MCP.Toolkit/bin/publish
 
-            Write-Info "Building image: $IMAGE_TAG"
             docker build --platform linux/amd64 -t $IMAGE_TAG -f Dockerfile.runtime .
-            
-            if ($LASTEXITCODE -ne 0) {
-                throw "Docker build failed with exit code $LASTEXITCODE"
-            }
+            if ($LASTEXITCODE -ne 0) { throw "Docker build failed" }
 
-            Write-Info "Pushing image: $IMAGE_TAG"
             docker push $IMAGE_TAG
-            
-            if ($LASTEXITCODE -ne 0) {
-                throw "Docker push failed with exit code $LASTEXITCODE"
-            }
+            if ($LASTEXITCODE -ne 0) { throw "Docker push failed" }
 
             $script:IMAGE_TAG = $IMAGE_TAG
-            Write-Info "Image pushed successfully!"
+            Write-Info "Image pushed: $IMAGE_TAG"
         }
         finally {
             Pop-Location
@@ -903,15 +744,10 @@ function Build-And-Push-Image {
 }
 
 function Update-Container-App {
-    Write-Info "Updating Azure Container App with MCP Toolkit image..."
+    Write-Info "Updating Container App configuration..."
 
-    # Get current tenant ID
     $CURRENT_TENANT_ID = az account show --query "tenantId" --output tsv
-    Write-Info "Current Tenant ID: $CURRENT_TENANT_ID"
-
-    # Get Cosmos DB endpoint
     $cosmosEndpoint = az cosmosdb show --name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --query "documentEndpoint" --output tsv
-    Write-Info "Cosmos DB Endpoint: $cosmosEndpoint"
     
     # Get Container App to extract existing environment variables
     $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
@@ -919,19 +755,11 @@ function Update-Container-App {
     # Enable system-assigned managed identity if not already enabled
     $identityJustCreated = $false
     if ($containerApp.identity.type -ne "SystemAssigned") {
-        Write-Info "Enabling SystemAssigned managed identity on Container App..."
+        Write-Info "Enabling SystemAssigned managed identity..."
         az containerapp identity assign --name $ContainerAppName --resource-group $ResourceGroup --system-assigned
-        Write-Info "SystemAssigned managed identity enabled successfully"
-        
-        # Wait for the identity to propagate
-        Write-Info "Waiting 15 seconds for identity to propagate..."
         Start-Sleep -Seconds 15
-        
-        # Refresh container app info
         $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
         $identityJustCreated = $true
-    } else {
-        Write-Info "Container App is already using SystemAssigned managed identity"
     }
     
     # Get existing environment variables to extract Azure AI Services endpoint and embedding settings
@@ -940,22 +768,16 @@ function Update-Container-App {
     $embeddingDeployment = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_EMBEDDING_DEPLOYMENT" }).value
     
     if (-not $azureAiServiceEndpoint) {
-        Write-Warn "OPENAI_ENDPOINT not found in existing container app configuration"
-        Write-Warn "Please set this manually using: az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars 'OPENAI_ENDPOINT=<your-azure-ai-services-endpoint>'"
+        Write-Warn "OPENAI_ENDPOINT not configured. Set manually: az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars 'OPENAI_ENDPOINT=<endpoint>'"
     } else {
-        Write-Info "Azure AI Services Endpoint: $azureAiServiceEndpoint"
-        # Store for validation
         $script:OPENAI_ENDPOINT = $azureAiServiceEndpoint
     }
     
     if (-not $embeddingDeployment) {
-        Write-Warn "OPENAI_EMBEDDING_DEPLOYMENT not found in existing container app configuration"
-        Write-Warn "Please set this manually using: az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars 'OPENAI_EMBEDDING_DEPLOYMENT=<your-deployment>'"
-    } else {
-        Write-Info "Embedding Deployment: $embeddingDeployment"
+        Write-Warn "OPENAI_EMBEDDING_DEPLOYMENT not configured."
     }
 
-    # Build environment variables list (no AZURE_CLIENT_ID needed for system-assigned identity)
+    # Build environment variables list
     $envVars = @(
         "AzureAd__ClientId=$script:ENTRA_APP_CLIENT_ID"
         "AzureAd__TenantId=$CURRENT_TENANT_ID"
@@ -964,6 +786,15 @@ function Update-Container-App {
         "ASPNETCORE_ENVIRONMENT=Production"
         "ASPNETCORE_URLS=http://+:8080"
     )
+
+    # If a user-assigned identity exists, set AZURE_CLIENT_ID so DefaultAzureCredential resolves correctly
+    $userAssigned = $containerApp.identity.userAssignedIdentities
+    if ($userAssigned) {
+        $uaClientId = ($userAssigned.PSObject.Properties | Select-Object -First 1).Value.clientId
+        if ($uaClientId) {
+            $envVars += "AZURE_CLIENT_ID=$uaClientId"
+        }
+    }
     
     if ($azureAiServiceEndpoint) {
         $envVars += "OPENAI_ENDPOINT=$azureAiServiceEndpoint"
@@ -973,63 +804,30 @@ function Update-Container-App {
         $envVars += "OPENAI_EMBEDDING_DEPLOYMENT=$embeddingDeployment"
     }
 
-    # First, ensure ingress is configured correctly for port 8080
-    Write-Info "Configuring ingress to use target port 8080..."
+    # Ensure ingress is configured correctly for port 8080
     try {
         az containerapp ingress update --name $ContainerAppName --resource-group $ResourceGroup --target-port 8080 | Out-Null
-        Write-Info "Ingress updated successfully"
     }
     catch {
         Write-Warn "Failed to update ingress configuration: $_"
     }
     
-    # Configure CORS for the Container App
-    Write-Info "Configuring CORS to allow all origins..."
-    
-    # First check if CORS is already configured
+    # Configure CORS
     $existingCors = az containerapp ingress cors show --name $ContainerAppName --resource-group $ResourceGroup 2>$null | ConvertFrom-Json
     
-    if ($existingCors -and $existingCors.allowedOrigins -contains "*") {
-        Write-Info "CORS already configured with allowed origins: $($existingCors.allowedOrigins -join ', ')"
-    }
-    else {
+    if (-not ($existingCors -and $existingCors.allowedOrigins -contains "*")) {
         try {
-            # Wait a moment for the container app to be ready
             Start-Sleep -Seconds 2
-            
             $ErrorActionPreference = "Continue"
             az containerapp ingress cors enable --name $ContainerAppName --resource-group $ResourceGroup --allowed-origins "*" --allowed-methods "GET,POST,PUT,DELETE,OPTIONS" --allowed-headers "*" --expose-headers "*" --max-age 3600 --output none 2>&1 | Out-Null
             $ErrorActionPreference = "Stop"
-            
-            # Verify CORS was configured by checking again
-            Start-Sleep -Seconds 1
-            $corsConfig = az containerapp ingress cors show --name $ContainerAppName --resource-group $ResourceGroup 2>$null | ConvertFrom-Json
-            
-            if ($corsConfig -and $corsConfig.allowedOrigins) {
-                Write-Info "CORS configured successfully"
-                Write-Info "Allowed origins: $($corsConfig.allowedOrigins -join ', ')"
-            }
-            else {
-                Write-Warn "Could not verify CORS configuration. Please check manually in Azure Portal"
-                Write-Warn "Run: az containerapp ingress cors show --name $ContainerAppName --resource-group $ResourceGroup"
-            }
         }
         catch {
-            Write-Warn "Exception during CORS configuration: $_"
-            # Check if CORS was configured despite the error
-            $corsConfig = az containerapp ingress cors show --name $ContainerAppName --resource-group $ResourceGroup 2>$null | ConvertFrom-Json
-            if ($corsConfig -and $corsConfig.allowedOrigins) {
-                Write-Info "CORS was configured successfully despite warning"
-                Write-Info "Allowed origins: $($corsConfig.allowedOrigins -join ', ')"
-            }
-            else {
-                Write-Warn "You may need to configure CORS manually in Azure Portal"
-            }
+            Write-Warn "CORS configuration may need manual setup in Azure Portal"
         }
     }
     
-    # Get ACR credentials and configure registry
-    Write-Info "Configuring ACR credentials for container app..."
+    # Configure ACR registry credentials
     $acrName = $script:ACR_NAME
     if ([string]::IsNullOrWhiteSpace($acrName)) {
         $acrName = az acr list --resource-group $script:ACR_RESOURCE_GROUP --query "[0].name" -o tsv
@@ -1039,58 +837,33 @@ function Update-Container-App {
     $acrUsername = az acr credential show --name $acrName --resource-group $script:ACR_RESOURCE_GROUP --query "username" -o tsv
     $acrPassword = az acr credential show --name $acrName --resource-group $script:ACR_RESOURCE_GROUP --query "passwords[0].value" -o tsv
     
-    Write-Info "ACR Login Server: $acrLoginServer"
-    Write-Info "ACR Username: $acrUsername"
-    
-    # Set ACR credentials on the container app
-    Write-Info "Setting ACR registry credentials..."
     try {
         az containerapp registry set --name $ContainerAppName --resource-group $ResourceGroup --server $acrLoginServer --username $acrUsername --password $acrPassword --output none
-        Write-Info "ACR credentials configured successfully"
     }
     catch {
         Write-Warn "Failed to set ACR credentials: $_"
     }
     
-    # Only update image if a new one was built successfully
+    # Update container app with image and/or env vars
     if ($script:IMAGE_TAG) {
-        Write-Info "Updating container app with new image: $script:IMAGE_TAG"
-        
         try {
             az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars $envVars --output none
-            
-            if ($LASTEXITCODE -ne 0) {
-                throw "Container app update failed with exit code $LASTEXITCODE"
-            }
-            
-            Write-Info "Container app updated successfully with new image!"
+            if ($LASTEXITCODE -ne 0) { throw "Container app update failed" }
+            Write-Info "Container app updated with image: $($script:IMAGE_TAG)"
         }
         catch {
-            $errorMessage = $_.Exception.Message
-            Write-Error "Container app update failed: $errorMessage"
-            Write-Error "Check the container app logs for more details:"
-            Write-Info "az containerapp logs show --name $ContainerAppName --resource-group $ResourceGroup --follow"
+            Write-Error "Container app update failed: $($_.Exception.Message)"
             exit 1
         }
     }
     else {
-        Write-Warn "Skipping image update (no new image was built)"
-        Write-Info "Updating only environment variables..."
-        
+        Write-Warn "No new image built, updating environment variables only"
         try {
             az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars $envVars --output none
-            
-            if ($LASTEXITCODE -ne 0) {
-                throw "Container app update failed with exit code $LASTEXITCODE"
-            }
-            
-            Write-Info "Container app environment variables updated successfully!"
-            Write-Info "Note: Container app is still using its existing image"
+            if ($LASTEXITCODE -ne 0) { throw "Container app update failed" }
         }
         catch {
-            $errorMessage = $_.Exception.Message
-            Write-Warn "Failed to update environment variables: $errorMessage"
-            Write-Warn "Continuing with deployment..."
+            Write-Warn "Failed to update environment variables: $($_.Exception.Message)"
         }
     }
 
@@ -1098,9 +871,6 @@ function Update-Container-App {
 }
 
 function Configure-Entra-App-RedirectURIs {
-    Write-Info "Configuring redirect URIs for Entra App as Single-Page Application..."
-    
-    # Extract FQDN from Container App URL
     $containerAppFqdn = $script:CONTAINER_APP_URL -replace '^https?://', ''
     
     $redirectUris = @(
@@ -1109,8 +879,6 @@ function Configure-Entra-App-RedirectURIs {
     )
     
     $ENTRA_APP_URL = "https://graph.microsoft.com/v1.0/applications/$($script:ENTRA_APP_OBJECT_ID)"
-    
-    # Create temporary file for JSON body
     $tempFile = [System.IO.Path]::GetTempFileName()
     
     # Configure as SPA (Single-Page Application) with proper token settings
@@ -1143,68 +911,66 @@ function Configure-Entra-App-RedirectURIs {
     
     try {
         az rest --method PATCH --url $ENTRA_APP_URL --headers "Content-Type=application/json" --body "@$tempFile" | Out-Null
-        Write-Info "Redirect URIs configured successfully as SPA:"
-        foreach ($uri in $redirectUris) {
-            Write-Info "  - $uri"
-        }
-        Write-Info "Access token issuance enabled for SPA authentication"
+        Write-Info "SPA redirect URIs configured: $($redirectUris -join ', ')"
     }
     catch {
-        Write-Warn "Failed to configure redirect URIs automatically."
-        Write-Warn "Please add these redirect URIs manually in Azure Portal as SPA redirect URIs:"
-        foreach ($uri in $redirectUris) {
-            Write-Warn "  - $uri"
-        }
+        Write-Warn "Failed to configure redirect URIs. Add manually as SPA redirect URIs in Azure Portal."
     }
     finally {
-        # Clean up temp file
-        if (Test-Path $tempFile) {
-            Remove-Item $tempFile -Force
-        }
+        if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
     }
 }
 
 function Assign-Cosmos-RBAC {
-    Write-Info "Assigning Cosmos DB permissions to Container App Managed Identity..."
+    Write-Info "Assigning Cosmos DB RBAC roles..."
 
-    Write-Info "Getting Container App Managed Identity Principal ID..."
-    $ACA_MI_PRINCIPAL_ID = az containerapp show --resource-group $ResourceGroup --name $ContainerAppName --query "identity.principalId" --output tsv
+    $containerAppIdentity = az containerapp identity show --resource-group $ResourceGroup --name $ContainerAppName | ConvertFrom-Json
+    $ACA_MI_PRINCIPAL_ID = $containerAppIdentity.principalId
     
     if (-not $ACA_MI_PRINCIPAL_ID -or $ACA_MI_PRINCIPAL_ID -eq "null") {
         Write-Error "Failed to get Container App Managed Identity Principal ID"
-        Write-Error "Make sure the Container App has a system-assigned managed identity enabled"
         exit 1
+    }
+
+    # Collect all principal IDs that need Cosmos DB access
+    $principalIds = @($ACA_MI_PRINCIPAL_ID)
+    if ($containerAppIdentity.userAssignedIdentities) {
+        foreach ($ua in $containerAppIdentity.userAssignedIdentities.PSObject.Properties) {
+            $uaPrincipal = $ua.Value.principalId
+            if ($uaPrincipal -and $uaPrincipal -notin $principalIds) {
+                $principalIds += $uaPrincipal
+            }
+        }
     }
     
     $ACA_MI_DISPLAY_NAME = $ContainerAppName
 
-    Write-Info "Container App MI Principal ID: $ACA_MI_PRINCIPAL_ID"
+    Write-Info "Principal IDs: $($principalIds -join ', ')"
     
-    # Assign Cosmos DB Built-in Data Reader role at Cosmos native data-plane root scope (/)
-    # Native Cosmos RBAC scopes are "/", "/dbs/{db}", "/dbs/{db}/colls/{coll}" - not ARM resource IDs.
+    # Assign Cosmos DB Built-in Data Reader role at native data-plane root scope (/)
     Write-Info "Assigning Cosmos DB Data Reader role..."
     $subscriptionId = az account show --query id -o tsv
     $roleDefinitionGuid = "00000000-0000-0000-0000-000000000001"
     $roleDefinitionResourceId = "/subscriptions/$subscriptionId/resourceGroups/$($script:COSMOS_RESOURCE_GROUP)/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccountName/sqlRoleDefinitions/$roleDefinitionGuid"
     $cosmosScope = "/"
 
-    $existingAssignment = az cosmosdb sql role assignment list --account-name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --query "[?principalId=='$ACA_MI_PRINCIPAL_ID' && scope=='$cosmosScope' && contains(roleDefinitionId, '$roleDefinitionGuid')]" | ConvertFrom-Json
+    foreach ($principalId in $principalIds) {
+        $existingAssignment = az cosmosdb sql role assignment list --account-name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --query "[?principalId=='$principalId' && scope=='$cosmosScope' && contains(roleDefinitionId, '$roleDefinitionGuid')]" | ConvertFrom-Json
 
-    if ($existingAssignment.Count -eq 0) {
-        az cosmosdb sql role assignment create --account-name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --role-definition-id $roleDefinitionResourceId --principal-id $ACA_MI_PRINCIPAL_ID --scope $cosmosScope
-        Write-Info "Successfully assigned Cosmos DB Data Reader role to Container App MI at scope '/'"
-        Write-Info "Role assignment propagation may take a few minutes."
-    } else {
-        Write-Info "Cosmos DB Data Reader role assignment already exists at scope '/'"
+        if ($existingAssignment.Count -eq 0) {
+            az cosmosdb sql role assignment create --account-name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --role-definition-id $roleDefinitionResourceId --principal-id $principalId --scope $cosmosScope
+            Write-Info "Assigned Cosmos DB Data Reader to '$principalId'"
+        }
     }
     
-    # Export variables for use in deployment summary
+    # Export variables for use in deployment summary and Cognitive Services RBAC
     $script:ACA_MI_PRINCIPAL_ID = $ACA_MI_PRINCIPAL_ID
+    $script:ACA_MI_PRINCIPAL_IDS = $principalIds
     $script:ACA_MI_DISPLAY_NAME = $ACA_MI_DISPLAY_NAME
 }
 
 function Assign-AI-Foundry-RBAC {
-    Write-Info "Assigning Azure AI Services permissions to Container App Managed Identity..."
+    Write-Info "Assigning Azure AI Services RBAC roles..."
 
     # Get Container App to extract Azure AI Services endpoint
     $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
@@ -1212,21 +978,23 @@ function Assign-AI-Foundry-RBAC {
     $azureAiServiceEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value
     
     if (-not $azureAiServiceEndpoint) {
-        Write-Warn "OPENAI_ENDPOINT not configured. Skipping Azure AI Services RBAC assignment."
+        Write-Warn "OPENAI_ENDPOINT not configured. Skipping AI Services RBAC."
         return
     }
     
-    Write-Info "Azure AI Services Endpoint: $azureAiServiceEndpoint"
-    
-    # Search for Cognitive Services accounts in the resource group
-    Write-Info "Searching for Azure AI Services (Cognitive Services) resources in resource group..."
-    $cognitiveAccounts = az cognitiveservices account list --resource-group $ResourceGroup | ConvertFrom-Json
+    # Search for Cognitive Services accounts
+    $cognitiveAccounts = az cognitiveservices account list --resource-group $ResourceGroup 2>$null | ConvertFrom-Json
     
     if (-not $cognitiveAccounts -or $cognitiveAccounts.Count -eq 0) {
-        Write-Warn "No Cognitive Services accounts found in resource group: $ResourceGroup"
-        Write-Warn "Please manually assign 'Cognitive Services OpenAI User' role to managed identity:"
-        Write-Warn "  Principal ID: $($script:ACA_MI_PRINCIPAL_ID)"
-        return
+        # The Cognitive Services account may be in a different resource group
+        $endpointHost = ([System.Uri]$azureAiServiceEndpoint).Host
+        $accountName = $endpointHost.Split('.')[0]
+        $cognitiveAccounts = az cognitiveservices account list --query "[?name=='$accountName']" 2>$null | ConvertFrom-Json
+        
+        if (-not $cognitiveAccounts -or $cognitiveAccounts.Count -eq 0) {
+            Write-Warn "No Cognitive Services accounts found matching endpoint. Assign 'Cognitive Services OpenAI User' manually."
+            return
+        }
     }
     
     # Match endpoint to Cognitive Services account
@@ -1243,22 +1011,14 @@ function Assign-AI-Foundry-RBAC {
     }
     
     if ($azureAiServiceEndpoint -match "\.cognitiveservices\.azure\.com") {
-        Write-Info "Detected Azure AI Services (Cognitive Services) endpoint"
-        
-        # Try to find the matching Cognitive Services account
-        # Prefer accounts with "openai" in the endpoint or kind
         foreach ($account in $cognitiveAccounts) {
             if ($account.kind -eq "OpenAI" -or $account.properties.endpoint -match "openai\.cognitiveservices\.azure\.com") {
                 $matchingAccount = $account
-                Write-Info "Found OpenAI account for Microsoft Foundry project: $($account.name)"
                 break
             }
         }
-        
-        # If no OpenAI account found, use the first Cognitive Services account
         if (-not $matchingAccount -and $cognitiveAccounts.Count -gt 0) {
             $matchingAccount = $cognitiveAccounts[0]
-            Write-Info "Using Cognitive Services account: $($matchingAccount.name)"
         }
     }
     else {
@@ -1274,171 +1034,97 @@ function Assign-AI-Foundry-RBAC {
     }
     
     if (-not $matchingAccount) {
-        Write-Warn "Could not automatically determine which Cognitive Services account to use"
-        Write-Warn "Found these Cognitive Services accounts in resource group:"
-        foreach ($account in $cognitiveAccounts) {
-            Write-Warn "  - $($account.name): $($account.properties.endpoint) (Kind: $($account.kind))"
-        }
-        Write-Warn ""
-        Write-Warn "Attempting to assign 'Cognitive Services OpenAI User' role to all OpenAI accounts..."
+        Write-Warn "Could not determine Cognitive Services account. Assigning to all OpenAI accounts..."
         
-        # Try to assign to all OpenAI accounts
         $assigned = $false
+        $principalIds = if ($script:ACA_MI_PRINCIPAL_IDS) { $script:ACA_MI_PRINCIPAL_IDS } else { @($script:ACA_MI_PRINCIPAL_ID) }
         foreach ($account in $cognitiveAccounts) {
             if ($account.kind -eq "OpenAI") {
-                Write-Info "Assigning role to OpenAI account: $($account.name)"
-                $existingRoleAssignment = az role assignment list --assignee $script:ACA_MI_PRINCIPAL_ID --scope $account.id --query "[?roleDefinitionName=='Cognitive Services OpenAI User'].id" -o tsv
-                
-                if (-not $existingRoleAssignment) {
-                    az role assignment create --role "Cognitive Services OpenAI User" --assignee-object-id $script:ACA_MI_PRINCIPAL_ID --assignee-principal-type ServicePrincipal --scope $account.id
-                    Write-Info "Successfully assigned role to $($account.name)"
-                    $assigned = $true
-                }
-                else {
-                    Write-Info "Role already assigned to $($account.name)"
-                    $assigned = $true
+                foreach ($principalId in $principalIds) {
+                    $existingRoleAssignment = az role assignment list --assignee $principalId --scope $account.id --query "[?roleDefinitionName=='Cognitive Services OpenAI User'].id" -o tsv
+                    if (-not $existingRoleAssignment) {
+                        az role assignment create --role "Cognitive Services OpenAI User" --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --scope $account.id
+                        $assigned = $true
+                    } else {
+                        $assigned = $true
+                    }
                 }
             }
         }
-        
-        if (-not $assigned) {
-            Write-Warn "No OpenAI accounts found. Please manually assign the role."
-        }
+        if (-not $assigned) { Write-Warn "No OpenAI accounts found. Assign role manually." }
         return
     }
     
     $resourceId = $matchingAccount.id
-    $resourceName = $matchingAccount.name
-    Write-Info "Target Cognitive Services account: $resourceName"
+    Write-Info "Target: $($matchingAccount.name)"
     
-    # Check if role assignment already exists
-    $existingRoleAssignment = az role assignment list --assignee $script:ACA_MI_PRINCIPAL_ID --scope $resourceId --query "[?roleDefinitionName=='Cognitive Services OpenAI User'].id" -o tsv
-    
-    if ($existingRoleAssignment) {
-        Write-Info "'Cognitive Services OpenAI User' role already assigned to Container App MI"
-    } else {
-        Write-Info "Assigning 'Cognitive Services OpenAI User' role..."
-        az role assignment create --role "Cognitive Services OpenAI User" --assignee-object-id $script:ACA_MI_PRINCIPAL_ID --assignee-principal-type ServicePrincipal --scope $resourceId
-        Write-Info "Successfully assigned 'Cognitive Services OpenAI User' role to Container App MI"
+    # Assign to all identity principals
+    $principalIds = if ($script:ACA_MI_PRINCIPAL_IDS) { $script:ACA_MI_PRINCIPAL_IDS } else { @($script:ACA_MI_PRINCIPAL_ID) }
+    foreach ($principalId in $principalIds) {
+        $existingRoleAssignment = az role assignment list --assignee $principalId --scope $resourceId --query "[?roleDefinitionName=='Cognitive Services OpenAI User'].id" -o tsv
+        if (-not $existingRoleAssignment) {
+            az role assignment create --role "Cognitive Services OpenAI User" --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --scope $resourceId
+            Write-Info "Assigned 'Cognitive Services OpenAI User' to '$principalId'"
+        }
     }
 }
 
 function Show-Container-Logs {
-    Write-Info "Waiting 10 seconds for Azure Container App to initialize then fetching logs..."
     Start-Sleep 10
-
     Write-Host ""
-    Write-Info "Azure Container App logs (hosting 'Azure Cosmos DB MCP Toolkit'):"
-    Write-Host "Begin_Azure_Container_App_Logs ---->"
-    
+    Write-Info "Container App logs:"
     try {
         az containerapp logs show --name $ContainerAppName --resource-group $ResourceGroup --tail 50 --output table
-        Write-Host "<---- End_Azure_Container_App_Logs"
-        Write-Host ""
     }
     catch {
-        Write-Warn "Could not retrieve logs. The Azure Container App might still be starting up, use the following command to check logs later."
-        Write-Info "az containerapp logs show --name $ContainerAppName --resource-group $ResourceGroup --tail 50"
+        Write-Warn "Could not retrieve logs. Check later: az containerapp logs show --name $ContainerAppName --resource-group $ResourceGroup --tail 50"
     }
 }
 
 function Test-MCP-Server-Health {
-    Write-Info "Verifying MCP server deployment and health..."
-    Write-Info "Note: Initial container startup can take 1-3 minutes..."
+    Write-Info "Verifying MCP server health (may take 1-3 minutes)..."
     
-    # First check if the revision is provisioned
-    Write-Info "Checking container app revision status..."
     $revision = az containerapp revision list --name $ContainerAppName --resource-group $ResourceGroup --query "[0]" | ConvertFrom-Json
     if ($revision.properties.provisioningState -ne "Provisioned") {
-        Write-Warn "Container revision is not yet provisioned. Current state: $($revision.properties.provisioningState)"
-        Write-Info "Waiting 30 seconds for revision to provision..."
         Start-Sleep -Seconds 30
     }
     
-    $maxRetries = 18  # 3 minutes total (10 seconds * 18)
+    $maxRetries = 18
     $retryDelay = 10
     
     for ($i = 1; $i -le $maxRetries; $i++) {
-        Write-Info "Health check attempt $i of $maxRetries..."
-        
         try {
-            # Test basic connectivity with longer timeout
             $response = Invoke-WebRequest -Uri "$($script:CONTAINER_APP_URL)/" -UseBasicParsing -TimeoutSec 30
-            Write-Info "[OK] MCP server is responding! Status: $($response.StatusCode)"
-            
-            # Test health endpoint if available
-            try {
-                $healthResponse = Invoke-WebRequest -Uri "$($script:CONTAINER_APP_URL)/health" -UseBasicParsing -TimeoutSec 10
-                Write-Info "[OK] Health endpoint responding: $($healthResponse.StatusCode)"
-            }
-            catch {
-                Write-Info "[WARN] Health endpoint not accessible, but main server is running"
-            }
-            
-            # Test MCP protocol endpoint
-            try {
-                $mcpResponse = Invoke-WebRequest -Uri "$($script:CONTAINER_APP_URL)/mcp" -UseBasicParsing -TimeoutSec 10
-                Write-Info "[OK] MCP protocol endpoint responding: $($mcpResponse.StatusCode)"
-            }
-            catch {
-                Write-Info "[INFO] MCP endpoint returned: $($_.Exception.Message)"
-            }
-            
-            Write-Info "[SUCCESS] MCP server verification completed successfully!"
+            Write-Info "MCP server responding (Status: $($response.StatusCode))"
             return $true
         }
         catch {
-            Write-Info "[RETRY] Attempt $i failed: $($_.Exception.Message)"
             if ($i -eq $maxRetries) {
-                Write-Error "[FAILED] MCP server failed to respond after $maxRetries attempts"
-                Write-Error "This might indicate a configuration issue or the application needs more time to start"
+                Write-Error "MCP server failed to respond after $maxRetries attempts"
                 return $false
             }
-            Write-Info "Waiting $retryDelay seconds before next attempt..."
             Start-Sleep -Seconds $retryDelay
         }
     }
 }
 
 function Verify-Container-App-Status {
-    Write-Info "Checking Container App revision status..."
-    
-    # Check revision status
     $revision = az containerapp revision list --name $ContainerAppName --resource-group $ResourceGroup --query "[0]" | ConvertFrom-Json
     
-    Write-Info "Revision Status:"
-    Write-Info "  - Name: $($revision.name)"
-    Write-Info "  - Provisioning: $($revision.properties.provisioningState)"
-    Write-Info "  - Health: $($revision.properties.healthState)"
-    Write-Info "  - Active: $($revision.properties.active)"
-    Write-Info "  - Replicas: $($revision.properties.replicas)"
+    Write-Info "Revision: $($revision.name) | State: $($revision.properties.provisioningState) | Health: $($revision.properties.healthState)"
     
-    if ($revision.properties.provisioningState -ne "Provisioned") {
-        Write-Warning "[WARN] Container App revision is not fully provisioned: $($revision.properties.provisioningState)"
-        
-        # Try to restart if failed
-        if ($revision.properties.provisioningState -eq "Failed") {
-            Write-Info "Attempting to restart failed revision..."
-            az containerapp revision restart --name $ContainerAppName --resource-group $ResourceGroup --revision $revision.name
-            Write-Info "Waiting 30 seconds for restart to complete..."
-            Start-Sleep -Seconds 30
-        }
-    }
-    
-    if ($revision.properties.healthState -eq "Unhealthy") {
-        Write-Warning "[WARN] Container App health check is failing - this may be normal for MCP servers without health endpoints"
+    if ($revision.properties.provisioningState -eq "Failed") {
+        Write-Info "Restarting failed revision..."
+        az containerapp revision restart --name $ContainerAppName --resource-group $ResourceGroup --revision $revision.name
+        Start-Sleep -Seconds 30
     }
     
     return $revision.properties.provisioningState -eq "Provisioned"
 }
 
 function Show-Deployment-Summary {
-    # Validate Azure AI Services endpoint before final deployment
     Validate-AzureAiServicesEndpoint
     
-    Write-Info "Deployment Summary (JSON):"
-    
-    # Create JSON summary (following PostgreSQL pattern exactly)
     $SUMMARY = @{
         MCP_SERVER_URI = $script:CONTAINER_APP_URL
         ENTRA_APP_CLIENT_ID = $script:ENTRA_APP_CLIENT_ID
@@ -1464,34 +1150,19 @@ function Show-Deployment-Summary {
     
     $DEPLOYMENT_INFO_FILE = "$SCRIPT_DIR/deployment-info.json"
     $SUMMARY_JSON | Out-File -FilePath $DEPLOYMENT_INFO_FILE -Encoding UTF8
-    Write-Info "Deployment information written to: $DEPLOYMENT_INFO_FILE"
+    Write-Info "Deployment info saved to: $DEPLOYMENT_INFO_FILE"
 }
 
 function Update-Frontend-Config {
-    Write-Info "Updating frontend configuration with deployment URLs..."
-    
-    # Build path incrementally for compatibility
     $projectRoot = Split-Path -Parent $SCRIPT_DIR
-    $srcPath = Join-Path $projectRoot "src"
-    $projectPath = Join-Path $srcPath "AzureCosmosDB.MCP.Toolkit"
-    $wwwrootPath = Join-Path $projectPath "wwwroot"
-    $htmlPath = Join-Path $wwwrootPath "index.html"
+    $htmlPath = Join-Path (Join-Path (Join-Path (Join-Path $projectRoot "src") "AzureCosmosDB.MCP.Toolkit") "wwwroot") "index.html"
     
-    if (-not (Test-Path $htmlPath)) {
-        Write-Warn "Frontend HTML file not found at: $htmlPath"
-        return
-    }
+    if (-not (Test-Path $htmlPath)) { return }
     
     try {
         $htmlContent = Get-Content $htmlPath -Raw
-        
-        # Update the serverUrl input default value
         $htmlContent = $htmlContent -replace 'value="https://[^"]*azurecontainerapps\.io"', "value=`"$($script:CONTAINER_APP_URL)`""
-        
-        # Save the updated HTML
         $htmlContent | Out-File -FilePath $htmlPath -Encoding UTF8 -NoNewline
-        
-        Write-Info "Updated frontend default Server URL to: $($script:CONTAINER_APP_URL)"
     }
     catch {
         Write-Warn "Failed to update frontend configuration: $_"
@@ -1543,7 +1214,7 @@ For more information, see: https://aka.ms/foundry-endpoints
 function Main {
     param($Arguments)
     
-    Write-Info "Starting Azure Container Apps deployment..."
+    Write-Info "Starting deployment..."
 
     Parse-Arguments
     Check-Prerequisites
@@ -1554,7 +1225,7 @@ function Main {
     Assign-Current-User-Role
     Deploy-Infrastructure
     Get-Deployment-Outputs
-    Update-Frontend-Config  # Must run BEFORE Build-And-Push-Image so HTML is updated before build
+    Update-Frontend-Config
     Build-And-Push-Image
     Update-Container-App
     Configure-Entra-App-RedirectURIs
@@ -1562,43 +1233,18 @@ function Main {
     Assign-AI-Foundry-RBAC
     Show-Container-Logs
 
-    Write-Info "Deployment completed!"
-    
-    # Verify deployment health
-    Write-Info "`n" + "="*80
-    Write-Info "DEPLOYMENT VERIFICATION"
-    Write-Info "="*80
-    
-    $containerHealthy = Verify-Container-App-Status
-    if (-not $containerHealthy) {
-        Write-Warning "Container App verification had issues, but continuing with MCP server testing..."
-    }
+    Verify-Container-App-Status | Out-Null
     
     $mcpHealthy = Test-MCP-Server-Health
     if (-not $mcpHealthy) {
-        Write-Warning "MCP server health verification failed - please check the container logs for more details"
-        $logCommand = "az containerapp logs show --name $ContainerAppName --resource-group $ResourceGroup --follow"
-        Write-Info "You can check logs with: $logCommand"
+        Write-Warn "MCP server health check failed. Check logs: az containerapp logs show --name $ContainerAppName --resource-group $ResourceGroup --follow"
     }
     
     Show-Deployment-Summary
     
-    # Final instructions
-    Write-Info "`n" + "="*80
-    Write-Info "IMPORTANT: AUTHENTICATION SETUP"
-    Write-Info "="*80
-    Write-Info "The Mcp.Tool.Executor role has been assigned to your user."
     Write-Info ""
-    Write-Info "To use the frontend, you MUST:"
-    Write-Info "  1. Sign out completely in the browser if already logged in"
-    Write-Info "  2. Clear browser cache or use incognito/private window"
-    Write-Info "  3. Sign in again to get a fresh token with the role claim"
-    Write-Info ""
-    Write-Info "Access the MCP Toolkit at:"
-    Write-Info "  $($script:CONTAINER_APP_URL)"
-    Write-Info ""
-    Write-Info "After signing in, check the 'Roles' field shows: Mcp.Tool.Executor"
-    Write-Info "="*80
+    Write-Info "Deployment complete! Access: $($script:CONTAINER_APP_URL)"
+    Write-Info "Sign out/in to get fresh token with Mcp.Tool.Executor role claim."
 }
 
 # Run main function
