@@ -1,8 +1,7 @@
-# `agentic_search` — Harness-1 multi-turn retrieval as an MCP tool
+# `agentic_search` — multi-turn retrieval as an MCP tool
 
-`agentic_search` runs the trained **Harness-1** multi-turn search agent
-(`pat-jj/harness-1`, a fine-tuned `openai/gpt-oss-20b` served by vLLM) against
-an Azure Cosmos DB corpus and returns the ranked, curated set of documents
+`agentic_search` runs a multi-turn search agent — built from scratch for this
+toolkit — against an Azure Cosmos DB corpus and returns the ranked, curated set of documents
 that best answer a natural-language query. The agent issues hybrid (vector +
 full-text) RRF searches, optionally reranks with Qwen3-Reranker-8B, fetches
 full documents, and prunes its working context across multiple turns. From
@@ -16,19 +15,19 @@ agent can take 20–40 turns and 30–60 s of wall-clock time.
   ──────────                            ─────────────────                 ───────────────────────────────────
   Claude Desktop                                                              ┌─ TokenBudgetRetrievalSubagent
   AI Foundry         ─── MCP HTTP ───► [McpServerTool] AgenticSearch          │  ├─ SearchCorpus / Grep / Read / Prune
-  VS Code Copilot                          │                                  │  └─ VLLMHarmonyInferenceModel
+  VS Code Copilot                          │                                  │  └─ OpenAI-compatible inference
                                            ▼                                  │
                                       AgenticSearchExecutor ── HTTP POST ───► POST /search  (uvicorn, kept warm)
                                            │                                  │
                                            │ ◄────── JSON body ──────────────┤
-                                           │                                  └─► vLLM (Harness-1) + Cosmos DB + embeddings
+                                           │                                  └─► LLM endpoint + Cosmos DB + embeddings
                                            ▼
                                       MCP tool response
 ```
 
 The .NET server and the Python retriever are now **two long-lived
 processes**. The retriever is started once (`python -m cosmos_retriever
-serve`) and keeps its Cosmos/embedding/Harmony clients warm; the .NET server
+serve`) and keeps its Cosmos/embedding/LLM clients warm; the .NET server
 calls its `POST /search` endpoint per MCP tool call and passes the JSON
 response through verbatim.
 
@@ -38,22 +37,21 @@ You need three things running on the same host (or reachable from it):
 
 | Component | What it is |
 |---|---|
-| **An LLM endpoint** | Either vLLM serving `pat-jj/harness-1` (default, Harmony token-IDs) **or** any OpenAI-compatible chat model — e.g. an Azure AI Foundry deployment — via `INFERENCE_BACKEND=openai_chat` (see below). |
-| **Azure Cosmos DB for NoSQL** | Container populated with the Harness-1 schema (`id`, `docid`, `chunk_idx`, `text`, `embedding`), vector + FTS indexes enabled. |
+| **An LLM endpoint** | Any OpenAI-compatible model — an Azure AI Foundry deployment, OpenAI, or a local server — via `INFERENCE_BACKEND=openai_responses` (default) or `openai_chat` (see below). |
+| **Azure Cosmos DB for NoSQL** | Container populated with the standard chunked-corpus schema (`id`, `docid`, `chunk_idx`, `text`, `embedding`), vector + FTS indexes enabled. |
 | **Embeddings backend** | Whatever model your corpus was ingested with — Azure OpenAI `text-embedding-3-small`, OpenAI native, or a local vLLM embedding server. |
 
-### Inference backend (local model vs. any Foundry endpoint)
+### Inference backend
 
-The bundled retriever supports two backends, selected by `INFERENCE_BACKEND`:
+The retriever supports two backends, selected by `INFERENCE_BACKEND`:
 
-- `harmony_vllm` *(default)* — the fine-tuned `pat-jj/harness-1` checkpoint
-  served by vLLM, driven with raw Harmony token-IDs (`VLLM_BASE_URL`, `VLLM_MODEL_NAME`).
-- `openai_chat` — **any** OpenAI-compatible chat model (an Azure AI Foundry
-  deployment, OpenAI, a local server, ...), driven with standard
-  function/tool calling. Set `CHAT_BASE_URL`, `CHAT_API_KEY`, `CHAT_MODEL`
-  (and `CHAT_API_VERSION` for Azure OpenAI-style endpoints). The agent uses
-  the same Cosmos tools, so retrieval quality tracks the chosen model's
-  tool-use ability rather than the Harness-1 checkpoint.
+- `openai_responses` *(default)* — any OpenAI-compatible `/responses` model
+  (e.g. a reasoning model such as gpt-5.x), driven with standard tool calling.
+- `openai_chat` — any OpenAI-compatible `/chat/completions` model (an Azure AI
+  Foundry deployment, OpenAI, a local server, ...). Set `CHAT_BASE_URL`,
+  `CHAT_API_KEY`, `CHAT_MODEL` (and `CHAT_API_VERSION` for Azure OpenAI-style
+  endpoints). The agent uses the same Cosmos tools, so retrieval quality tracks
+  the chosen model's tool-use ability.
 
 The Python helper is **bundled in this repository** at
 [`cosmos-retriever/`](../cosmos-retriever/) — no separate clone needed.
@@ -72,7 +70,7 @@ Confirm it works:
 ```
 
 Then start the service (it reads its own `.env` / `.env.local` for
-`VLLM_BASE_URL`, `ACCOUNT_URI`, `COSMOS_*`, `AZURE_OPENAI_*`, `HOST`, `PORT`):
+`CHAT_BASE_URL`, `ACCOUNT_URI`, `COSMOS_*`, `AZURE_OPENAI_*`, `HOST`, `PORT`):
 
 ```bash
 .venv/bin/python -m cosmos_retriever serve          # binds HOST:PORT (default 0.0.0.0:9000)
@@ -92,7 +90,7 @@ crashing the server.
 | `COSMOS_RETRIEVER_TIMEOUT_S` | `600` | Per-request wall-clock cap; the request is abandoned if it exceeds this. |
 
 Unlike the previous subprocess design, the retriever service has its **own**
-environment. Everything it needs (`VLLM_BASE_URL`, `ACCOUNT_URI`,
+environment. Everything it needs (`CHAT_BASE_URL`, `ACCOUNT_URI`,
 `COSMOS_DATABASE`, `COSMOS_CORPUS_CONTAINER`, `AZURE_OPENAI_*`,
 `CORPUS_REGISTRY_FILE`, …) is read from the retriever process's environment /
 `.env` file, **not** inherited from the .NET server.
@@ -102,7 +100,7 @@ environment. Everything it needs (`VLLM_BASE_URL`, `ACCOUNT_URI`,
 ```jsonc
 {
   "name": "agentic_search",
-  "description": "Runs the Harness-1 multi-turn retrieval agent (pat-jj/harness-1) against a Cosmos DB corpus and returns ranked, curated documents.",
+  "description": "Runs a multi-turn retrieval agent against a Cosmos DB corpus and returns ranked, curated documents.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -185,17 +183,17 @@ corpus is a one-line registry edit — no rebuild, no restart.
 
 ## Local demo
 
-End-to-end with the upstream `harness-1` repository checkout providing the
-Cosmos / Azure OpenAI / vLLM endpoints.
+End-to-end against any OpenAI-compatible endpoint plus Cosmos DB and embeddings.
 
 **1. Start the retriever service** (the bundled `cosmos-retriever/` folder; it
-reads `../harness-1/.env.local` plus its own `.env`):
+reads its own `.env`):
 
 ```bash
 cd cosmos-retriever
-set -a; source /path/to/harness-1/.env.local; set +a
-VLLM_BASE_URL=http://localhost:8000 \
-VLLM_MODEL_NAME=harness-1 \
+INFERENCE_BACKEND=openai_responses \
+CHAT_BASE_URL=https://your-resource.services.ai.azure.com/openai/v1 \
+CHAT_API_KEY=... \
+CHAT_MODEL=gpt-5.2 \
 VLLM_RERANKER_URL=http://localhost:8011 \
 CORPUS_REGISTRY_FILE=$PWD/corpus_registry.json \
 PORT=9000 \
@@ -217,7 +215,7 @@ Then point any MCP client at `http://127.0.0.1:8080/mcp/`.
 ## Operational notes
 
 - **The retriever service has its own environment.** Configure
-  `VLLM_BASE_URL`, `ACCOUNT_URI`, `COSMOS_*`, `AZURE_OPENAI_*`,
+  `CHAT_BASE_URL`, `ACCOUNT_URI`, `COSMOS_*`, `AZURE_OPENAI_*`,
   `CORPUS_REGISTRY_FILE`, etc. where you launch `cosmos_retriever serve`
   (env or its `.env` file) — the .NET server no longer forwards them.
 - **`COSMOS_USE_DEFAULT_CREDENTIAL`** controls the retriever's Cosmos auth.
@@ -225,7 +223,7 @@ Then point any MCP client at `http://127.0.0.1:8080/mcp/`.
   broader `DefaultAzureCredential` chain (managed identity, etc.).
 - **Warm process, no cold start.** Because the service stays up, the heavy
   client init happens once. Per-call latency is dominated by Cosmos
-  round-trips + vLLM generation; don't expect sub-second latency.
+  round-trips + LLM generation; don't expect sub-second latency.
 - **Retrieval quality is corpus-dependent.** Cosmos's hybrid RRF puts gold
   docs in the top 5 reliably; the Qwen3-Reranker step on top can over- or
   under-shoot depending on how close the corpus distribution is to the

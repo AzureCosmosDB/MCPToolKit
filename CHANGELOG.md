@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2026-06-18
 
 ### Added
-- **`agentic_search` tool**: Runs the trained Harness-1 multi-turn retrieval
-  agent (`pat-jj/harness-1` served by vLLM) against a Cosmos DB corpus and
+- **`agentic_search` tool**: Runs a multi-turn retrieval agent — built from
+  scratch for this toolkit — against a Cosmos DB corpus and
   returns ranked, curated documents that best answer the query. The agent
   issues hybrid (vector + full-text) RRF searches, optionally reranks with
   Qwen3-Reranker-8B, reads full documents, and prunes its context across

@@ -116,14 +116,6 @@ Optional reranker (pick at most one):
 - `BASETEN_API_KEY` + `BASETEN_MODEL_URL` — Baseten Qwen3-Reranker-8B classify
 - `VLLM_RERANKER_URL` — local vLLM `/score` endpoint with Qwen3-Reranker-8B
 
-A bundled wrapper script reads `../harness-1/.env.local` (the upstream repo's
-local config) and re-exports under our variable names:
-
-```bash
-scripts/run_with_upstream_env.sh \
-  python -m cosmos_retriever search --query "..."
-```
-
 ## Layout
 
 ```text
