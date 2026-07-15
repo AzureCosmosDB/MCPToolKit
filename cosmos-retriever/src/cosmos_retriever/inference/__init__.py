@@ -1,16 +1,16 @@
 
 from __future__ import annotations
 
-from cosmos_retriever.inference.openai_chat import (
+from cosmos_retriever.inference.agent_loop import (
     ChatDocument,
-    ChatSearchResult,
+    AgentSearchResult,
     run_chat_search,
     run_responses_search,
 )
 
 __all__ = [
     "ChatDocument",
-    "ChatSearchResult",
+    "AgentSearchResult",
     "run_chat_search",
     "run_responses_search",
 ]

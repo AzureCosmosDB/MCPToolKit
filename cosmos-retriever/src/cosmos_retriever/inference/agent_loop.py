@@ -13,7 +13,7 @@ from cosmos_retriever.prompts import get_retrieval_subagent_prompt
 from cosmos_retriever.tools import ToolSet
 from cosmos_retriever.utils import ProviderFormat
 
-logger = structlog.get_logger("cosmos_retriever.inference.openai_chat")
+logger = structlog.get_logger("cosmos_retriever.inference.agent_loop")
 
 _CHAT_TOOL_NAMES = ("search_corpus", "grep_corpus", "read_document", "prune_chunks")
 
@@ -37,7 +37,7 @@ class ChatDocument:
 
 
 @dataclass
-class ChatSearchResult:
+class AgentSearchResult:
 
     documents: list[ChatDocument]
     num_turns: int
@@ -143,7 +143,7 @@ def run_chat_search(
     max_turns: int = 20,
     temperature: float = 0.7,
     max_tokens: int = 4096,
-) -> ChatSearchResult:
+) -> AgentSearchResult:
 
     tool_specs = [
         tool.get_format(ProviderFormat.OPENAI_HARMONY)
@@ -232,7 +232,7 @@ def run_chat_search(
         tool_calls=tool_call_count,
     )
 
-    return ChatSearchResult(
+    return AgentSearchResult(
         documents=documents,
         num_turns=num_turns,
         final_text=final_text,
@@ -256,7 +256,7 @@ def run_responses_search(
     max_turns: int = 20,
     max_tokens: int = 4096,
     reasoning_effort: str | None = None,
-) -> ChatSearchResult:
+) -> AgentSearchResult:
 
     tool_specs = [
         tool.get_format(ProviderFormat.OPENAI)
@@ -340,7 +340,7 @@ def run_responses_search(
         pool_size=len(pool_doc_ids),
     )
 
-    return ChatSearchResult(
+    return AgentSearchResult(
         documents=documents,
         num_turns=num_turns,
         final_text=final_text,
@@ -360,4 +360,4 @@ def run_responses_search(
     )
 
 
-__all__ = ["ChatDocument", "ChatSearchResult", "run_chat_search", "run_responses_search"]
+__all__ = ["ChatDocument", "AgentSearchResult", "run_chat_search", "run_responses_search"]

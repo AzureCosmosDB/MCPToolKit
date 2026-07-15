@@ -95,7 +95,7 @@ RetrievalResult(
 
 ---
 
-## 4. Inference backends (`inference/openai_chat.py`)
+## 4. Inference backends (`inference/agent_loop.py`)
 
 Both backends drive the **same four Cosmos tools** via function-calling; they
 differ only in the API surface:
@@ -266,7 +266,7 @@ issued, per-turn tool calls, and the final document set) is also captured on the
 |---|---|
 | `server.py` | FastAPI service, `/health`, `/search`, `_RetrieverPool` |
 | `retriever.py` | `CosmosRetriever` agent façade + `RetrievalResult` |
-| `inference/openai_chat.py` | `run_chat_search` / `run_responses_search` agent loops |
+| `inference/agent_loop.py` | `run_chat_search` / `run_responses_search` agent loops |
 | `prompts.py` | System prompt + budget-exhausted message |
 | `tools.py` | The four tools, `ToolSchema`, `ToolSet` |
 | `rerank.py` | Optional Baseten / vLLM rerankers |

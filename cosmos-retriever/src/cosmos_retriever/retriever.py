@@ -121,7 +121,7 @@ class CosmosRetriever:
 
     def _search_chat(self, query: str, max_documents: int) -> RetrievalResult:
 
-        from cosmos_retriever.inference.openai_chat import (
+        from cosmos_retriever.inference.agent_loop import (
             run_chat_search,
         )
 
@@ -166,7 +166,7 @@ class CosmosRetriever:
 
     def _search_responses(self, query: str, max_documents: int) -> RetrievalResult:
 
-        from cosmos_retriever.inference.openai_chat import (
+        from cosmos_retriever.inference.agent_loop import (
             run_responses_search,
         )
 
