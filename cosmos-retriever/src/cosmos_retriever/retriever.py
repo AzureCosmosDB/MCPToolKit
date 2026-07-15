@@ -56,6 +56,7 @@ class CosmosRetriever:
         openai_client = self.settings.build_openai_client(self.corpus)
         self._use_chat = self.settings.use_chat_backend
         self._use_responses = self.settings.use_responses_backend
+        self._use_anthropic = self.settings.use_anthropic_backend
 
         self.toolset: ToolSet = ToolSet.build(
             cosmos_database=cosmos_db,
@@ -68,7 +69,11 @@ class CosmosRetriever:
             search_display_limit=self.settings.cosmos_retriever_search_display_limit,
         )
 
-        self._chat_client = self.settings.build_chat_client()
+        self._chat_client = (
+            self.settings.build_chat_client()
+            if self.settings.use_generic_llm_backend
+            else None
+        )
         self._chat_model: str | None = self.settings.chat_model
 
         logger.info(
@@ -117,6 +122,8 @@ class CosmosRetriever:
 
         if self._use_chat:
             return self._search_chat(query, max_documents)
+        if self._use_anthropic:
+            return self._search_anthropic(query, max_documents)
         return self._search_responses(query, max_documents)
 
     def _search_chat(self, query: str, max_documents: int) -> RetrievalResult:
@@ -205,6 +212,60 @@ class CosmosRetriever:
             "search_complete",
             query=query[:200],
             backend="openai_responses",
+            num_documents=len(result.documents),
+            num_turns=result.num_turns,
+            elapsed_s=result.elapsed_s,
+        )
+        return result
+
+    def _search_anthropic(self, query: str, max_documents: int) -> RetrievalResult:
+        from cosmos_retriever.inference.agent_loop import (
+            run_anthropic_search,
+        )
+
+        if (
+            not self.settings.chat_base_url
+            or self.settings.chat_api_key is None
+            or self._chat_model is None
+        ):
+            raise RuntimeError(
+                "anthropic backend selected but CHAT_BASE_URL / CHAT_API_KEY / CHAT_MODEL not set"
+            )
+
+        start = time.perf_counter()
+        chat_result = run_anthropic_search(
+            toolset=self.toolset,
+            base_url=self.settings.chat_base_url,
+            api_key=self.settings.chat_api_key.get_secret_value(),
+            model=self._chat_model,
+            query=query,
+            max_documents=max_documents,
+            max_turns=self.settings.chat_max_turns,
+            max_tokens=self.settings.chat_max_tokens,
+            anthropic_version=self.settings.anthropic_version,
+            auth_header=self.settings.anthropic_auth_header,
+        )
+        elapsed = time.perf_counter() - start
+
+        documents = [
+            RetrievedDocument(id=d.id, text=d.text, justification=d.justification, rank=d.rank)
+            for d in chat_result.documents
+        ]
+        result = RetrievalResult(
+            query=query,
+            documents=documents,
+            num_turns=chat_result.num_turns,
+            final_text=chat_result.final_text,
+            elapsed_s=round(elapsed, 3),
+            pool_doc_ids=chat_result.pool_doc_ids,
+            usage=chat_result.usage,
+            trajectory=chat_result.trajectory,
+            metadata=chat_result.metadata,
+        )
+        logger.info(
+            "search_complete",
+            query=query[:200],
+            backend="anthropic_messages",
             num_documents=len(result.documents),
             num_turns=result.num_turns,
             elapsed_s=result.elapsed_s,

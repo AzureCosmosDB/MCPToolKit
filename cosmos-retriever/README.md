@@ -97,12 +97,12 @@ at the repo root). Required:
 
 | Value | Model | Endpoint vars |
 |---|---|---|
-| `harmony_vllm` *(default)* | A fine-tuned checkpoint, driven with raw Harmony token-IDs. | `VLLM_BASE_URL`, `VLLM_MODEL_NAME` |
-| `openai_chat` | **Any** OpenAI-compatible chat model (Azure AI Foundry deployment, OpenAI, local server, ...), driven with standard function/tool calling. | `CHAT_BASE_URL`, `CHAT_API_KEY`, `CHAT_MODEL`, optional `CHAT_API_VERSION` |
+| `openai_responses` *(default)* | Any OpenAI-compatible `/responses` model (reasoning models such as gpt-5.x). | `CHAT_BASE_URL`, `CHAT_API_KEY`, `CHAT_MODEL`, optional `CHAT_API_VERSION` |
+| `openai_chat` | Any OpenAI-compatible `/chat/completions` model (Azure AI Foundry deployment, OpenAI, local server, ...). | `CHAT_BASE_URL`, `CHAT_API_KEY`, `CHAT_MODEL`, optional `CHAT_API_VERSION` |
+| `anthropic_messages` | Any Anthropic Messages API endpoint — e.g. Claude on Azure AI Foundry (served over the Messages API, not OpenAI-shaped). | `CHAT_BASE_URL`, `CHAT_API_KEY`, `CHAT_MODEL`, optional `ANTHROPIC_VERSION`, `ANTHROPIC_AUTH_HEADER` |
 
-With `openai_chat` the agent uses the same Cosmos tools, so retrieval quality
-depends on the chosen model's tool-use ability rather than the fine-tuned
-checkpoint. Example (Azure AI Foundry):
+All backends drive the same Cosmos tools, so retrieval quality depends on the
+chosen model's tool-use ability. Example (Azure AI Foundry):
 
 ```bash
 INFERENCE_BACKEND=openai_chat \

@@ -76,14 +76,14 @@ class RetrieverSettings(BaseSettings):
 
     inference_backend: str = Field(
         default="openai_responses",
-        description='Inference backend: "openai_responses" or "openai_chat".',
+        description='Inference backend: "openai_responses", "openai_chat", or "anthropic_messages".',
     )
 
     @field_validator("inference_backend")
     @classmethod
     def _validate_inference_backend(cls, v: str) -> str:
         normalized = (v or "").strip().lower()
-        allowed = {"openai_chat", "openai_responses"}
+        allowed = {"openai_chat", "openai_responses", "anthropic_messages"}
         if normalized not in allowed:
             raise ValueError(
                 f"INFERENCE_BACKEND must be one of {sorted(allowed)}, got {v!r}."
@@ -108,6 +108,14 @@ class RetrieverSettings(BaseSettings):
     chat_reasoning_effort: str | None = Field(
         default=None,
         description='Reasoning effort for reasoning models on the responses API (e.g. "low", "medium", "high").',
+    )
+    anthropic_version: str = Field(
+        default="2023-06-01",
+        description="anthropic-version header for the anthropic_messages backend.",
+    )
+    anthropic_auth_header: str = Field(
+        default="x-api-key",
+        description='Auth header name for the anthropic_messages endpoint (e.g. "x-api-key" or "api-key").',
     )
 
     account_uri: str = Field(description="Cosmos DB account URI (default corpus).")
@@ -254,6 +262,11 @@ class RetrieverSettings(BaseSettings):
     def use_responses_backend(self) -> bool:
 
         return self.inference_backend.strip().lower() == "openai_responses"
+
+    @property
+    def use_anthropic_backend(self) -> bool:
+
+        return self.inference_backend.strip().lower() == "anthropic_messages"
 
     @property
     def use_generic_llm_backend(self) -> bool:

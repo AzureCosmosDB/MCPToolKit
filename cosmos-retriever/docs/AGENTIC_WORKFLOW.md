@@ -97,13 +97,14 @@ RetrievalResult(
 
 ## 4. Inference backends (`inference/agent_loop.py`)
 
-Both backends drive the **same four Cosmos tools** via function-calling; they
-differ only in the API surface:
+All three backends drive the **same four Cosmos tools** via function-calling;
+they differ only in the API surface:
 
 | Backend | Function | API | Use for |
 |---|---|---|---|
 | `openai_responses` | `run_responses_search` | `/responses` | Reasoning models (gpt-5.x) — exposes turn-level trajectory + reasoning tokens. |
 | `openai_chat` | `run_chat_search` | `/chat/completions` | Generic OpenAI-compatible chat models. |
+| `anthropic_messages` | `run_anthropic_search` | `/v1/messages` | Anthropic Messages API models — e.g. Claude on Azure AI Foundry (tool-use blocks). |
 
 Each backend runs the **agent loop** (up to `max_turns`, default 20):
 

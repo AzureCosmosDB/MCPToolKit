@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 import json_repair
 import openai
+import requests
 import structlog
 
 from cosmos_retriever.prompts import get_retrieval_subagent_prompt
@@ -360,4 +361,160 @@ def run_responses_search(
     )
 
 
-__all__ = ["ChatDocument", "AgentSearchResult", "run_chat_search", "run_responses_search"]
+def _acc_anthropic_usage(usage: dict[str, int], data: dict) -> None:
+    u = data.get("usage") or {}
+    inp = int(u.get("input_tokens") or 0)
+    out = int(u.get("output_tokens") or 0)
+    usage["prompt_tokens"] += inp
+    usage["completion_tokens"] += out
+    usage["total_tokens"] += inp + out
+    usage["llm_calls"] += 1
+
+
+def _anthropic_messages_url(base_url: str) -> str:
+    b = base_url.rstrip("/")
+    if b.endswith("/messages"):
+        return b
+    if b.endswith("/v1"):
+        return b + "/messages"
+    return b + "/v1/messages"
+
+
+def run_anthropic_search(
+    *,
+    toolset: ToolSet,
+    base_url: str,
+    api_key: str,
+    model: str,
+    query: str,
+    max_documents: int = 20,
+    max_turns: int = 20,
+    max_tokens: int = 4096,
+    anthropic_version: str = "2023-06-01",
+    auth_header: str = "x-api-key",
+    timeout_s: int = 600,
+) -> AgentSearchResult:
+    tools = [
+        tool.get_format(ProviderFormat.ANTHROPIC)
+        for name, tool in toolset.tools.items()
+        if name in _CHAT_TOOL_NAMES
+    ]
+    system = get_retrieval_subagent_prompt(query, num_output_docs=max_documents)
+    messages: list[dict] = [
+        {
+            "role": "user",
+            "content": (
+                "Use the available tools to search the corpus, then return ONLY the "
+                "ranked <Document id=...> blocks (each with a <Justification>) for the most "
+                "relevant documents. Do not answer the question yourself."
+            ),
+        }
+    ]
+
+    url = _anthropic_messages_url(base_url)
+    headers = {
+        "content-type": "application/json",
+        "anthropic-version": anthropic_version,
+        auth_header: api_key,
+    }
+
+    doc_text: dict[str, str] = {}
+    tool_types_used: set[str] = set()
+    tool_call_count = 0
+    final_text = ""
+    num_turns = 0
+    usage = _empty_usage()
+    search_history: list[str] = []
+    turn_tools: list[list[str]] = []
+
+    for _ in range(max_turns):
+        payload = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": messages,
+            "tools": tools,
+        }
+        response = requests.post(url, json=payload, headers=headers, timeout=timeout_s)
+        response.raise_for_status()
+        data = response.json()
+        num_turns += 1
+        _acc_anthropic_usage(usage, data)
+
+        content = data.get("content") or []
+        messages.append({"role": "assistant", "content": content})
+
+        tool_uses = [b for b in content if b.get("type") == "tool_use"]
+        if not tool_uses:
+            final_text = "".join(
+                b.get("text", "") for b in content if b.get("type") == "text"
+            )
+            break
+
+        turn_tools.append([tu.get("name", "") for tu in tool_uses])
+        tool_results: list[dict] = []
+        for tu in tool_uses:
+            name = tu.get("name", "")
+            tool_types_used.add(name)
+            tool_call_count += 1
+            args = tu.get("input") or {}
+            if name in ("search_corpus", "grep_corpus"):
+                q = args.get("query") or args.get("pattern") or ""
+                if q:
+                    search_history.append(f"{name}: {str(q)[:100]}")
+            tool = toolset.get_tool(name)
+            if tool is None:
+                output = f"Error: unknown tool '{name}'."
+            else:
+                try:
+                    output, _metadata = tool(args)
+                    _collect_doc_text(output, doc_text)
+                except Exception as exc:
+                    logger.warning("anthropic_tool_error", tool=name, error=str(exc))
+                    output = f"Error executing '{name}': {exc}"
+            tool_results.append(
+                {"type": "tool_result", "tool_use_id": tu.get("id"), "content": output}
+            )
+        messages.append({"role": "user", "content": tool_results})
+    else:
+        final_text = ""
+
+    documents = _extract_documents(final_text, doc_text, max_documents)
+    pool_doc_ids = sorted({cid.split("__")[0] for cid in doc_text})
+
+    logger.info(
+        "anthropic_search_complete",
+        model=model,
+        num_turns=num_turns,
+        num_documents=len(documents),
+        tool_calls=tool_call_count,
+        pool_size=len(pool_doc_ids),
+    )
+
+    return AgentSearchResult(
+        documents=documents,
+        num_turns=num_turns,
+        final_text=final_text,
+        pool_doc_ids=pool_doc_ids,
+        usage=usage,
+        trajectory={
+            "search_history": search_history,
+            "turn_tools": turn_tools,
+            "final_docs": [d.id for d in documents],
+        },
+        metadata={
+            "backend": "anthropic_messages",
+            "model": model,
+            "tool_calls": tool_call_count,
+            "tool_types_used": ",".join(sorted(tool_types_used)),
+        },
+    )
+
+
+__all__ = [
+    "ChatDocument",
+    "AgentSearchResult",
+    "run_anthropic_search",
+    "run_chat_search",
+    "run_responses_search",
+]

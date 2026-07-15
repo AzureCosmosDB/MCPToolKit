@@ -65,11 +65,24 @@ class ToolSchema(BaseModel):
             },
         }
 
+    def _to_anthropic_format(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": {
+                "type": "object",
+                "properties": self.parameters,
+                "required": self.required,
+            },
+        }
+
     def to_provider_format(self, provider: ProviderFormat) -> dict[str, Any]:
         if provider is ProviderFormat.OPENAI:
             return self._to_openai_format()
         if provider is ProviderFormat.OPENAI_HARMONY:
             return self._to_openai_harmony_format()
+        if provider is ProviderFormat.ANTHROPIC:
+            return self._to_anthropic_format()
         raise ValueError(f"Unsupported provider format: {provider}")
 
 
