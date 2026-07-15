@@ -1,25 +1,30 @@
-"""Generic OpenAI-compatible **chat-completions** retrieval agent.
+"""Retrieval agent for generic OpenAI-compatible models.
 
-This is the inference backend for *any* chat model (an Azure AI Foundry
-deployment, OpenAI, a local OpenAI-compatible server, ...) — as opposed to
-:mod:`cosmos_retriever.inference.vllm`, which only works with the fine-tuned
-``pat-jj/harness-1`` checkpoint driven by raw Harmony token-IDs.
+This is the inference backend for *any* standard model — an Azure AI Foundry
+deployment, OpenAI, or a local OpenAI-compatible server — reached through plain
+function/tool calling.
 
-Instead of the Harmony channel/token protocol, this drives the same Cosmos
-:class:`~cosmos_retriever.tools.ToolSet` through **standard function/tool
-calling**:
+It exposes two entry points over the same Cosmos
+:class:`~cosmos_retriever.tools.ToolSet`:
 
-1. Render the retrieval system prompt (the same one the trained model used).
+* :func:`run_chat_search` — the ``/v1/chat/completions`` API (``tool_calls``).
+* :func:`run_responses_search` — the ``/responses`` API used by reasoning
+  models, with continuation via ``previous_response_id`` and
+  ``function_call_output`` items.
+
+Both follow the same loop:
+
+1. Render the retrieval system prompt.
 2. Advertise the four real tools (``search_corpus``, ``grep_corpus``,
-   ``read_document``, ``prune_chunks``) as OpenAI ``tools`` function schemas.
-3. Loop: call ``/v1/chat/completions``; if the model returns ``tool_calls``,
-   execute each against the toolset and feed the results back as ``role:tool``
-   messages; otherwise treat the assistant text as the final answer.
+   ``read_document``, ``prune_chunks``) as function schemas.
+3. Loop: call the model; if it requests tool calls, execute each against the
+   toolset and feed the results back; otherwise treat the assistant text as the
+   final answer.
 4. Parse the final ``<Document id=...>`` blocks the prompt asks for and hydrate
-   each with the chunk text we saw during searches.
+   each with the chunk text seen during searches.
 
 The loop is fully synchronous (the Cosmos SDK + OpenAI SDK calls are sync), so
-the FastAPI server runs it on a worker thread just like the Harmony path.
+the FastAPI server runs it on a worker thread.
 """
 
 from __future__ import annotations
@@ -38,9 +43,9 @@ from cosmos_retriever.utils import ProviderFormat
 
 logger = structlog.get_logger("cosmos_retriever.inference.openai_chat")
 
-# Only these tools are exposed to a generic chat model. The ``ultra`` stub
-# tools (fan_out_search / curate / review_docs / end_search) are dispatched by
-# the Harmony env and would raise if a chat model tried to call them.
+# The four executable tools (defined in cosmos_retriever.tools) advertised to
+# the model. The model "curates" its answer by emitting the final
+# <Document id=...> blocks the system prompt asks for.
 _CHAT_TOOL_NAMES = ("search_corpus", "grep_corpus", "read_document", "prune_chunks")
 
 # Matches the per-result header the search/grep tools emit:
@@ -74,7 +79,44 @@ class ChatSearchResult:
     num_turns: int
     final_text: str = ""
     pool_doc_ids: list[str] = field(default_factory=list)
+    usage: dict[str, int] = field(default_factory=dict)
+    trajectory: dict[str, object] = field(default_factory=dict)
     metadata: dict[str, str | int | float] = field(default_factory=dict)
+
+
+def _empty_usage() -> dict[str, int]:
+    return {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 0,
+        "llm_calls": 0,
+    }
+
+
+def _acc_chat_usage(usage: dict[str, int], resp) -> None:
+    """Accumulate /chat/completions usage (prompt/completion/total)."""
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return
+    usage["prompt_tokens"] += int(getattr(u, "prompt_tokens", 0) or 0)
+    usage["completion_tokens"] += int(getattr(u, "completion_tokens", 0) or 0)
+    usage["total_tokens"] += int(getattr(u, "total_tokens", 0) or 0)
+    usage["llm_calls"] += 1
+
+
+def _acc_responses_usage(usage: dict[str, int], resp) -> None:
+    """Accumulate /responses usage (input/output/reasoning tokens)."""
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return
+    usage["prompt_tokens"] += int(getattr(u, "input_tokens", 0) or 0)
+    usage["completion_tokens"] += int(getattr(u, "output_tokens", 0) or 0)
+    usage["total_tokens"] += int(getattr(u, "total_tokens", 0) or 0)
+    details = getattr(u, "output_tokens_details", None)
+    if details is not None:
+        usage["reasoning_tokens"] += int(getattr(details, "reasoning_tokens", 0) or 0)
+    usage["llm_calls"] += 1
 
 
 def _parse_tool_arguments(raw: str | None) -> dict:
@@ -183,6 +225,7 @@ def run_chat_search(
     tool_call_count = 0
     final_text = ""
     num_turns = 0
+    usage = _empty_usage()
 
     for _ in range(max_turns):
         response = client.chat.completions.create(
@@ -194,6 +237,7 @@ def run_chat_search(
             max_tokens=max_tokens,
         )
         num_turns += 1
+        _acc_chat_usage(usage, response)
         message = response.choices[0].message
         tool_calls = message.tool_calls or []
 
@@ -252,6 +296,7 @@ def run_chat_search(
         documents=documents,
         num_turns=num_turns,
         final_text=final_text,
+        usage=usage,
         metadata={
             "backend": "openai_chat",
             "model": model,
@@ -304,9 +349,13 @@ def run_responses_search(
     tool_types_used: set[str] = set()
     tool_call_count = 0
     final_text = ""
+    usage = _empty_usage()
+    search_history: list[str] = []
+    turn_tools: list[list[str]] = []
 
     response = client.responses.create(input=prompt, **common)
     num_turns = 1
+    _acc_responses_usage(usage, response)
 
     while True:
         function_calls = [o for o in response.output if getattr(o, "type", None) == "function_call"]
@@ -317,12 +366,17 @@ def run_responses_search(
             final_text = getattr(response, "output_text", "") or ""
             break
 
+        turn_tools.append([fc.name for fc in function_calls])
         outputs: list[dict] = []
         for fc in function_calls:
             name = fc.name
             tool_types_used.add(name)
             tool_call_count += 1
             args = _parse_tool_arguments(fc.arguments)
+            if name in ("search_corpus", "grep_corpus"):
+                q = args.get("query") or args.get("pattern") or args.get("q") or ""
+                if q:
+                    search_history.append(f"{name}: {str(q)[:100]}")
             tool = toolset.get_tool(name)
             if tool is None:
                 output = f"Error: unknown tool '{name}'."
@@ -341,6 +395,7 @@ def run_responses_search(
             previous_response_id=response.id, input=outputs, **common
         )
         num_turns += 1
+        _acc_responses_usage(usage, response)
 
     documents = _extract_documents(final_text, doc_text, max_documents)
 
@@ -362,6 +417,12 @@ def run_responses_search(
         num_turns=num_turns,
         final_text=final_text,
         pool_doc_ids=pool_doc_ids,
+        usage=usage,
+        trajectory={
+            "search_history": search_history,
+            "turn_tools": turn_tools,
+            "final_docs": [d.id for d in documents],
+        },
         metadata={
             "backend": "openai_responses",
             "model": model,

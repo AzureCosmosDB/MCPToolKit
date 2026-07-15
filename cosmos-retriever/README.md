@@ -1,8 +1,8 @@
 # Cosmos Retriever (Python helper)
 
-A Python library + FastAPI service that runs the **Harness-1** multi-turn
-search agent (`pat-jj/harness-1`, a fine-tuned `openai/gpt-oss-20b` served by
-vLLM) against an Azure Cosmos DB corpus and returns the curated documents as
+A Python library + FastAPI service that runs a multi-turn search agent
+(a fine-tuned `openai/gpt-oss-20b` served by vLLM, or any OpenAI-compatible
+model) against an Azure Cosmos DB corpus and returns the curated documents as
 JSON.
 
 The [Azure Cosmos DB MCP Toolkit](../MCPToolKit/)'s `agentic_search` tool
@@ -87,7 +87,7 @@ at the repo root). Required:
 
 | Variable | Purpose |
 |---|---|
-| `VLLM_BASE_URL` | OpenAI-compatible vLLM endpoint serving Harness-1 |
+| `VLLM_BASE_URL` | OpenAI-compatible vLLM endpoint serving the local model |
 | `ACCOUNT_URI` / `COSMOS_DATABASE` / `COSMOS_CORPUS_CONTAINER` | Cosmos target |
 | `OPENAI_API_KEY` *(or `AZURE_OPENAI_*`)* | Embeddings backend |
 
@@ -97,11 +97,11 @@ at the repo root). Required:
 
 | Value | Model | Endpoint vars |
 |---|---|---|
-| `harmony_vllm` *(default)* | The fine-tuned `pat-jj/harness-1` checkpoint, driven with raw Harmony token-IDs. | `VLLM_BASE_URL`, `VLLM_MODEL_NAME` |
+| `harmony_vllm` *(default)* | A fine-tuned checkpoint, driven with raw Harmony token-IDs. | `VLLM_BASE_URL`, `VLLM_MODEL_NAME` |
 | `openai_chat` | **Any** OpenAI-compatible chat model (Azure AI Foundry deployment, OpenAI, local server, ...), driven with standard function/tool calling. | `CHAT_BASE_URL`, `CHAT_API_KEY`, `CHAT_MODEL`, optional `CHAT_API_VERSION` |
 
 With `openai_chat` the agent uses the same Cosmos tools, so retrieval quality
-depends on the chosen model's tool-use ability rather than the Harness-1
+depends on the chosen model's tool-use ability rather than the fine-tuned
 checkpoint. Example (Azure AI Foundry):
 
 ```bash

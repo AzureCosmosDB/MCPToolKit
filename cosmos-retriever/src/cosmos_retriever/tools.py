@@ -1,153 +1,53 @@
-"""Tool implementations for the Harness-1 retrieval agent.
+"""Tool implementations for the Cosmos retrieval agent.
 
-The corpus lives in Azure Cosmos DB for NoSQL and is queried with hybrid
-RRF search (vector + full-text) plus an optional reranker. There are five
-tools (matching the trained model's output schema):
+The corpus lives in Azure Cosmos DB for NoSQL and is queried through a
+schema-decoupled retrieval layer (:mod:`cosmos_retriever.retrieval`): the agent
+tools build *logical* requests and delegate to a :class:`CorpusRetriever`, which
+plans a strategy, compiles safe Cosmos SQL from a validated ``CorpusSchema``, and
+normalises the rows. The tools themselves contain no Cosmos SQL and no physical
+field names.
 
-* :class:`SearchCorpusTool` — hybrid vector + FTS search over the corpus.
-* :class:`GrepCorpusTool` — BM25-narrowed regex search.
-* :class:`ReadDocumentTool` — fetch all chunks of a document by its docid.
+Tools:
+
+* :class:`SearchCorpusTool` — hybrid/vector/full-text corpus search.
+* :class:`GrepCorpusTool` — candidate retrieval + client-side regex filter.
+* :class:`ReadDocumentTool` — reconstruct a document via a configured resolver.
 * :class:`PruneChunksTool` — record chunk-ids whose context should be removed.
-* :class:`MultiToolUseTool` — wraps a parallel tool-call bundle (the trained
-  model emits a single ``functions.multi_tool_use`` call to fan out).
+* :class:`MultiToolUseTool` — wraps a parallel tool-call bundle.
 
-Plus :class:`UserTextTool`, the sentinel tool for assistant text in the
-trajectory, and :class:`SerializedTool`, a placeholder used by tests/round-trips.
+Plus :class:`UserTextTool`, the sentinel tool for assistant text, and
+:class:`SerializedTool`, a placeholder used by tests/round-trips.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import re
-import threading
-import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, TypeAlias, cast
+from typing import Any, TypeAlias
 
 import openai
 import structlog
-import tenacity
-from azure.cosmos import ContainerProxy, DatabaseProxy
-from azure.cosmos.exceptions import CosmosHttpResponseError
+from azure.cosmos import DatabaseProxy
 from pydantic import BaseModel, Field
 
 from cosmos_retriever.rerank import Reranker
+from cosmos_retriever.retrieval import (
+    CorpusRetriever,
+    GrepRequest,
+    QueryEmbedder,
+    ReadDocumentRequest,
+    SearchRequest,
+    build_legacy_retriever,
+)
+from cosmos_retriever.retrieval.errors import UnknownField, UnsupportedRetrievalCapability
+from cosmos_retriever.retrieval.executor import COSMOS_QUERY_MAX_CONCURRENCY
+from cosmos_retriever.retrieval.formatting import DOC_TRUNCATION, format_result_blocks
+from cosmos_retriever.retrieval.schema import CorpusSchema
 from cosmos_retriever.utils import ProviderFormat
 
 logger = structlog.get_logger("cosmos_retriever.tools")
-
-
-# ============================================================================
-# Cosmos helpers (concurrency throttle + retry)
-# ============================================================================
-
-
-def _read_positive_int_env(name: str, default: int) -> int:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        logger.warning("invalid_int_env", name=name, value=raw, default=default)
-        return default
-    if value < 1:
-        logger.warning("invalid_positive_int_env", name=name, value=raw, default=default)
-        return default
-    return value
-
-
-COSMOS_QUERY_MAX_CONCURRENCY = _read_positive_int_env("COSMOS_QUERY_MAX_CONCURRENCY", 8)
-_COSMOS_QUERY_SEMAPHORE = threading.BoundedSemaphore(COSMOS_QUERY_MAX_CONCURRENCY)
-
-
-def _is_retryable_cosmos_error(exc: BaseException) -> bool:
-    if not isinstance(exc, CosmosHttpResponseError):
-        return False
-    status = getattr(exc, "status_code", None)
-    return status in (408, 429, 449, 500, 502, 503, 504)
-
-
-@tenacity.retry(
-    stop=tenacity.stop_after_attempt(5),
-    wait=tenacity.wait_exponential(multiplier=1, min=4, max=15),
-    retry=tenacity.retry_if_exception(_is_retryable_cosmos_error),
-    before_sleep=lambda retry_state: logger.warning(
-        "retry_cosmos_query",
-        attempt=retry_state.attempt_number,
-        error=str(retry_state.outcome.exception()) if retry_state.outcome else None,
-    ),
-)
-def _query_with_retry(
-    container: ContainerProxy,
-    query: str,
-    parameters: list[dict[str, Any]],
-    *,
-    partition_key: str | None = None,
-) -> list[dict[str, Any]]:
-    """Execute a Cosmos NoSQL query with retry on transient errors."""
-
-    start = time.perf_counter()
-    with _COSMOS_QUERY_SEMAPHORE:
-        kwargs: dict[str, Any] = {"query": query, "parameters": parameters}
-        if partition_key is not None:
-            kwargs["partition_key"] = partition_key
-        else:
-            kwargs["enable_cross_partition_query"] = True
-        result = list(container.query_items(**kwargs))
-    elapsed_ms = (time.perf_counter() - start) * 1000
-    if elapsed_ms > 4500:
-        logger.warning(
-            "slow_cosmos_query",
-            elapsed_ms=round(elapsed_ms, 1),
-            cosmos_max_concurrency=COSMOS_QUERY_MAX_CONCURRENCY,
-        )
-    return result
-
-
-# ----- Stopword + tokenisation helpers for FullTextScore --------------------
-
-_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
-
-# Cosmos's en-US analyzer doesn't strip stopwords during FullTextScore scoring,
-# and FullTextScore is hard-capped at 30 terms per call. Drop standard English
-# stopwords client-side to (a) stay under 30 and (b) keep BM25 signal on the
-# rare/content tokens.
-_STOPWORDS = frozenset(
-    ["a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", "can", "did", "do", "does", "doing", "don", "down", "during", "each", "few", "for", "from", "further", "had", "has", "have", "having", "he", "her", "here", "hers", "herself", "him", "himself", "his", "how", "i", "if", "in", "into", "is", "it", "its", "itself", "just", "like", "me", "more", "most", "my", "myself", "no", "nor", "not", "now", "of", "off", "on", "once", "only", "or", "other", "our", "ours", "ourselves", "out", "over", "own", "please", "same", "she", "should", "so", "some", "such", "tell", "than", "that", "the", "their", "theirs", "them", "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too", "under", "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", "while", "who", "whom", "why", "will", "with", "would", "you", "your", "yours", "yourself", "yourselves"]
-)
-
-_FTS_MAX_TERMS = 30  # Cosmos hard limit on FullTextScore arity.
-
-
-def _tokenize_for_fts(query: str) -> list[str]:
-    """Tokenise for Cosmos FullTextScore: lowercase, drop stopwords, dedupe, cap at 30."""
-
-    out: list[str] = []
-    seen: set[str] = set()
-    for raw in _TOKEN_RE.findall(query):
-        t = raw.lower()
-        if t in _STOPWORDS or t in seen:
-            continue
-        seen.add(t)
-        out.append(t)
-        if len(out) >= _FTS_MAX_TERMS:
-            break
-    return out
-
-
-def _fts_literal_args(terms: list[str]) -> str:
-    """Render terms as comma-separated string literals for FullTextScore.
-
-    The 2nd+ arguments of FullTextScore must be literals, not bound parameters.
-    """
-
-    def esc(t: str) -> str:
-        return '"' + t.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-    return ", ".join(esc(t) for t in terms)
 
 
 # ============================================================================
@@ -316,7 +216,82 @@ class SerializedTool(Tool):
 # Concrete tools
 # ============================================================================
 
-DOC_TRUNCATION = 51_200_000  # effectively unbounded; keeps the formatting branch sane
+
+def _search_schema_for(schema: CorpusSchema) -> ToolSchema:
+    """Build a per-corpus ``search_corpus`` schema advertising the queryable
+    fields, so the agent can decide which field(s) to search and how."""
+
+    text_names = list(schema.text_field_map())
+    vector_names = list(schema.vector_field_map())
+    params: dict[str, Any] = {
+        "query": {
+            "type": "string",
+            "description": "The search query to find relevant documents in the corpus.",
+        }
+    }
+    if len(text_names) > 1:
+        params["fields"] = {
+            "type": "array",
+            "items": {"type": "string", "enum": text_names},
+            "description": (
+                "Optional. Text field(s) to keyword-match against "
+                f"(available: {text_names}). Defaults to the primary text field."
+            ),
+        }
+    if len(vector_names) > 1:
+        params["vector_field"] = {
+            "type": "string",
+            "enum": vector_names,
+            "description": (
+                "Optional. Vector field for semantic similarity "
+                f"(available: {vector_names}). Defaults to the first vector field."
+            ),
+        }
+    if text_names and vector_names:
+        params["mode"] = {
+            "type": "string",
+            "enum": ["auto", "hybrid", "vector", "text"],
+            "description": (
+                "Optional retrieval method: 'hybrid' (semantic + keyword), "
+                "'vector' (semantic only), 'text' (keyword only), or 'auto' (default)."
+            ),
+        }
+    desc = (
+        "Searches the corpus for relevant documents based on the input query. "
+        "Returns a section of the document that is relevant to the query.\n\n"
+        "Queryable schema:\n" + schema.agent_field_summary()
+    )
+    return ToolSchema(
+        name="search_corpus", description=desc, parameters=params, required=["query"]
+    )
+
+
+def _grep_schema_for(schema: CorpusSchema) -> ToolSchema:
+    """Build a per-corpus ``grep_corpus`` schema advertising the text fields."""
+
+    text_names = list(schema.text_field_map())
+    params: dict[str, Any] = {
+        "pattern": {
+            "type": "string",
+            "description": "The regex query to search for in the corpus.",
+        }
+    }
+    if len(text_names) > 1:
+        params["field"] = {
+            "type": "string",
+            "enum": text_names,
+            "description": (
+                "Optional. Text field to search "
+                f"(available: {text_names}). Defaults to the primary text field."
+            ),
+        }
+    desc = (
+        "Performs a regex search on the corpus to find documents matching the query.\n\n"
+        "Queryable text fields: " + ", ".join(f"'{n}'" for n in text_names)
+    )
+    return ToolSchema(
+        name="grep_corpus", description=desc, parameters=params, required=["pattern"]
+    )
 
 
 class SearchCorpusToolCallMetadata(ToolCallMetadata):
@@ -327,35 +302,25 @@ class SearchCorpusToolCallMetadata(ToolCallMetadata):
 
 
 class SearchCorpusTool(Tool):
-    """Hybrid (vector + full-text RRF) corpus search backed by Cosmos DB."""
+    """Thin agent tool: builds a logical :class:`SearchRequest` and delegates to
+    a :class:`CorpusRetriever`. Contains no Cosmos SQL or physical field names.
+    """
 
     tool_schema: ToolSchema
-    _cosmos_database: DatabaseProxy
-    _container: ContainerProxy
-    _openai_client: openai.OpenAI
-    _openai_ef_name: str
-    _embed_query_instruction: str | None
+    _retriever: CorpusRetriever
     _reranker: Reranker | None
     _search_limit: int
     _display_limit: int
 
     def __init__(
         self,
-        cosmos_database: DatabaseProxy,
-        openai_client: openai.OpenAI,
-        cosmos_container_name: str,
-        openai_ef_name: str = "text-embedding-3-small",
-        embed_query_instruction: str | None = None,
+        retriever: CorpusRetriever,
         reranker: Reranker | None = None,
         search_limit: int = 50,
         display_limit: int = 10,
     ) -> None:
-        super().__init__(tool_schema=SEARCH_CORPUS_SCHEMA)
-        self._cosmos_database = cosmos_database
-        self._container = cosmos_database.get_container_client(cosmos_container_name)
-        self._openai_client = openai_client
-        self._openai_ef_name = openai_ef_name
-        self._embed_query_instruction = embed_query_instruction
+        super().__init__(tool_schema=_search_schema_for(retriever.schema))
+        self._retriever = retriever
         self._reranker = reranker
         self._search_limit = search_limit
         self._display_limit = display_limit
@@ -374,32 +339,42 @@ class SearchCorpusTool(Tool):
         ignore_ids: list[str] = []
         if overrides is not None and "ignore_ids" in overrides:
             ignore_ids = overrides["ignore_ids"]
-        log.info("search_corpus", query=query, ignore_ids=len(ignore_ids))
 
-        terms = _tokenize_for_fts(query)
-        if not terms:
-            terms = [query.strip() or "_"]
-        dense_vec = self._embed_query(query)
-
-        sql_parts = ["SELECT TOP @k c.id, c.text, c.docid, c.chunk_idx FROM c"]
-        parameters: list[dict[str, Any]] = [
-            {"name": "@k", "value": self._search_limit},
-            {"name": "@qVec", "value": dense_vec},
-        ]
-        if ignore_ids:
-            sql_parts.append("WHERE NOT ARRAY_CONTAINS(@ignore, c.id)")
-            parameters.append({"name": "@ignore", "value": ignore_ids})
-        sql_parts.append(
-            "ORDER BY RANK RRF("
-            "VectorDistance(c.embedding, @qVec), "
-            f"FullTextScore(c.text, {_fts_literal_args(terms)})"
-            ")"
+        # Optional agent-selected field targeting / retrieval mode.
+        fields = params.get("fields")
+        if isinstance(fields, str):
+            fields = [fields]
+        vector_field = params.get("vector_field")
+        mode = params.get("mode") or "auto"
+        if mode not in ("auto", "hybrid", "vector", "text"):
+            mode = "auto"
+        log.info(
+            "search_corpus",
+            query=query,
+            ignore_ids=len(ignore_ids),
+            fields=fields,
+            vector_field=vector_field,
+            mode=mode,
         )
-        sql = "\n".join(sql_parts)
 
-        rows = _query_with_retry(self._container, sql, parameters)
-        ids = [r["id"] for r in rows]
-        documents = [r.get("text", "") for r in rows]
+        request = SearchRequest(
+            query=query,
+            limit=self._search_limit,
+            ignored_item_ids=ignore_ids,
+            text_fields=fields,
+            vector_field=vector_field,
+            mode=mode,
+        )
+        try:
+            items = self._retriever.search(request)
+        except (UnknownField, UnsupportedRetrievalCapability) as exc:
+            log.warning("search_field_error", error=str(exc))
+            return (
+                f"Search field/mode error: {exc}",
+                SearchCorpusToolCallMetadata(returned_chunk_ids=[]),
+            )
+        ids = [it.item_id for it in items]
+        documents = [it.text for it in items]
 
         max_tokens_override = (
             overrides.get("max_tokens") if overrides and "max_tokens" in overrides else None
@@ -407,33 +382,16 @@ class SearchCorpusTool(Tool):
 
         token_counts: list[int | None] = [None] * len(ids)
         if self._reranker is not None and ids:
-            rerank_results = self._reranker(
-                query, cast(list[str], documents), max_tokens=max_tokens_override
-            )
+            rerank_results = self._reranker(query, documents, max_tokens=max_tokens_override)
             ids = [ids[r.original_index] for r in rerank_results]
             documents = [r.document for r in rerank_results]
             token_counts = [r.tokens for r in rerank_results]
             log.info("reranked_results", num_results=len(ids))
 
-        formatted = [
-            "\n# DOCUMENT ID: {}{} \n{}".format(
-                id_,
-                f" ({tokens} tokens)" if tokens is not None else "",
-                doc[:DOC_TRUNCATION],
-            )
-            for id_, doc, tokens in zip(ids, cast(list[str], documents), token_counts, strict=True)
-        ][: self._display_limit]
-
-        text = "\n".join(formatted) if ids else "No results found"
-        return text, SearchCorpusToolCallMetadata(returned_chunk_ids=ids[: len(formatted)])
-
-    def _embed_query(self, text: str) -> list[float]:
-        if self._embed_query_instruction:
-            text = f"Instruct: {self._embed_query_instruction}\nQuery: {text}"
-        resp = self._openai_client.embeddings.create(
-            model=self._openai_ef_name, input=[text], encoding_format="float"
-        )
-        return resp.data[0].embedding
+        triples = list(zip(ids, documents, token_counts, strict=True))[: self._display_limit]
+        text = format_result_blocks(triples)
+        returned = [t[0] for t in triples]
+        return text, SearchCorpusToolCallMetadata(returned_chunk_ids=returned)
 
 
 class GrepCorpusToolCallMetadata(ToolCallMetadata):
@@ -443,28 +401,25 @@ class GrepCorpusToolCallMetadata(ToolCallMetadata):
 
 
 class GrepCorpusTool(Tool):
-    """Regex search over the corpus.
+    """Two-stage regex search: strategy-selected candidate retrieval (via the
+    :class:`CorpusRetriever`) followed by client-side regex filtering.
 
-    Cosmos's ``RegexMatch`` requires an O(N) scan that blows past serverless
-    per-request budgets. We use ``FullTextScore`` (index-backed BM25) on the
-    pattern's tokens, then post-filter the top hits with the real regex
-    client-side.
+    The candidate source (full-text by default) is chosen by the retrieval
+    planner, so this tool holds no Cosmos SQL or physical field names — only the
+    client-side regex semantics.
     """
 
     tool_schema: ToolSchema
-    _cosmos_database: DatabaseProxy
-    _container: ContainerProxy
+    _retriever: CorpusRetriever
     _token_counter: Callable[[str], int] | None
 
     def __init__(
         self,
-        cosmos_database: DatabaseProxy,
-        cosmos_container_name: str,
+        retriever: CorpusRetriever,
         token_counter: Callable[[str], int] | None = None,
     ) -> None:
-        super().__init__(tool_schema=GREP_CORPUS_SCHEMA)
-        self._cosmos_database = cosmos_database
-        self._container = cosmos_database.get_container_client(cosmos_container_name)
+        super().__init__(tool_schema=_grep_schema_for(retriever.schema))
+        self._retriever = retriever
         self._token_counter = token_counter
 
     def __call__(
@@ -478,58 +433,60 @@ class GrepCorpusTool(Tool):
             raise ValueError(f"Invalid params type: {type(params)}")
 
         pattern = params["pattern"]
-        log.info("grep_corpus", pattern=pattern)
+        field = params.get("field")
+        log.info("grep_corpus", pattern=pattern, field=field)
 
-        terms = _tokenize_for_fts(pattern)
-        if not terms:
+        try:
+            candidates = self._retriever.grep_candidates(
+                GrepRequest(
+                    pattern=pattern, candidate_limit=50, result_limit=5, text_field=field
+                )
+            )
+        except (UnknownField, UnsupportedRetrievalCapability) as exc:
+            log.warning("grep_field_error", error=str(exc))
+            return (
+                f"Grep field error: {exc}",
+                GrepCorpusToolCallMetadata(returned_chunk_ids=[]),
+            )
+        if not candidates:
             return "No results found", GrepCorpusToolCallMetadata(returned_chunk_ids=[])
-
-        sql = (
-            "SELECT TOP 50 c.id, c.text, c.docid FROM c "
-            "ORDER BY RANK FullTextScore(c.text, " + _fts_literal_args(terms) + ")"
-        )
-        candidate_rows = _query_with_retry(self._container, sql, [])
 
         try:
             regex = re.compile(pattern, re.IGNORECASE)
-            rows = [r for r in candidate_rows if regex.search(r.get("text", ""))][:5]
+            matched = [it for it in candidates if regex.search(it.text)][:5]
         except re.error:
-            rows = candidate_rows[:5]
+            matched = candidates[:5]
 
-        ids = [r["id"] for r in rows]
-        documents = [r.get("text", "") for r in rows]
+        ids = [it.item_id for it in matched]
+        documents = [it.text for it in matched]
         token_counts: list[int | None] = (
             [self._token_counter(doc) for doc in documents]
             if self._token_counter is not None
             else [None] * len(documents)
         )
 
-        formatted = [
-            "\n# DOCUMENT ID: {}{} \n{}".format(
-                id_,
-                f" ({tokens} tokens)" if tokens is not None else "",
-                doc[:DOC_TRUNCATION],
-            )
-            for id_, doc, tokens in zip(ids, documents, token_counts, strict=True)
-        ]
-        text = "\n".join(formatted) if ids else "No results found"
+        triples = list(zip(ids, documents, token_counts, strict=True))
+        text = format_result_blocks(triples)
         return text, GrepCorpusToolCallMetadata(returned_chunk_ids=ids)
 
 
 class ReadDocumentTool(Tool):
-    """Reads all chunks for a document (partitioned by docid)."""
+    """Reads a complete document via a configured document resolver.
+
+    Document reconstruction (partition handling, chunk ordering, identity
+    parsing) lives in the resolver; this tool only applies rerank/token-budget
+    trimming and formats the result.
+    """
 
     tool_schema: ToolSchema
-    _cosmos_database: DatabaseProxy
-    _container: ContainerProxy
+    _retriever: CorpusRetriever
     _reranker: Reranker | None
     _token_counter: Callable[[str], int] | None
     _max_tokens: int | None
 
     def __init__(
         self,
-        cosmos_database: DatabaseProxy,
-        cosmos_container_name: str,
+        retriever: CorpusRetriever,
         reranker: Reranker | None = None,
         token_counter: Callable[[str], int] | None = None,
         max_tokens: int | None = None,
@@ -537,8 +494,7 @@ class ReadDocumentTool(Tool):
         if max_tokens is not None and token_counter is None:
             raise ValueError("token_counter is required when max_tokens is specified")
         super().__init__(tool_schema=READ_DOCUMENT_SCHEMA)
-        self._cosmos_database = cosmos_database
-        self._container = cosmos_database.get_container_client(cosmos_container_name)
+        self._retriever = retriever
         self._reranker = reranker
         self._token_counter = token_counter
         self._max_tokens = max_tokens
@@ -555,27 +511,20 @@ class ReadDocumentTool(Tool):
 
         doc_id = params.get("doc_id") or params.get("id")
         log.info("read_document", doc_id=doc_id)
-        # Ingest format is "<docid>__<chunk_idx>"; tolerate either form.
-        if isinstance(doc_id, str) and "__" in doc_id:
-            doc_id = doc_id.split("__", 1)[0]
-
-        sql = (
-            "SELECT TOP 300 c.id, c.text, c.chunk_idx, c.docid FROM c "
-            "WHERE c.docid = @doc_id"
-        )
-        parameters = [{"name": "@doc_id", "value": doc_id}]
-        rows = _query_with_retry(self._container, sql, parameters, partition_key=doc_id)
-        rows.sort(key=lambda r: r.get("chunk_idx", 0))
-        documents = [r.get("text", "") for r in rows]
-        assembled = "".join(cast(list[str], documents))
 
         query = overrides.get("query") if overrides else None
         max_tokens = (
             overrides.get("max_tokens") if overrides and "max_tokens" in overrides else None
         ) or self._max_tokens
 
+        document = self._retriever.read_document(
+            ReadDocumentRequest(document_id=doc_id, query=query)
+        )
+        documents = document.chunk_texts
+        assembled = document.assembled
+
         if self._reranker is not None and query is not None and max_tokens is not None:
-            rerank_results = self._reranker(query, cast(list[str], documents), max_tokens=max_tokens)
+            rerank_results = self._reranker(query, documents, max_tokens=max_tokens)
             kept_indices = {r.original_index for r in rerank_results}
             kept_docs = [documents[i] for i in range(len(documents)) if i in kept_indices]
             assembled = "".join(kept_docs)
@@ -627,7 +576,7 @@ _ToolSetT: TypeAlias = "ToolSet"
 class MultiToolUseTool(Tool):
     """Wraps a parallel tool-call bundle for models without native parallel calls.
 
-    The trained Harness-1 model emits a single ``functions.multi_tool_use``
+    A model emits a single ``functions.multi_tool_use``
     call with a list of inner ``{tool_name, parameters}`` entries; the inner
     tools are dispatched serially against the bound :class:`ToolSet`.
     """
@@ -677,85 +626,6 @@ class UserTextTool(Tool):
 
 
 # ============================================================================
-# Stub tools used by the ultra_core working-memory env
-# ----------------------------------------------------------------------------
-# These tools are *registered* on the toolset so the model sees their
-# schemas, but their actual behaviour is dispatched by
-# :class:`cosmos_retriever.env.UltraSearchEnv` (which has access to the
-# cross-turn :class:`WorkingMemory`).
-# ============================================================================
-
-
-def _stub_tool(name_for_error: str):
-    def _impl(self, params, overrides=None):
-        raise NotImplementedError(
-            f"{name_for_error} is dispatched by UltraSearchEnv, not the tool itself"
-        )
-    return _impl
-
-
-class FanOutSearchTool(Tool):
-    """Stub: dispatched by env. Runs N parallel ``search_corpus`` calls."""
-
-    tool_schema: ToolSchema
-
-    def __init__(self) -> None:
-        from cosmos_retriever.ultra_core import FAN_OUT_SEARCH_SCHEMA
-        super().__init__(tool_schema=FAN_OUT_SEARCH_SCHEMA)
-
-    __call__ = _stub_tool("fan_out_search")
-
-
-class CurateTool(Tool):
-    """Stub: dispatched by env. Updates :class:`WorkingMemory.curated_ids`."""
-
-    tool_schema: ToolSchema
-
-    def __init__(self) -> None:
-        from cosmos_retriever.ultra_core import CURATE_SCHEMA
-        super().__init__(tool_schema=CURATE_SCHEMA)
-
-    __call__ = _stub_tool("curate")
-
-
-class EndSearchTool(Tool):
-    """Sentinel tool — when called, the env terminates the episode."""
-
-    tool_schema: ToolSchema
-
-    def __init__(self) -> None:
-        from cosmos_retriever.ultra_core import END_SEARCH_SCHEMA
-        super().__init__(tool_schema=END_SEARCH_SCHEMA)
-
-    def __call__(self, params, overrides=None):
-        return "Search concluded.", None
-
-
-class ReviewDocsTool(Tool):
-    """Stub: dispatched by env. Returns full text of previously-found docs."""
-
-    tool_schema: ToolSchema
-
-    def __init__(self) -> None:
-        from cosmos_retriever.ultra_core import REVIEW_DOCS_SCHEMA
-        super().__init__(tool_schema=REVIEW_DOCS_SCHEMA)
-
-    __call__ = _stub_tool("review_docs")
-
-
-class VerifyTool(Tool):
-    """Stub: dispatched by env (v8d). Verifies a claim against doc IDs."""
-
-    tool_schema: ToolSchema
-
-    def __init__(self) -> None:
-        from cosmos_retriever.ultra_core import VERIFY_SCHEMA
-        super().__init__(tool_schema=VERIFY_SCHEMA)
-
-    __call__ = _stub_tool("verify")
-
-
-# ============================================================================
 # ToolSet
 # ============================================================================
 
@@ -789,40 +659,54 @@ class ToolSet(BaseModel):
     def build(
         cls,
         *,
-        cosmos_database: DatabaseProxy,
-        cosmos_container_name: str,
-        openai_client: openai.OpenAI,
+        cosmos_database: DatabaseProxy | None = None,
+        cosmos_container_name: str | None = None,
+        openai_client: openai.OpenAI | None = None,
         openai_embedding_model: str = "text-embedding-3-small",
         embed_query_instruction: str | None = None,
+        retriever: CorpusRetriever | None = None,
         reranker: Reranker | None = None,
         token_counter: Callable[[str], int] | None = None,
         max_tokens: int | None = None,
         search_limit: int = 50,
         search_display_limit: int = 10,
-        include_ultra_tools: bool = False,
         name: str | None = None,
     ) -> ToolSet:
         """Build a fully-wired retrieval :class:`ToolSet`.
 
         Returns a :class:`ToolSet` containing :class:`SearchCorpusTool`,
         :class:`GrepCorpusTool`, :class:`ReadDocumentTool`, and
-        :class:`PruneChunksTool` — exactly the four tools the trained
-        Harness-1 model expects to see on its developer message.
+        :class:`PruneChunksTool` — the four tools the agent drives.
 
-        When ``include_ultra_tools`` is true, also registers the stub
-        ``fan_out_search``, ``curate``, ``review_docs``, and
-        ``end_search`` tools used by
-        :class:`cosmos_retriever.env.UltraSearchEnv`.
+        Provide either a pre-built ``retriever`` (a :class:`CorpusRetriever`,
+        for custom schemas) *or* the ``cosmos_database`` / ``cosmos_container_name``
+        / ``openai_client`` trio, in which case a legacy-benchmark
+        :class:`CorpusRetriever` is constructed automatically (backward
+        compatible with the pre-refactor call site).
         """
+
+        if retriever is None:
+            if cosmos_database is None or cosmos_container_name is None or openai_client is None:
+                raise ValueError(
+                    "ToolSet.build requires either 'retriever' or "
+                    "'cosmos_database' + 'cosmos_container_name' + 'openai_client'"
+                )
+            container = cosmos_database.get_container_client(cosmos_container_name)
+            embedder = QueryEmbedder(
+                client=openai_client,
+                model=openai_embedding_model,
+                query_instruction=embed_query_instruction,
+            )
+            retriever = build_legacy_retriever(
+                container=container,
+                embedder=embedder,
+                embedding_model=openai_embedding_model,
+            )
 
         toolset = cls(name=name)
         toolset.add_tool(
             SearchCorpusTool(
-                cosmos_database=cosmos_database,
-                openai_client=openai_client,
-                cosmos_container_name=cosmos_container_name,
-                openai_ef_name=openai_embedding_model,
-                embed_query_instruction=embed_query_instruction,
+                retriever=retriever,
                 reranker=reranker,
                 search_limit=search_limit,
                 display_limit=search_display_limit,
@@ -830,30 +714,22 @@ class ToolSet(BaseModel):
         )
         toolset.add_tool(
             GrepCorpusTool(
-                cosmos_database=cosmos_database,
-                cosmos_container_name=cosmos_container_name,
+                retriever=retriever,
                 token_counter=token_counter,
             )
         )
         toolset.add_tool(
             ReadDocumentTool(
-                cosmos_database=cosmos_database,
-                cosmos_container_name=cosmos_container_name,
+                retriever=retriever,
                 reranker=reranker,
                 token_counter=token_counter,
                 max_tokens=max_tokens,
             )
         )
         toolset.add_tool(PruneChunksTool())
-        if include_ultra_tools:
-            toolset.add_tool(FanOutSearchTool())
-            toolset.add_tool(CurateTool())
-            toolset.add_tool(ReviewDocsTool())
-            toolset.add_tool(EndSearchTool())
         return toolset
 
 
-# Re-export the names trajectory.py imports
 __all__ = [
     "COSMOS_QUERY_MAX_CONCURRENCY",
     "DOC_TRUNCATION",

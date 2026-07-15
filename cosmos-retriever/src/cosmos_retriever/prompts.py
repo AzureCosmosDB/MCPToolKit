@@ -1,7 +1,7 @@
-"""System prompts for the Harness-1 retrieval subagent.
+"""System prompts for the retrieval subagent.
 
-Carried over verbatim from the upstream Harness-1 training prompts so that the
-trained model continues to see the exact format it was optimised for.
+These instruct an OpenAI-compatible model how to search the Cosmos corpus with
+the four tools and return the ranked ``<Document id=...>`` blocks it curated.
 """
 
 from __future__ import annotations

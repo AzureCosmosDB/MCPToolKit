@@ -5311,3 +5311,5 @@ node_modules/
 .venv/Scripts/python.exe
 .venv/Scripts/pythonw.exe
 .venv/Scripts/tqdm.exe
+foundry-harness/**/__pycache__/
+*.pyc

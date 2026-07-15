@@ -4,12 +4,12 @@ This is the network entry point the Azure Cosmos DB MCP Toolkit's
 ``agentic_search`` tool calls into. Instead of spawning ``python -m
 cosmos_retriever search`` as a subprocess per request, the .NET server makes
 an HTTP ``POST /search`` to a long-lived instance of this app. That keeps the
-heavy clients (Cosmos SDK, OpenAI embeddings, Harmony encoder, tiktoken)
-warm across calls and removes interpreter-cold-start from every request.
+heavy clients (Cosmos SDK, OpenAI embeddings, tiktoken) warm across calls and
+removes interpreter-cold-start from every request.
 
 Routes
 ------
-``GET  /health``  → ``{"status": "ok"}`` (liveness; never touches Cosmos/vLLM).
+``GET  /health``  → ``{"status": "ok"}`` (liveness; never touches Cosmos or the model).
 ``POST /search``  → run the multi-turn agent and return the JSON result.
 
 The ``/search`` response schema is:
@@ -143,7 +143,7 @@ def create_app(settings: RetrieverSettings | None = None) -> FastAPI:
     app = FastAPI(
         title="Cosmos Retriever",
         version="0.1.0",
-        description="HTTP service running the Harness-1 multi-turn search agent.",
+        description="HTTP service running the multi-turn Cosmos search agent.",
         lifespan=lifespan,
     )
 
