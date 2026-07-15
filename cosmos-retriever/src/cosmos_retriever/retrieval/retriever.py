@@ -1,9 +1,5 @@
-"""CorpusRetriever: the single façade the agent tools depend on.
 
-Ties together schema, capabilities, planner, compiler, executor, strategies, and
-document resolvers. The three agent tools call ``search`` / ``grep_candidates``
-/ ``read_document`` and never touch Cosmos SQL or physical field names.
-"""
+
 
 from __future__ import annotations
 
@@ -57,10 +53,7 @@ class CorpusRetriever:
             schema, self._compiler, self._executor, self.policy
         )
 
-    # ------------------------------------------------------------------
     def search(self, request: SearchRequest) -> list[RetrievedItem]:
-        # Validate explicitly-requested field names up front so an unknown field
-        # raises rather than silently falling back to a different strategy.
         if request.vector_field is not None:
             self.schema.resolve_vector_config(request.vector_field)
         if request.text_fields:

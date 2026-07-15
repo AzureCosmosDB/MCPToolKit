@@ -11,13 +11,6 @@ def _display_text(
     queried: list[str] | None,
     primary: str | None,
 ) -> str:
-    """Pick the text to show: the queried field(s), plus the configured primary.
-
-    When no field was explicitly queried, show the primary field (or the raw
-    ``text`` column as a last resort). When one or more fields were queried,
-    return their content (labelled when there is more than one), and also append
-    the primary field if it was configured and not already included.
-    """
 
     names = [n for n in (queried or []) if n in text_fields]
     if not names:
@@ -47,7 +40,6 @@ def normalize_rows(
         metadata = {
             key[len("md_") :]: value for key, value in row.items() if key.startswith("md_")
         }
-        # Collect every configured text field's content, keyed by its name.
         text_fields: dict[str, str] = {}
         for key, value in row.items():
             if key.startswith("txt_") and key in aliases:

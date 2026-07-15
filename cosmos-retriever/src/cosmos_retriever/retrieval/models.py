@@ -1,9 +1,3 @@
-"""Logical request/result models for the retrieval layer.
-
-These carry *no* Cosmos SQL, physical field names, partition-key paths, or
-capability knowledge. Agent-facing tools build the request models; the retriever
-returns the normalized result models.
-"""
 
 from __future__ import annotations
 

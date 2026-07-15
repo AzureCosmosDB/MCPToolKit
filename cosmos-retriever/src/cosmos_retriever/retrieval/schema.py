@@ -1,10 +1,4 @@
-"""Logical corpus schema: the mapping from logical retriever fields to physical
-Cosmos property paths, plus the optional chunk-identity codec.
-
-Adding support for a new customer container is a matter of constructing a
-:class:`CorpusSchema` — no edits to the agent tools.
-"""
-
+ 
 from __future__ import annotations
 
 from typing import Annotated, Literal, Protocol, runtime_checkable
@@ -14,7 +8,6 @@ from pydantic import BaseModel, BeforeValidator, model_validator
 from cosmos_retriever.retrieval.errors import InvalidCorpusSchema, UnknownField
 from cosmos_retriever.retrieval.paths import CosmosPath, coerce_path
 
-# A field that accepts either a CosmosPath or a "/path/string".
 PathField = Annotated[CosmosPath, BeforeValidator(coerce_path)]
 
 
@@ -30,18 +23,11 @@ class VectorFieldConfig(BaseModel):
 
 @runtime_checkable
 class ChunkIdentityCodec(Protocol):
-    """Converts a returned chunk/item id into its parent document id."""
 
     def to_document_id(self, raw_id: str) -> str: ...
 
 
 class LegacyDunderCodec:
-    """Legacy benchmark codec: ``<docid>__<chunk_idx>`` → ``<docid>``.
-
-    Reproduces the exact behavior of the pre-refactor ``ReadDocumentTool``,
-    which stripped only a ``__`` suffix. IDs without ``__`` pass through
-    unchanged.
-    """
 
     def to_document_id(self, raw_id: str) -> str:
         if isinstance(raw_id, str) and "__" in raw_id:
@@ -61,13 +47,9 @@ class CorpusSchema(BaseModel):
     source_path: PathField | None = None
     partition_key_paths: list[PathField] = []
     metadata_paths: dict[str, PathField] = {}
-    # Optional human-facing descriptions of text fields, keyed by field name
-    # (see :meth:`text_field_map`) — surfaced to the agent in tool descriptions.
     text_field_descriptions: dict[str, str] = {}
     model_config = {"arbitrary_types_allowed": True}
 
-    # Attached post-construction (not validated by pydantic to keep protocols
-    # flexible). Defaulted here so instances always have the attribute.
     identity_codec: ChunkIdentityCodec | None = None
 
     @model_validator(mode="after")
@@ -83,34 +65,23 @@ class CorpusSchema(BaseModel):
             raise InvalidCorpusSchema("; ".join(errors))
         return self
 
-    # ------------------------------------------------------------------
     @property
     def is_item_document_mode(self) -> bool:
-        """True when one Cosmos item is one complete logical document."""
 
         return self.document_id_path is None
 
     @property
     def partition_key_is_document_id(self) -> bool:
-        """True when the (single) partition key path equals the document id path."""
 
         if self.document_id_path is None or len(self.partition_key_paths) != 1:
             return False
         return str(self.partition_key_paths[0]) == str(self.document_id_path)
 
-    # ------------------------------------------------------------------
-    # Named-field maps + resolution (lets the agent pick fields by name)
-    # ------------------------------------------------------------------
     @staticmethod
     def _seg_name(path: CosmosPath) -> str:
         return path.segments[-1]
 
     def text_field_map(self) -> dict[str, CosmosPath]:
-        """Return ``{name: path}`` for each searchable text field.
-
-        The name is the path's last segment; collisions fall back to the full
-        ``/a/b`` path string so every field is addressable.
-        """
 
         out: dict[str, CosmosPath] = {}
         for p in self.text_paths:
@@ -121,7 +92,6 @@ class CorpusSchema(BaseModel):
         return out
 
     def vector_field_map(self) -> dict[str, CosmosPath]:
-        """Return ``{name: path}`` for each vector field."""
 
         out: dict[str, CosmosPath] = {}
         for i, vf in enumerate(self.vector_fields):
@@ -166,7 +136,6 @@ class CorpusSchema(BaseModel):
         return self.resolve_vector_config(name).path
 
     def agent_field_summary(self) -> str:
-        """A human-readable summary of queryable fields for the agent prompt."""
 
         tm = self.text_field_map()
         vm = self.vector_field_map()

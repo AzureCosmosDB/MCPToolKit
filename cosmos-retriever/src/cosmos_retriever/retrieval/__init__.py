@@ -1,12 +1,3 @@
-"""Schema-decoupled retrieval layer for the Cosmos retriever.
-
-Public entry points:
-
-* :class:`CorpusRetriever` — façade the agent tools depend on.
-* :class:`CorpusSchema` / :class:`VectorFieldConfig` — logical→physical mapping.
-* :class:`RetrievalCapabilities` — what the container can efficiently do.
-* :func:`build_legacy_retriever` — the named legacy benchmark profile.
-"""
 
 from __future__ import annotations
 

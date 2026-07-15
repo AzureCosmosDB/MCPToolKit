@@ -1,9 +1,3 @@
-"""Document resolvers: reconstruct a complete logical document.
-
-Replaces the pre-refactor ``ReadDocumentTool`` assumptions (docid == partition
-key, ``__`` chunk-id parsing, fixed ``TOP 300``) with configurable resolution
-modes selected by the planner.
-"""
 
 from __future__ import annotations
 
@@ -142,11 +136,10 @@ def build_document_resolver(
 
     policy: PartitionQueryPolicy,
 ) -> DocumentResolver:
-    """Select the appropriate resolver for the configured schema."""
 
     if schema.is_item_document_mode:
         return ItemIsDocumentResolver(schema, compiler, executor, policy)
-    if schema.document_id_path is None:  # defensive; covered above
+    if schema.document_id_path is None:
 
         raise DocumentResolutionUnsupported("no document reconstruction is possible")
     if schema.partition_key_is_document_id:

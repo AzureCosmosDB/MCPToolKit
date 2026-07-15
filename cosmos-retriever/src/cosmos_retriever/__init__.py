@@ -1,4 +1,3 @@
-"""Cosmos Retriever: multi-turn search agent exposed as an MCP tool."""
 
 from __future__ import annotations
 

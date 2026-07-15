@@ -1,12 +1,3 @@
-"""High-level facade: ``CosmosRetriever().search(query)`` returns docs.
-
-Wraps the agent loop, tool-set wiring, and token counter into
-a single synchronous object that the CLI (and any in-process caller) drives
-directly. The agent loop is synchronous end-to-end (Cosmos SDK + httpx +
-tiktoken are all sync); there is no async surface here on purpose so that
-subprocess-based callers (the MCP Toolkit ``agentic_search`` tool) get clean,
-predictable behaviour.
-"""
 
 from __future__ import annotations
 
@@ -25,17 +16,15 @@ logger = structlog.get_logger("cosmos_retriever.retriever")
 
 @dataclass
 class RetrievedDocument:
-    """A single curated document returned by the agent."""
 
     id: str
-    text: str = ""  # populated by `_hydrate_document_text` when available
+    text: str = ""
     justification: str | None = None
     rank: int | None = None
 
 
 @dataclass
 class RetrievalResult:
-    """Output of :py:meth:`CosmosRetriever.search`."""
 
     query: str
     documents: list[RetrievedDocument]
@@ -45,28 +34,10 @@ class RetrievalResult:
     elapsed_s: float = 0.0
     usage: dict[str, int] = field(default_factory=dict)
     metadata: dict[str, str | int | float] = field(default_factory=dict)
-    # Per-query trajectory: the agent's step-by-step actions (search queries
-    # issued, per-turn tool calls, and the final document set). Populated by the
-    # /responses backend; empty for backends that don't expose turn-level state.
     trajectory: dict[str, object] = field(default_factory=dict)
 
 
 class CosmosRetriever:
-    """Drive an OpenAI-compatible retrieval agent against a Cosmos DB corpus.
-
-    Construct once per process; reuse for many ``search`` calls. The internal
-    Cosmos and OpenAI clients are kept open for the lifetime of the instance.
-
-    Args:
-        settings: Loaded :class:`RetrieverSettings`. Falls back to
-            :func:`get_settings` (i.e. env vars + ``.env``).
-        corpus_name: Optional container name to look up in the
-            :py:attr:`RetrieverSettings.corpus_registry`. When omitted,
-            the default-corpus env vars (``ACCOUNT_URI`` / ``COSMOS_DATABASE`` /
-            ``COSMOS_CORPUS_CONTAINER`` / ``AZURE_OPENAI_*``) are used.
-        reranker: Optional pre-built reranker. When omitted, one is built
-            from settings (Baseten if configured, then local vLLM, else None).
-    """
 
     def __init__(
         self,
@@ -97,8 +68,6 @@ class CosmosRetriever:
             search_display_limit=self.settings.cosmos_retriever_search_display_limit,
         )
 
-        # Inference backend: any OpenAI-compatible chat/responses model driven
-        # via function-calling over the four real Cosmos tools.
         self._chat_client = self.settings.build_chat_client()
         self._chat_model: str | None = self.settings.chat_model
 
@@ -116,9 +85,6 @@ class CosmosRetriever:
             reranker=type(self._reranker).__name__ if self._reranker is not None else None,
         )
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
     def search(
         self,
         query: str,
@@ -128,21 +94,6 @@ class CosmosRetriever:
         threshold_budget: int | None = None,
         token_budget: int | None = None,
     ) -> RetrievalResult:
-        """Run the multi-turn search agent and return its curated documents.
-
-        Args:
-            query: Natural-language question.
-            max_documents: Cap on the number of documents to ask the model
-                to surface (rendered into the system prompt).
-            max_turns: Override the default ``COSMOS_RETRIEVER_MAX_TURNS``.
-            threshold_budget / token_budget: Override the default token
-                budgets for this single call.
-
-        Returns:
-            A :class:`RetrievalResult` containing the ranked documents, the
-            number of turns the agent took, and the model's final-channel
-            text (used to extract document IDs/justifications).
-        """
 
         if not query or not query.strip():
             raise ValueError("query must be a non-empty string")
@@ -163,26 +114,14 @@ class CosmosRetriever:
         threshold_budget: int,
         token_budget: int,
     ) -> RetrievalResult:
-        """Dispatch one query to the configured OpenAI-compatible backend.
-
-        Both backends drive the same four Cosmos tools; ``openai_responses``
-        routes through the /responses API (for reasoning models such as
-        gpt-5.x) while ``openai_chat`` uses /chat/completions.
-        """
 
         if self._use_chat:
             return self._search_chat(query, max_documents)
         return self._search_responses(query, max_documents)
 
     def _search_chat(self, query: str, max_documents: int) -> RetrievalResult:
-        """Drive a generic OpenAI-compatible chat model via function-calling.
 
-        Used when ``INFERENCE_BACKEND=openai_chat``. The chat agent talks to
-        the same Cosmos :class:`ToolSet`, so retrieval quality depends on the
-        chosen model's tool-use ability.
-        """
-
-        from cosmos_retriever.inference.openai_chat import (  # noqa: PLC0415
+        from cosmos_retriever.inference.openai_chat import (
             run_chat_search,
         )
 
@@ -226,14 +165,8 @@ class CosmosRetriever:
         return result
 
     def _search_responses(self, query: str, max_documents: int) -> RetrievalResult:
-        """Drive a generic OpenAI **/responses** model (e.g. gpt-5.x reasoning).
 
-        Used when ``INFERENCE_BACKEND=openai_responses``. Same Cosmos tools as
-        the chat backend, but routed through the responses API which reasoning
-        models require.
-        """
-
-        from cosmos_retriever.inference.openai_chat import (  # noqa: PLC0415
+        from cosmos_retriever.inference.openai_chat import (
             run_responses_search,
         )
 

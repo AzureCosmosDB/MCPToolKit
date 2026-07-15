@@ -18,33 +18,20 @@ logger = structlog.get_logger("search_agent.rerank")
 
 @dataclass
 class RerankResult:
-    """Result of reranking a single document."""
 
     document: str
     score: float
     original_index: int
-    tokens: Optional[int] = None  # Token count, populated if token_counter is available
+    tokens: Optional[int] = None
 
 
 class Reranker(ABC):
-    """Abstract base class for reranking documents based on a query."""
 
     def __init__(
         self,
         token_counter: Optional[Callable[[str], int]] = None,
         max_tokens: Optional[int] = None,
     ):
-        """
-        Initialize the reranker.
-
-        Args:
-            token_counter: Optional callable that counts tokens in a string.
-            max_tokens: Maximum total tokens for the output. Documents are returned
-                in reranked order until this budget is exhausted.
-
-        Raises:
-            ValueError: If max_tokens is specified without a token_counter.
-        """
         if max_tokens is not None and token_counter is None:
             raise ValueError("token_counter is required when max_tokens is specified")
         self.token_counter = token_counter
@@ -53,16 +40,6 @@ class Reranker(ABC):
     def _truncate_results(
         self, results: List[RerankResult], max_tokens: Optional[int] = None
     ) -> List[RerankResult]:
-        """Truncate results to fit within max_tokens total.
-
-        Also populates the tokens field for each result if token_counter is available.
-
-        Args:
-            results: List of RerankResult objects to truncate.
-            max_tokens: Optional override for max_tokens. If not provided,
-                uses the instance's max_tokens setting.
-        """
-        # If we have a token_counter, populate tokens for all results
         if self.token_counter is not None:
             for result in results:
                 result.tokens = self.token_counter(result.document)
@@ -74,7 +51,7 @@ class Reranker(ABC):
         truncated: List[RerankResult] = []
         total_tokens = 0
         for result in results:
-            doc_tokens = result.tokens  # Already calculated above
+            doc_tokens = result.tokens
             assert doc_tokens is not None
             if total_tokens + doc_tokens > effective_max_tokens:
                 logger.info(
@@ -97,19 +74,6 @@ class Reranker(ABC):
         documents: List[str],
         instruction: Optional[str] = None,
     ) -> List[RerankResult]:
-        """
-        Rerank documents based on relevance to the query.
-
-        Subclasses must implement this method to perform the actual reranking.
-
-        Args:
-            query: The search query to rank documents against.
-            documents: List of document strings to rerank.
-            instruction: Optional instruction for the reranker.
-
-        Returns:
-            List of RerankResult objects sorted by relevance (highest first).
-        """
         pass
 
     def __call__(
@@ -119,20 +83,6 @@ class Reranker(ABC):
         instruction: Optional[str] = None,
         max_tokens: Optional[int] = None,
     ) -> List[RerankResult]:
-        """
-        Rerank documents based on relevance to the query.
-
-        Args:
-            query: The search query to rank documents against.
-            documents: List of document strings to rerank.
-            instruction: Optional instruction for the reranker.
-            max_tokens: Optional override for max_tokens budget. If provided,
-                overrides the instance's max_tokens for this call only.
-
-        Returns:
-            List of RerankResult objects sorted by relevance (highest first),
-            truncated to fit within max_tokens if token_counter is provided.
-        """
         start = time.perf_counter()
         results = self._rerank(query, documents, instruction)
         elapsed_ms = (time.perf_counter() - start) * 1000
@@ -145,7 +95,6 @@ class Reranker(ABC):
 
 
 class BasetenReranker(Reranker):
-    """Reranker implementation using Baseten's classification API on top of Qwen 3 8B"""
 
     PREFIX = '<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be "yes" or "no".<|im_end|>\n<|im_start|>user\n'
     SUFFIX = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
@@ -162,21 +111,10 @@ class BasetenReranker(Reranker):
         max_concurrent_requests: int = 256,
         timeout_s: int = 360,
     ):
-        """
-        Initialize the Baseten reranker.
-
-        Args:
-            client: Optional PerformanceClient. If not provided, uses config.
-            token_counter: Optional callable that counts tokens in a string.
-            max_tokens: Maximum total tokens for the output.
-            batch_size: Batch size for classification requests.
-            max_concurrent_requests: Maximum concurrent requests.
-            timeout_s: Timeout in seconds.
-        """
         super().__init__(token_counter=token_counter, max_tokens=max_tokens)
         if client is None:
             config = get_config()
-            client = config.get_baseten_client()  # type: ignore[assignment]
+            client = config.get_baseten_client()
 
 
             
@@ -188,7 +126,6 @@ class BasetenReranker(Reranker):
     def _format_input(
         self, instruction: Optional[str], query: str, document: str
     ) -> str:
-        """Format input for the classification model."""
         if instruction is None:
             instruction = self.DEFAULT_INSTRUCTION
         return f"{self.PREFIX}<Instruct>: {instruction}\n<Query>: {query}\n<Document>: {document}{self.SUFFIX}"
@@ -202,10 +139,8 @@ class BasetenReranker(Reranker):
         if not documents:
             return []
 
-        # Format all documents for classification
         inputs = [self._format_input(instruction, query, doc) for doc in documents]
 
-        # Classify all inputs
         response: ClassificationResponse = self.client.classify(
             inputs=inputs,
             truncate=True,
@@ -214,7 +149,6 @@ class BasetenReranker(Reranker):
             timeout_s=self.timeout_s,
         )
 
-        # Extract scores for "yes" labels
         results = []
         for idx, (doc, group) in enumerate(zip(documents, response.data)):
             score = 0.0
@@ -224,27 +158,11 @@ class BasetenReranker(Reranker):
                     break
             results.append(RerankResult(document=doc, score=score, original_index=idx))
 
-        # Sort by score descending
         results.sort(key=lambda x: x.score, reverse=True)
         return results
 
 
 class VLLMQwen3Reranker(Reranker):
-    """Drop-in replacement for BasetenReranker backed by a local vLLM server.
-
-    Serves Qwen3-Reranker-8B locally via vLLM's /score endpoint (original
-    Qwen3-reranker sequence-classification conversion). The prompt template and
-    yes/no scoring match BasetenReranker exactly, so scores match the Baseten
-    deployment up to numerics — use it when the Baseten reranker deployment is
-    unavailable.
-
-    Server launch:
-        vllm serve Qwen/Qwen3-Reranker-8B --port 8011 \
-          --hf-overrides '{"architectures": ["Qwen3ForSequenceClassification"],
-                           "classifier_from_token": ["no", "yes"],
-                           "is_original_qwen3_reranker": true}'
-    Point at it with VLLM_RERANKER_URL (default http://127.0.0.1:8011).
-    """
 
     PREFIX = '<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be "yes" or "no".<|im_end|>\n<|im_start|>user\n'
     SUFFIX = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
@@ -324,7 +242,6 @@ class VLLMQwen3Reranker(Reranker):
 
 
 class ContextualReranker(Reranker):
-    """Reranker implementation using Contextual AI's rerank API."""
 
     API_URL = "https://api.contextual.ai/v1/rerank"
     DEFAULT_MODEL = "ctxl-rerank-v2-instruct-multilingual"
@@ -339,17 +256,6 @@ class ContextualReranker(Reranker):
         top_n: Optional[int] = None,
         timeout_s: int = 60,
     ):
-        """
-        Initialize the Contextual AI reranker.
-
-        Args:
-            api_key: Optional API key. If not provided, uses config.
-            model: Model to use for reranking. Defaults to ctxl-rerank-en-v1-instruct.
-            token_counter: Optional callable that counts tokens in a string.
-            max_tokens: Maximum total tokens for the output.
-            top_n: Optional number of top results to return from the API.
-            timeout_s: Timeout in seconds for API requests.
-        """
         super().__init__(token_counter=token_counter, max_tokens=max_tokens)
         if api_key is None:
             config = get_config()
@@ -400,7 +306,6 @@ class ContextualReranker(Reranker):
             logger.error("contextual_rerank_failed", error=str(e))
             raise
 
-        # Parse response and build results
         results = []
         for item in data.get("results", []):
             idx = item["index"]
@@ -413,7 +318,6 @@ class ContextualReranker(Reranker):
                 )
             )
 
-        # Results should already be sorted by relevance, but ensure descending order
         results.sort(key=lambda x: x.score, reverse=True)
         return results
 
@@ -441,11 +345,9 @@ if __name__ == "__main__":
         "Running reranker example", reranker=args.reranker, max_tokens=args.max_tokens
     )
 
-    # Simple token counter just to demonstrate the concept, not accurate token for all models of course
     enc = tiktoken.get_encoding("o200k_harmony")
     token_counter = lambda text: len(enc.encode(text))
 
-    # Create reranker based on argument
     reranker: Reranker
     if args.reranker == "contextual":
         reranker = ContextualReranker(
@@ -486,5 +388,4 @@ if __name__ == "__main__":
     for result in results:
         logger.info("result", score=result.score, document=result.document)
 
-# Back-compat alias kept for callers of the original cosmos-retriever API.
 VLLMReranker = VLLMQwen3Reranker

@@ -1,31 +1,3 @@
-"""Retrieval agent for generic OpenAI-compatible models.
-
-This is the inference backend for *any* standard model — an Azure AI Foundry
-deployment, OpenAI, or a local OpenAI-compatible server — reached through plain
-function/tool calling.
-
-It exposes two entry points over the same Cosmos
-:class:`~cosmos_retriever.tools.ToolSet`:
-
-* :func:`run_chat_search` — the ``/v1/chat/completions`` API (``tool_calls``).
-* :func:`run_responses_search` — the ``/responses`` API used by reasoning
-  models, with continuation via ``previous_response_id`` and
-  ``function_call_output`` items.
-
-Both follow the same loop:
-
-1. Render the retrieval system prompt.
-2. Advertise the four real tools (``search_corpus``, ``grep_corpus``,
-   ``read_document``, ``prune_chunks``) as function schemas.
-3. Loop: call the model; if it requests tool calls, execute each against the
-   toolset and feed the results back; otherwise treat the assistant text as the
-   final answer.
-4. Parse the final ``<Document id=...>`` blocks the prompt asks for and hydrate
-   each with the chunk text seen during searches.
-
-The loop is fully synchronous (the Cosmos SDK + OpenAI SDK calls are sync), so
-the FastAPI server runs it on a worker thread.
-"""
 
 from __future__ import annotations
 
@@ -43,16 +15,10 @@ from cosmos_retriever.utils import ProviderFormat
 
 logger = structlog.get_logger("cosmos_retriever.inference.openai_chat")
 
-# The four executable tools (defined in cosmos_retriever.tools) advertised to
-# the model. The model "curates" its answer by emitting the final
-# <Document id=...> blocks the system prompt asks for.
 _CHAT_TOOL_NAMES = ("search_corpus", "grep_corpus", "read_document", "prune_chunks")
 
-# Matches the per-result header the search/grep tools emit:
-#   "\n# DOCUMENT ID: <id> (<n> tokens) \n<body...>"
 _DOC_RESULT_RE = re.compile(r"#\s*DOCUMENT ID:\s*(?P<id>\S+)(?:\s*\(\d+\s*tokens\))?")
 
-# Matches the final answer blocks the system prompt asks the model to produce.
 _FINAL_DOC_RE = re.compile(
     r"<Document\s+id=[\"']?(?P<id>[^\"'\s>]+)[\"']?\s*>\s*"
     r"(?:<Justification>\s*(?P<justification>.*?)\s*</Justification>\s*)?"
@@ -63,7 +29,6 @@ _FINAL_DOC_RE = re.compile(
 
 @dataclass
 class ChatDocument:
-    """A single curated document produced by the chat agent."""
 
     id: str
     text: str = ""
@@ -73,7 +38,6 @@ class ChatDocument:
 
 @dataclass
 class ChatSearchResult:
-    """Output of :func:`run_chat_search`."""
 
     documents: list[ChatDocument]
     num_turns: int
@@ -95,7 +59,6 @@ def _empty_usage() -> dict[str, int]:
 
 
 def _acc_chat_usage(usage: dict[str, int], resp) -> None:
-    """Accumulate /chat/completions usage (prompt/completion/total)."""
     u = getattr(resp, "usage", None)
     if u is None:
         return
@@ -106,7 +69,6 @@ def _acc_chat_usage(usage: dict[str, int], resp) -> None:
 
 
 def _acc_responses_usage(usage: dict[str, int], resp) -> None:
-    """Accumulate /responses usage (input/output/reasoning tokens)."""
     u = getattr(resp, "usage", None)
     if u is None:
         return
@@ -120,7 +82,6 @@ def _acc_responses_usage(usage: dict[str, int], resp) -> None:
 
 
 def _parse_tool_arguments(raw: str | None) -> dict:
-    """Parse a tool-call ``arguments`` JSON string, tolerating minor breakage."""
 
     if not raw:
         return {}
@@ -129,13 +90,12 @@ def _parse_tool_arguments(raw: str | None) -> dict:
     except json.JSONDecodeError:
         try:
             parsed = json_repair.loads(raw)
-        except Exception:  # noqa: BLE001 — last-ditch; bad args become {}
+        except Exception:
             return {}
     return parsed if isinstance(parsed, dict) else {}
 
 
 def _collect_doc_text(observation: str, store: dict[str, str]) -> None:
-    """Record the first chunk text seen for each ``# DOCUMENT ID:`` in a result."""
 
     matches = list(_DOC_RESULT_RE.finditer(observation))
     for idx, match in enumerate(matches):
@@ -150,7 +110,6 @@ def _collect_doc_text(observation: str, store: dict[str, str]) -> None:
 def _extract_documents(
     final_text: str, doc_text: dict[str, str], max_documents: int
 ) -> list[ChatDocument]:
-    """Pull ranked ``<Document id=...>`` blocks out of the model's final answer."""
 
     documents: list[ChatDocument] = []
     seen: set[str] = set()
@@ -185,25 +144,9 @@ def run_chat_search(
     temperature: float = 0.7,
     max_tokens: int = 4096,
 ) -> ChatSearchResult:
-    """Run the multi-turn retrieval agent against a generic chat model.
-
-    Args:
-        toolset: The Cosmos-backed :class:`ToolSet` (built **without** the
-            ultra stub tools).
-        client: An OpenAI-compatible client (``openai.OpenAI`` /
-            ``openai.AzureOpenAI``).
-        model: Model or Foundry deployment name passed as ``model=``.
-        query: Natural-language information need.
-        max_documents: Cap on curated documents to return / ask for.
-        max_turns: Hard cap on chat round-trips.
-        temperature / max_tokens: Sampling controls per call.
-
-    Returns:
-        A :class:`ChatSearchResult` with ranked documents and run metadata.
-    """
 
     tool_specs = [
-        tool.get_format(ProviderFormat.OPENAI_HARMONY)  # Chat-Completions function shape
+        tool.get_format(ProviderFormat.OPENAI_HARMONY)
         for name, tool in toolset.tools.items()
         if name in _CHAT_TOOL_NAMES
     ]
@@ -241,7 +184,6 @@ def run_chat_search(
         message = response.choices[0].message
         tool_calls = message.tool_calls or []
 
-        # Echo the assistant turn back into the transcript.
         assistant_entry: dict = {"role": "assistant", "content": message.content or ""}
         if tool_calls:
             assistant_entry["tool_calls"] = [
@@ -270,13 +212,11 @@ def run_chat_search(
                 try:
                     output, _metadata = tool(args)
                     _collect_doc_text(output, doc_text)
-                except Exception as exc:  # noqa: BLE001 — surface tool errors to the model
+                except Exception as exc:
                     logger.warning("chat_tool_error", tool=name, error=str(exc))
                     output = f"Error executing '{name}': {exc}"
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": output})
     else:
-        # Loop exhausted without a final (no-tool-call) turn: fall back to the
-        # last assistant text we saw, if any.
         for entry in reversed(messages):
             if entry.get("role") == "assistant" and entry.get("content"):
                 final_text = entry["content"]
@@ -317,19 +257,9 @@ def run_responses_search(
     max_tokens: int = 4096,
     reasoning_effort: str | None = None,
 ) -> ChatSearchResult:
-    """Run the retrieval agent against an OpenAI **/responses** API model.
-
-    Reasoning models such as ``gpt-5.x`` are exposed only through the
-    ``responses`` endpoint, which uses a different shape from chat-completions:
-    a plain-string first ``input``, flat function tool schemas, and multi-turn
-    continuation via ``previous_response_id`` + ``function_call_output`` items.
-
-    Args mirror :func:`run_chat_search`, plus ``reasoning_effort`` which (when
-    set) is forwarded as ``reasoning={"effort": ...}`` for reasoning models.
-    """
 
     tool_specs = [
-        tool.get_format(ProviderFormat.OPENAI)  # flat Responses function shape
+        tool.get_format(ProviderFormat.OPENAI)
         for name, tool in toolset.tools.items()
         if name in _CHAT_TOOL_NAMES
     ]
@@ -384,7 +314,7 @@ def run_responses_search(
                 try:
                     output, _metadata = tool(args)
                     _collect_doc_text(output, doc_text)
-                except Exception as exc:  # noqa: BLE001 — surface tool errors to the model
+                except Exception as exc:
                     logger.warning("responses_tool_error", tool=name, error=str(exc))
                     output = f"Error executing '{name}': {exc}"
             outputs.append(
@@ -399,8 +329,6 @@ def run_responses_search(
 
     documents = _extract_documents(final_text, doc_text, max_documents)
 
-    # Every chunk surfaced by any tool call across the whole trajectory lands in
-    # ``doc_text``; its doc-level projection is the "pool" used for trajectory_recall.
     pool_doc_ids = sorted({cid.split("__")[0] for cid in doc_text})
 
     logger.info(

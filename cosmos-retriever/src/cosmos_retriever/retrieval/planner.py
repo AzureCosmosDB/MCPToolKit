@@ -1,8 +1,3 @@
-"""Retrieval planner: pick a strategy from request + schema + capabilities.
-
-Owns embedding-compatibility gating and never equates "the query didn't throw"
-with "the operation is indexed". Fails clearly instead of silently degrading.
-"""
 
 from __future__ import annotations
 
@@ -37,7 +32,6 @@ class RetrievalPlanner:
         self.capabilities = capabilities
         self.policy = policy
 
-    # -- helpers ------------------------------------------------------------
     def _vector_ok(self, req: SearchRequest | None = None) -> bool:
         if not self.schema.vector_fields or not self.capabilities.vector_supported:
             return False
@@ -49,7 +43,6 @@ class RetrievalPlanner:
         cap = self.capabilities.vector_capability_for(field.path)
         if cap is None or cap.support in (SupportLevel.UNSUPPORTED, SupportLevel.UNKNOWN):
             return False
-        # Embedding compatibility: stored dimensions must match the schema's.
         if cap.dimensions != field.dimensions:
             logger.warning(
                 "embedding_dimension_mismatch",
@@ -69,7 +62,6 @@ class RetrievalPlanner:
             return False
         return all(self.capabilities.has_full_text_path(p) for p in paths)
 
-    # -- search -------------------------------------------------------------
     def plan_search(self, req: SearchRequest) -> SearchStrategy:
         vector_ok = self._vector_ok(req)
         fts_ok = self._fts_ok(req)
@@ -101,7 +93,6 @@ class RetrievalPlanner:
                 "for the selected fields"
             )
 
-        # auto
         if self.capabilities.native_hybrid_supported and vector_ok and fts_ok:
             return NativeHybridStrategy()
         if vector_ok and fts_ok:
@@ -116,7 +107,6 @@ class RetrievalPlanner:
             "no search strategy available for the configured container"
         )
 
-    # -- grep ---------------------------------------------------------------
     def plan_grep(self, req: GrepRequest) -> GrepCandidateStrategy:
         if self.capabilities.full_text_supported:
             return FullTextGrepCandidateStrategy()

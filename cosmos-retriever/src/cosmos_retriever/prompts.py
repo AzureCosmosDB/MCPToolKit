@@ -1,14 +1,8 @@
-"""System prompts for the retrieval subagent.
-
-These instruct an OpenAI-compatible model how to search the Cosmos corpus with
-the four tools and return the ranked ``<Document id=...>`` blocks it curated.
-"""
 
 from __future__ import annotations
 
 
 def get_retrieval_subagent_prompt(query: str, *, num_output_docs: int = 30) -> str:
-    """Return the system prompt the retrieval subagent was trained against."""
 
     return f"""
 
@@ -76,7 +70,6 @@ def get_retrieval_subagent_prompt(query: str, *, num_output_docs: int = 30) -> s
 def get_retrieval_subagent_budget_exhausted_message(
     current_token_usage: int, threshold_budget: int
 ) -> str:
-    """User-message inserted when the retriever has crossed its soft token budget."""
 
     return (
         f"[Token usage: {current_token_usage}/{threshold_budget}] **OVER BUDGET.** \n"

@@ -1,12 +1,3 @@
-"""Named legacy benchmark profile.
-
-Reproduces the exact pre-refactor physical schema and behavior (native RRF
-hybrid over ``/text`` + ``/embedding``, ``/docid`` partition-scoped document
-reconstruction ordered by ``/chunk_idx``, ``<docid>__<chunk_idx>`` identity
-codec). This is the *default* so existing benchmark commands keep working, but
-it is a clearly-named profile rather than assumptions scattered through the
-code.
-"""
 
 from __future__ import annotations
 
@@ -53,7 +44,6 @@ def build_legacy_schema(
 
 
 def legacy_capabilities_for(schema: CorpusSchema) -> RetrievalCapabilities:
-    """Capabilities that reproduce the always-native-hybrid legacy behavior."""
 
     field = schema.vector_fields[0]
     return RetrievalCapabilities(

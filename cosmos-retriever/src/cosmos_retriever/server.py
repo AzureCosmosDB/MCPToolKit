@@ -1,39 +1,3 @@
-"""FastAPI HTTP service wrapping :class:`CosmosRetriever`.
-
-This is the network entry point the Azure Cosmos DB MCP Toolkit's
-``agentic_search`` tool calls into. Instead of spawning ``python -m
-cosmos_retriever search`` as a subprocess per request, the .NET server makes
-an HTTP ``POST /search`` to a long-lived instance of this app. That keeps the
-heavy clients (Cosmos SDK, OpenAI embeddings, tiktoken) warm across calls and
-removes interpreter-cold-start from every request.
-
-Routes
-------
-``GET  /health``  → ``{"status": "ok"}`` (liveness; never touches Cosmos or the model).
-``POST /search``  → run the multi-turn agent and return the JSON result.
-
-The ``/search`` response schema is:
-
-    {
-      "query":     str,
-      "num_turns": int,
-      "elapsed_s": float,
-      "documents": [
-        {"id": str, "text": str, "justification": str | null, "rank": int}
-      ],
-      ...
-    }
-
-Concurrency
------------
-`CosmosRetriever.search` is fully synchronous and internally calls
-``asyncio.run(...)``, which cannot run inside this app's event loop. Each
-request therefore runs the search on a worker thread via
-:func:`anyio.to_thread.run_sync`. Because a single retriever instance holds
-sync Cosmos/httpx clients and per-call agent state that are **not** safe to
-drive from two threads at once, calls that target the same corpus are
-serialised with a per-corpus lock; different corpora run concurrently.
-"""
 
 from __future__ import annotations
 
@@ -59,7 +23,6 @@ logger = structlog.get_logger("cosmos_retriever.server")
 
 
 class SearchRequest(BaseModel):
-    """Request body for ``POST /search``"""
 
     query: str = Field(..., min_length=1, description="Natural-language information need.")
     max_documents: int = Field(
@@ -82,13 +45,6 @@ class SearchRequest(BaseModel):
 
 
 class _RetrieverPool:
-    """Lazily build + cache one :class:`CosmosRetriever` per corpus target.
-
-    Keyed by ``(database_override, container)`` so a single server process can
-    serve many corpora. Each key also gets an :class:`asyncio.Lock` used to
-    serialise concurrent same-corpus requests (the underlying sync clients and
-    per-call agent state are not thread-safe for parallel use).
-    """
 
     def __init__(self, settings: RetrieverSettings) -> None:
         self._settings = settings
@@ -112,8 +68,6 @@ class _RetrieverPool:
         return retriever, self._locks[key]
 
     def _build(self, database: str | None, container: str | None) -> CosmosRetriever:
-        # Each retriever gets its own settings copy so a per-request database
-        # override never leaks into the shared singleton.
         settings = self._settings.model_copy(deep=True)
         if database:
             settings.cosmos_database = database
@@ -121,11 +75,6 @@ class _RetrieverPool:
 
 
 def create_app(settings: RetrieverSettings | None = None) -> FastAPI:
-    """Build the FastAPI application.
-
-    Args:
-        settings: Optional pre-loaded settings. Defaults to :func:`get_settings`.
-    """
 
     resolved = settings or get_settings()
 
@@ -162,7 +111,7 @@ def create_app(settings: RetrieverSettings | None = None) -> FastAPI:
                         request.query, max_documents=request.max_documents
                     )
                 )
-        except Exception as exc:  # noqa: BLE001 — return JSON error envelope to caller
+        except Exception as exc:
             logger.error(
                 "search_failed",
                 query=request.query[:200],

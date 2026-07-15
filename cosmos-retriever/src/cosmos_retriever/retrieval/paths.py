@@ -1,11 +1,3 @@
-"""Safe Cosmos property-path representation.
-
-Configured property paths (e.g. ``/payload/body``) must never be interpolated
-straight into SQL. :class:`CosmosPath` parses a path into validated segments and
-renders a bracket-quoted, alias-relative expression such as
-``c["payload"]["body"]`` that is safe regardless of reserved words or
-non-identifier property names. Raw SQL fragments are rejected.
-"""
 
 from __future__ import annotations
 
@@ -16,15 +8,10 @@ from pydantic import BaseModel, ConfigDict
 
 from cosmos_retriever.retrieval.errors import UnsafeCosmosPath
 
-# A single path segment (property name). Must start with a letter/underscore and
-# contain only letters, digits, underscore, space, dot or hyphen. This is
-# permissive enough for realistic property names while rejecting quotes,
-# brackets, and SQL metacharacters.
 _ALLOWED_SEGMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_ .\-]*$")
 
 
 class CosmosPath(BaseModel):
-    """A validated, safely-renderable Cosmos property path."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -32,11 +19,6 @@ class CosmosPath(BaseModel):
 
     @classmethod
     def parse(cls, raw: str | CosmosPath) -> CosmosPath:
-        """Parse ``/a/b/c`` into a :class:`CosmosPath`.
-
-        Raises :class:`UnsafeCosmosPath` for empty, malformed, or dangerous
-        input. Array traversal is not supported by default.
-        """
 
         if isinstance(raw, CosmosPath):
             return raw
@@ -54,7 +36,6 @@ class CosmosPath(BaseModel):
         return cls(segments=tuple(segments))
 
     def render(self, alias: str = "c") -> str:
-        """Render an alias-relative, bracket-quoted SQL expression."""
 
         out = alias
         for seg in self.segments:
@@ -67,7 +48,6 @@ class CosmosPath(BaseModel):
 
 
 def coerce_path(value: Any) -> CosmosPath:
-    """Pydantic BeforeValidator: accept a str or a :class:`CosmosPath`."""
 
     if isinstance(value, CosmosPath):
         return value

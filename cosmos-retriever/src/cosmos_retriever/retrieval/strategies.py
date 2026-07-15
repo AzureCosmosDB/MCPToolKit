@@ -30,7 +30,6 @@ class RetrievalContext:
 
 
 def _resolve_cross_partition(req_partition_key, policy: PartitionQueryPolicy) -> bool:
-    """Return whether the query must run cross-partition, or raise if disallowed."""
 
     if req_partition_key is not None:
         return False

@@ -1,23 +1,3 @@
-"""Tool implementations for the Cosmos retrieval agent.
-
-The corpus lives in Azure Cosmos DB for NoSQL and is queried through a
-schema-decoupled retrieval layer (:mod:`cosmos_retriever.retrieval`): the agent
-tools build *logical* requests and delegate to a :class:`CorpusRetriever`, which
-plans a strategy, compiles safe Cosmos SQL from a validated ``CorpusSchema``, and
-normalises the rows. The tools themselves contain no Cosmos SQL and no physical
-field names.
-
-Tools:
-
-* :class:`SearchCorpusTool` — hybrid/vector/full-text corpus search.
-* :class:`GrepCorpusTool` — candidate retrieval + client-side regex filter.
-* :class:`ReadDocumentTool` — reconstruct a document via a configured resolver.
-* :class:`PruneChunksTool` — record chunk-ids whose context should be removed.
-* :class:`MultiToolUseTool` — wraps a parallel tool-call bundle.
-
-Plus :class:`UserTextTool`, the sentinel tool for assistant text, and
-:class:`SerializedTool`, a placeholder used by tests/round-trips.
-"""
 
 from __future__ import annotations
 
@@ -50,13 +30,9 @@ from cosmos_retriever.utils import ProviderFormat
 logger = structlog.get_logger("cosmos_retriever.tools")
 
 
-# ============================================================================
-# Tool schema (provider-agnostic) + provider format conversion
-# ============================================================================
 
 
 class ToolSchema(BaseModel):
-    """Provider-agnostic JSON-Schema-like tool definition."""
 
     name: str
     description: str
@@ -76,7 +52,6 @@ class ToolSchema(BaseModel):
         }
 
     def _to_openai_harmony_format(self) -> dict[str, Any]:
-        # Harmony uses the OpenAI-Chat-Completions function shape (function:{...}).
         return {
             "type": "function",
             "function": {
@@ -98,9 +73,6 @@ class ToolSchema(BaseModel):
         raise ValueError(f"Unsupported provider format: {provider}")
 
 
-# ============================================================================
-# Tool schemas (data)
-# ============================================================================
 
 SEARCH_CORPUS_SCHEMA = ToolSchema(
     name="search_corpus",
@@ -172,17 +144,13 @@ PRUNE_CHUNKS_SCHEMA = ToolSchema(
 )
 
 
-# ============================================================================
-# Base classes
-# ============================================================================
 
 
 class ToolCallMetadata(BaseModel):
-    """Metadata returned alongside a tool call's text output."""
+    pass
 
 
 class Tool(ABC, BaseModel):
-    """Base class for executable tools."""
 
     tool_schema: ToolSchema
 
@@ -192,7 +160,7 @@ class Tool(ABC, BaseModel):
         params: dict[Any, Any],
         overrides: dict[Any, Any] | None = None,
     ) -> tuple[str, ToolCallMetadata | None]:
-        """Execute the tool against ``params`` (possibly overridden by the caller)."""
+        pass
 
     def get_format(self, provider: ProviderFormat) -> dict[str, Any]:
         return self.tool_schema.to_provider_format(provider)
@@ -202,7 +170,6 @@ class Tool(ABC, BaseModel):
 
 
 class SerializedTool(Tool):
-    """Lightweight placeholder used when deserialising trajectories from JSON."""
 
     def __call__(
         self,
@@ -212,14 +179,9 @@ class SerializedTool(Tool):
         raise NotImplementedError("SerializedTool is a placeholder and cannot be executed.")
 
 
-# ============================================================================
-# Concrete tools
-# ============================================================================
 
 
 def _search_schema_for(schema: CorpusSchema) -> ToolSchema:
-    """Build a per-corpus ``search_corpus`` schema advertising the queryable
-    fields, so the agent can decide which field(s) to search and how."""
 
     text_names = list(schema.text_field_map())
     vector_names = list(schema.vector_field_map())
@@ -267,7 +229,6 @@ def _search_schema_for(schema: CorpusSchema) -> ToolSchema:
 
 
 def _grep_schema_for(schema: CorpusSchema) -> ToolSchema:
-    """Build a per-corpus ``grep_corpus`` schema advertising the text fields."""
 
     text_names = list(schema.text_field_map())
     params: dict[str, Any] = {
@@ -295,16 +256,12 @@ def _grep_schema_for(schema: CorpusSchema) -> ToolSchema:
 
 
 class SearchCorpusToolCallMetadata(ToolCallMetadata):
-    """IDs returned by a search call (post-rerank, with optional pre-rerank list)."""
 
     returned_chunk_ids: list[str]
     pre_rerank_chunk_ids: list[str] | None = None
 
 
 class SearchCorpusTool(Tool):
-    """Thin agent tool: builds a logical :class:`SearchRequest` and delegates to
-    a :class:`CorpusRetriever`. Contains no Cosmos SQL or physical field names.
-    """
 
     tool_schema: ToolSchema
     _retriever: CorpusRetriever
@@ -340,7 +297,6 @@ class SearchCorpusTool(Tool):
         if overrides is not None and "ignore_ids" in overrides:
             ignore_ids = overrides["ignore_ids"]
 
-        # Optional agent-selected field targeting / retrieval mode.
         fields = params.get("fields")
         if isinstance(fields, str):
             fields = [fields]
@@ -395,19 +351,11 @@ class SearchCorpusTool(Tool):
 
 
 class GrepCorpusToolCallMetadata(ToolCallMetadata):
-    """IDs returned by a grep call."""
 
     returned_chunk_ids: list[str]
 
 
 class GrepCorpusTool(Tool):
-    """Two-stage regex search: strategy-selected candidate retrieval (via the
-    :class:`CorpusRetriever`) followed by client-side regex filtering.
-
-    The candidate source (full-text by default) is chosen by the retrieval
-    planner, so this tool holds no Cosmos SQL or physical field names — only the
-    client-side regex semantics.
-    """
 
     tool_schema: ToolSchema
     _retriever: CorpusRetriever
@@ -471,12 +419,6 @@ class GrepCorpusTool(Tool):
 
 
 class ReadDocumentTool(Tool):
-    """Reads a complete document via a configured document resolver.
-
-    Document reconstruction (partition handling, chunk ordering, identity
-    parsing) lives in the resolver; this tool only applies rerank/token-budget
-    trimming and formats the result.
-    """
 
     tool_schema: ToolSchema
     _retriever: CorpusRetriever
@@ -550,7 +492,6 @@ class ReadDocumentTool(Tool):
 
 
 class PruneChunksTool(Tool):
-    """No-op tool used to record which chunks should be elided in subsequent turns."""
 
     tool_schema: ToolSchema
 
@@ -574,12 +515,6 @@ _ToolSetT: TypeAlias = "ToolSet"
 
 
 class MultiToolUseTool(Tool):
-    """Wraps a parallel tool-call bundle for models without native parallel calls.
-
-    A model emits a single ``functions.multi_tool_use``
-    call with a list of inner ``{tool_name, parameters}`` entries; the inner
-    tools are dispatched serially against the bound :class:`ToolSet`.
-    """
 
     tool_schema: ToolSchema
     toolset: _ToolSetT
@@ -603,7 +538,6 @@ class MultiToolUseTool(Tool):
 
 
 class UserTextTool(Tool):
-    """Sentinel tool representing assistant text in a trajectory."""
 
     tool_schema: ToolSchema
 
@@ -625,13 +559,9 @@ class UserTextTool(Tool):
         raise ValueError("UserTextTool should not be called directly")
 
 
-# ============================================================================
-# ToolSet
-# ============================================================================
 
 
 class ToolSet(BaseModel):
-    """A composable collection of named :class:`Tool` instances."""
 
     tools: dict[str, Tool] = Field(default_factory=dict)
     name: str | None = None
@@ -672,18 +602,6 @@ class ToolSet(BaseModel):
         search_display_limit: int = 10,
         name: str | None = None,
     ) -> ToolSet:
-        """Build a fully-wired retrieval :class:`ToolSet`.
-
-        Returns a :class:`ToolSet` containing :class:`SearchCorpusTool`,
-        :class:`GrepCorpusTool`, :class:`ReadDocumentTool`, and
-        :class:`PruneChunksTool` — the four tools the agent drives.
-
-        Provide either a pre-built ``retriever`` (a :class:`CorpusRetriever`,
-        for custom schemas) *or* the ``cosmos_database`` / ``cosmos_container_name``
-        / ``openai_client`` trio, in which case a legacy-benchmark
-        :class:`CorpusRetriever` is constructed automatically (backward
-        compatible with the pre-refactor call site).
-        """
 
         if retriever is None:
             if cosmos_database is None or cosmos_container_name is None or openai_client is None:

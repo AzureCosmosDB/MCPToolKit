@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-DOC_TRUNCATION = 51_200_000  # effectively unbounded; keeps the formatting branch sane
+DOC_TRUNCATION = 51_200_000
 
 
 def format_result_blocks(
     triples: list[tuple[str, str, int | None]],
 ) -> str:
-    """Render ``(item_id, text, tokens|None)`` triples into the tool output."""
 
     blocks = [
         "\n# DOCUMENT ID: {}{} \n{}".format(

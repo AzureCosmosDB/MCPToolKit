@@ -48,7 +48,7 @@ class CosmosQueryCompiler:
             "source": s.source_path,
         }
         if name in mapping and mapping[name] is not None:
-            return mapping[name]  # type: ignore[return-value]
+            return mapping[name]
         if name in s.metadata_paths:
             return s.metadata_paths[name]
         raise QueryCompilationError(f"unknown logical field {name!r}")
@@ -75,9 +75,6 @@ class CosmosQueryCompiler:
         add("title", s.title_path)
         add("source", s.source_path)
 
-        # Project every configured text field under a stable ``txt_<i>`` alias so
-        # results can return the field(s) that were actually queried, not just a
-        # single primary field. The alias -> field-name map rides in ``aliases``.
         for i, (fname, fpath) in enumerate(s.text_field_map().items()):
             alias = f"txt_{i}"
             cols.append(f"{fpath.render(_ALIAS)} AS {alias}")
