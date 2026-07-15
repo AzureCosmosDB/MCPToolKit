@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from cosmos_retriever.retrieval.capabilities import (
@@ -11,16 +10,16 @@ from cosmos_retriever.retrieval.models import PartitionQueryPolicy
 from cosmos_retriever.retrieval.retriever import CorpusRetriever
 from cosmos_retriever.retrieval.schema import (
     CorpusSchema,
-    LegacyDunderCodec,
+    DunderChunkCodec,
     VectorFieldConfig,
 )
 
-_LEGACY_DIMENSIONS = 1536
+_DEFAULT_DIMENSIONS = 1536
 
 
-def build_legacy_schema(
+def default_chunked_schema(
     embedding_model: str = "text-embedding-3-small",
-    dimensions: int = _LEGACY_DIMENSIONS,
+    dimensions: int = _DEFAULT_DIMENSIONS,
 ) -> CorpusSchema:
     schema = CorpusSchema(
         item_id_path="/id",
@@ -39,12 +38,11 @@ def build_legacy_schema(
         chunk_order_path="/chunk_idx",
         partition_key_paths=["/docid"],
     )
-    schema.identity_codec = LegacyDunderCodec()
+    schema.identity_codec = DunderChunkCodec()
     return schema
 
 
-def legacy_capabilities_for(schema: CorpusSchema) -> RetrievalCapabilities:
-
+def default_capabilities_for(schema: CorpusSchema) -> RetrievalCapabilities:
     field = schema.vector_fields[0]
     return RetrievalCapabilities(
         vector_fields=[
@@ -64,18 +62,18 @@ def legacy_capabilities_for(schema: CorpusSchema) -> RetrievalCapabilities:
     )
 
 
-def build_legacy_retriever(
+def build_default_retriever(
     *,
     container,
     embedder: QueryEmbedder | None,
     embedding_model: str = "text-embedding-3-small",
     partition_policy: PartitionQueryPolicy | None = None,
 ) -> CorpusRetriever:
-    schema = build_legacy_schema(embedding_model=embedding_model)
+    schema = default_chunked_schema(embedding_model=embedding_model)
     return CorpusRetriever(
         container=container,
         schema=schema,
-        capabilities=legacy_capabilities_for(schema),
+        capabilities=default_capabilities_for(schema),
         query_embedder=embedder,
         partition_policy=partition_policy or PartitionQueryPolicy(),
     )

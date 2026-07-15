@@ -27,7 +27,7 @@ class ChunkIdentityCodec(Protocol):
     def to_document_id(self, raw_id: str) -> str: ...
 
 
-class LegacyDunderCodec:
+class DunderChunkCodec:
 
     def to_document_id(self, raw_id: str) -> str:
         if isinstance(raw_id, str) and "__" in raw_id:

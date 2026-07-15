@@ -19,7 +19,7 @@ from cosmos_retriever.retrieval import (
     QueryEmbedder,
     ReadDocumentRequest,
     SearchRequest,
-    build_legacy_retriever,
+    build_default_retriever,
 )
 from cosmos_retriever.retrieval.errors import UnknownField, UnsupportedRetrievalCapability
 from cosmos_retriever.retrieval.executor import COSMOS_QUERY_MAX_CONCURRENCY
@@ -615,7 +615,7 @@ class ToolSet(BaseModel):
                 model=openai_embedding_model,
                 query_instruction=embed_query_instruction,
             )
-            retriever = build_legacy_retriever(
+            retriever = build_default_retriever(
                 container=container,
                 embedder=embedder,
                 embedding_model=openai_embedding_model,
