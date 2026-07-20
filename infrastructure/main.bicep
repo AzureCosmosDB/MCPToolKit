@@ -43,10 +43,10 @@ param commonTags object = {
 @description('Azure Cosmos DB endpoint URL')
 param cosmosEndpoint string = ''
 
-@description('Embedding service endpoint URL. Supports Azure AI Services, Azure AI Foundry, or OpenAI.')
+@description('Optional: Embedding service endpoint URL. Supports Azure AI Services, Azure AI Foundry, or OpenAI. Only needed for vector_search / hybrid_search tools.')
 param azureAiServiceEndpoint string = ''
 
-@description('Azure OpenAI embedding deployment name')
+@description('Optional: Azure OpenAI embedding deployment name. Only needed for vector_search / hybrid_search tools.')
 param embeddingDeploymentName string = ''
 
 // NOTE: Entra App creation has been moved to the Setup-Permissions.ps1 script

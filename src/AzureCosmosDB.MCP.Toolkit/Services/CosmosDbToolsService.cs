@@ -340,7 +340,7 @@ public class CosmosDbToolsService
                 
                 if (string.IsNullOrWhiteSpace(embeddingDeployment))
                 {
-                    return new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." };
+                    return new { error = "EmbeddingsNotConfigured: set OPENAI_EMBEDDING_DEPLOYMENT environment variable to enable vector_search and hybrid_search tools." };
                 }
                 
                 var embeddingDimensionsStr = _configuration["OPENAI_EMBEDDING_DIMENSIONS"] 
@@ -503,7 +503,7 @@ public class CosmosDbToolsService
                 
                 if (string.IsNullOrWhiteSpace(embeddingDeployment))
                 {
-                    return new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." };
+                    return new { error = "EmbeddingsNotConfigured: set OPENAI_EMBEDDING_DEPLOYMENT environment variable to enable vector_search and hybrid_search tools." };
                 }
                 
                 var embeddingDimensionsStr = _configuration["OPENAI_EMBEDDING_DIMENSIONS"] 

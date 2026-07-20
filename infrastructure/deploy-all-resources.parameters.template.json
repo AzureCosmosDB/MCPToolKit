@@ -11,19 +11,25 @@
     "cosmosEndpoint": {
       "value": "",
       "metadata": {
-        "description": "Your Cosmos DB endpoint. Example: https://your-cosmos-account.documents.azure.com:443/"
+        "description": "REQUIRED. Your Cosmos DB endpoint. Example: https://your-cosmos-account.documents.azure.com:443/"
       }
     },
     "azureAiServiceEndpoint": {
       "value": "",
       "metadata": {
-        "description": "Embedding service endpoint URL. Supports Azure AI Services, Azure AI Foundry, or OpenAI."
+        "description": "Optional. Embedding service endpoint URL. Only needed for vector_search / hybrid_search tools. Supports Azure AI Services, Azure AI Foundry, or OpenAI."
       }
     },
     "embeddingDeploymentName": {
-      "value": "text-embedding-3-large",
+      "value": "",
       "metadata": {
-        "description": "Embedding model deployment name in your Microsoft Foundry project or Azure OpenAI. Common values: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002"
+        "description": "Optional. Embedding model deployment name. Only needed for vector_search / hybrid_search tools. Common values: text-embedding-3-small, text-embedding-3-large"
+      }
+    },
+    "enableAuth": {
+      "value": false,
+      "metadata": {
+        "description": "Optional. Set to true to enable Entra ID authentication for inbound MCP requests. When false (default), the server accepts unauthenticated requests."
       }
     },
     "useExistingAcr": {

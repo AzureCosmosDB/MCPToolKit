@@ -89,8 +89,12 @@ namespace AzureCosmosDB.MCP.Toolkit.Services
         /// <returns>True if authentication should be bypassed</returns>
         private bool IsAuthenticationBypassed()
         {
+            // Auth is bypassed if explicitly requested OR if no auth is configured
+            var tenantId = _configuration["AzureAd:TenantId"];
+            var clientId = _configuration["AzureAd:ClientId"];
             return Environment.GetEnvironmentVariable("DEV_BYPASS_AUTH") == "true" ||
-                   _configuration.GetValue<bool>("DevelopmentMode:BypassAuthentication");
+                   _configuration.GetValue<bool>("DevelopmentMode:BypassAuthentication") ||
+                   string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(clientId);
         }
 
         /// <summary>

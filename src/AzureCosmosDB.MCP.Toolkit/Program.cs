@@ -244,6 +244,16 @@ var app = builder.Build();
 // Store configuration in static state for access by static tool methods
 AppState.Configuration = builder.Configuration;
 
+// Log feature summary at startup
+{
+    var embeddingConfigured = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_ENDPOINT"));
+    var authMode = (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(clientId)) ? "Entra ID" : "disabled";
+    app.Logger.LogInformation(
+        "Cosmos DB MCP Toolkit started | CoreTools: enabled | VectorSearch: {VectorSearch} | Auth: {Auth}",
+        embeddingConfigured ? "enabled" : "disabled",
+        authMode);
+}
+
 // Add security headers middleware to allow MSAL authentication
 app.Use(async (context, next) =>
 {
@@ -815,11 +825,11 @@ public static class CosmosDbTools
             }
             if (string.IsNullOrWhiteSpace(openaiEndpoint))
             {
-                return JsonSerializer.Serialize(new { error = "Missing required environment variable OPENAI_ENDPOINT." });
+                return JsonSerializer.Serialize(new { error = "EmbeddingsNotConfigured: set OPENAI_ENDPOINT and OPENAI_EMBEDDING_DEPLOYMENT environment variables to enable vector_search and hybrid_search tools." });
             }
             if (string.IsNullOrWhiteSpace(embeddingDeployment))
             {
-                return JsonSerializer.Serialize(new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." });
+                return JsonSerializer.Serialize(new { error = "EmbeddingsNotConfigured: set OPENAI_EMBEDDING_DEPLOYMENT environment variable to enable vector_search and hybrid_search tools." });
             }
 
             // Validate parameters
@@ -965,11 +975,11 @@ public static class CosmosDbTools
             }
             if (string.IsNullOrWhiteSpace(openaiEndpoint))
             {
-                return JsonSerializer.Serialize(new { error = "Missing required environment variable OPENAI_ENDPOINT." });
+                return JsonSerializer.Serialize(new { error = "EmbeddingsNotConfigured: set OPENAI_ENDPOINT and OPENAI_EMBEDDING_DEPLOYMENT environment variables to enable vector_search and hybrid_search tools." });
             }
             if (string.IsNullOrWhiteSpace(embeddingDeployment))
             {
-                return JsonSerializer.Serialize(new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." });
+                return JsonSerializer.Serialize(new { error = "EmbeddingsNotConfigured: set OPENAI_EMBEDDING_DEPLOYMENT environment variable to enable vector_search and hybrid_search tools." });
             }
 
             // Validate parameters

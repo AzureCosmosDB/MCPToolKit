@@ -7,11 +7,14 @@ param location string = resourceGroup().location
 @description('Cosmos DB endpoint (external resource)')
 param cosmosEndpoint string
 
-@description('Embedding service endpoint URL. Supports Azure AI Services, Azure AI Foundry, or OpenAI.')
-param azureAiServiceEndpoint string
+@description('Optional: Embedding service endpoint URL. Supports Azure AI Services, Azure AI Foundry, or OpenAI. Only needed for vector_search / hybrid_search tools.')
+param azureAiServiceEndpoint string = ''
 
-@description('Embedding model deployment name in AI Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002')
-param embeddingDeploymentName string
+@description('Optional: Embedding model deployment name in AI Foundry project or Azure OpenAI. Only needed for vector_search / hybrid_search tools.')
+param embeddingDeploymentName string = ''
+
+@description('Enable Entra ID authentication for inbound MCP requests. When false, the server accepts unauthenticated requests.')
+param enableAuth bool = false
 
 @description('Container app name')
 param containerAppName string = '${resourcePrefix}-app'
@@ -48,8 +51,8 @@ var commonTags = {
 // Built-in role definition IDs
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
 
-// Deploy Entra App
-module entraApp 'modules/entra-app.bicep' = {
+// Deploy Entra App (only when authentication is enabled)
+module entraApp 'modules/entra-app.bicep' = if (enableAuth) {
   name: 'entra-app-deployment'
   params: {
     entraAppDisplayName: entraAppDisplayName
@@ -141,18 +144,18 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'ASPNETCORE_URLS'
               value: 'http://+:8080'
             }
-            // Entra App authentication configuration
+            // Entra App authentication configuration (only set when auth is enabled)
             {
               name: 'AzureAd__TenantId'
-              value: tenant().tenantId
+              value: enableAuth ? tenant().tenantId : ''
             }
             {
               name: 'AzureAd__ClientId'
-              value: entraApp.outputs.entraAppClientId
+              value: enableAuth ? entraApp.outputs.entraAppClientId : ''
             }
             {
               name: 'AzureAd__Audience'
-              value: entraApp.outputs.entraAppClientId
+              value: enableAuth ? entraApp.outputs.entraAppClientId : ''
             }
           ]
           resources: {
@@ -222,7 +225,7 @@ resource acrRoleAssignmentMI 'Microsoft.Authorization/roleAssignments@2022-04-01
 }
 
 // Deploy Entra App role assignment for AIF project MI to access Container App (conditional)
-module aifRoleAssignment 'modules/aif-role-assignment-entraapp.bicep' = if (!empty(aifProjectResourceId)) {
+module aifRoleAssignment 'modules/aif-role-assignment-entraapp.bicep' = if (enableAuth && !empty(aifProjectResourceId)) {
   name: 'aif-role-assignment'
   params: {
     aifProjectResourceId: aifProjectResourceId
@@ -240,13 +243,13 @@ output containerAppEnvironmentId string = containerAppEnvironment.id
 output containerAppId string = containerApp.id
 output resourceGroupName string = resourceGroup().name
 
-// Entra App outputs
-output entraAppClientId string = entraApp.outputs.entraAppClientId
-output entraAppObjectId string = entraApp.outputs.entraAppObjectId
-output entraAppServicePrincipalId string = entraApp.outputs.entraAppServicePrincipalObjectId
-output entraAppRoleId string = entraApp.outputs.entraAppRoleId
-output entraAppIdentifierUri string = entraApp.outputs.entraAppIdentifierUri
-output entraAppRoleValue string = entraApp.outputs.entraAppRoleValue
+// Entra App outputs (empty when auth is disabled)
+output entraAppClientId string = enableAuth ? entraApp.outputs.entraAppClientId : ''
+output entraAppObjectId string = enableAuth ? entraApp.outputs.entraAppObjectId : ''
+output entraAppServicePrincipalId string = enableAuth ? entraApp.outputs.entraAppServicePrincipalObjectId : ''
+output entraAppRoleId string = enableAuth ? entraApp.outputs.entraAppRoleId : ''
+output entraAppIdentifierUri string = enableAuth ? entraApp.outputs.entraAppIdentifierUri : ''
+output entraAppRoleValue string = enableAuth ? entraApp.outputs.entraAppRoleValue : ''
 
 // Resource configuration for post-deployment
 output postDeploymentInfo object = {
@@ -254,8 +257,8 @@ output postDeploymentInfo object = {
   containerApp: containerAppName
   managedIdentityPrincipalId: containerApp.identity.principalId
   mcpServerUri: 'https://${containerApp.properties.configuration.ingress.fqdn}'
-  entraAppClientId: entraApp.outputs.entraAppClientId
-  entraAppRoleValue: entraApp.outputs.entraAppRoleValue
-  entraAppRoleId: entraApp.outputs.entraAppRoleId
-  entraAppServicePrincipalObjectId: entraApp.outputs.entraAppServicePrincipalObjectId
+  entraAppClientId: enableAuth ? entraApp.outputs.entraAppClientId : ''
+  entraAppRoleValue: enableAuth ? entraApp.outputs.entraAppRoleValue : ''
+  entraAppRoleId: enableAuth ? entraApp.outputs.entraAppRoleId : ''
+  entraAppServicePrincipalObjectId: enableAuth ? entraApp.outputs.entraAppServicePrincipalObjectId : ''
 }
