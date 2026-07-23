@@ -19,6 +19,12 @@ def get_retrieval_subagent_prompt(query: str, *, num_output_docs: int = 30) -> s
     - GrepTool: Text pattern matching
     - ReadDocument: Read specific document snippets that look promising but incomplete
     - PruneChunksTool: Remove irrelevant chunks to free up context space
+    - ExecuteQuery: Author and run a read-only Cosmos DB SELECT query on a chosen database/container. RESTRICTED — see rules below.
+
+    **When to use ExecuteQuery (restricted):**
+    - Use ExecuteQuery ONLY when the information need cannot be satisfied by semantic/keyword search and specifically requires precise, structured access to the data: exact field-value filters, numeric or date range filters, counts/aggregations (COUNT, SUM, AVG, MIN, MAX), DISTINCT values, GROUP BY, or deterministic ordering by a specific field.
+    - Do NOT use ExecuteQuery for ordinary topical, conceptual, or semantic questions — use SearchTool, GrepTool, and ReadDocument for those. When in doubt, prefer the search tools.
+    - It is read-only (SELECT only) and results are truncated. Typical pattern: use it to pinpoint document ids by structured criteria, then ReadDocument those ids or include them in your final ranked output.
 
     **Your Process:**
     - Break down the query into its key concepts and information needs (list each one explicitly)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 
 import json_repair
@@ -16,7 +17,13 @@ from cosmos_retriever.utils import ProviderFormat
 
 logger = structlog.get_logger("cosmos_retriever.inference.agent_loop")
 
-_CHAT_TOOL_NAMES = ("search_corpus", "grep_corpus", "read_document", "prune_chunks")
+_CHAT_TOOL_NAMES = (
+    "search_corpus",
+    "grep_corpus",
+    "read_document",
+    "prune_chunks",
+    "execute_query",
+)
 
 _DOC_RESULT_RE = re.compile(r"#\s*DOCUMENT ID:\s*(?P<id>\S+)(?:\s*\(\d+\s*tokens\))?")
 
@@ -47,6 +54,7 @@ class AgentSearchResult:
     usage: dict[str, int] = field(default_factory=dict)
     trajectory: dict[str, object] = field(default_factory=dict)
     metadata: dict[str, str | int | float] = field(default_factory=dict)
+    timing: dict[str, float] = field(default_factory=dict)
 
 
 def _empty_usage() -> dict[str, int]:
@@ -86,13 +94,21 @@ def _parse_tool_arguments(raw: str | None) -> dict:
 
     if not raw:
         return {}
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
+    parsed: object = raw
+    # Some models (e.g. gpt-oss via vLLM/Harmony) double-encode tool arguments,
+    # yielding a JSON string that itself contains JSON. Unwrap up to a few levels.
+    for _ in range(3):
+        if isinstance(parsed, dict):
+            return parsed
+        if not isinstance(parsed, str):
+            break
         try:
-            parsed = json_repair.loads(raw)
-        except Exception:
-            return {}
+            parsed = json.loads(parsed)
+        except json.JSONDecodeError:
+            try:
+                parsed = json_repair.loads(parsed)
+            except Exception:
+                return {}
     return parsed if isinstance(parsed, dict) else {}
 
 
@@ -171,7 +187,12 @@ def run_chat_search(
     num_turns = 0
     usage = _empty_usage()
 
+    import collections as _collections
+    timing = {"llm_s": 0.0, "tools_s": 0.0, "retrieval_s": 0.0, "rerank_s": 0.0}
+    tool_s = _collections.defaultdict(float)
+
     for _ in range(max_turns):
+        _t = time.perf_counter()
         response = client.chat.completions.create(
             model=model,
             messages=messages,
@@ -180,6 +201,7 @@ def run_chat_search(
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        timing["llm_s"] += time.perf_counter() - _t
         num_turns += 1
         _acc_chat_usage(usage, response)
         message = response.choices[0].message
@@ -211,7 +233,15 @@ def run_chat_search(
                 output = f"Error: unknown tool '{name}'."
             else:
                 try:
+                    _tt = time.perf_counter()
                     output, _metadata = tool(args)
+                    _dt = time.perf_counter() - _tt
+                    timing["tools_s"] += _dt
+                    tool_s[name] += _dt
+                    _rs = getattr(_metadata, "retrieval_s", None)
+                    if _rs is not None:
+                        timing["retrieval_s"] += _rs
+                        timing["rerank_s"] += getattr(_metadata, "rerank_s", 0.0) or 0.0
                     _collect_doc_text(output, doc_text)
                 except Exception as exc:
                     logger.warning("chat_tool_error", tool=name, error=str(exc))
@@ -224,6 +254,7 @@ def run_chat_search(
                 break
 
     documents = _extract_documents(final_text, doc_text, max_documents)
+    pool_doc_ids = sorted({cid.split("__")[0] for cid in doc_text})
 
     logger.info(
         "chat_search_complete",
@@ -237,12 +268,21 @@ def run_chat_search(
         documents=documents,
         num_turns=num_turns,
         final_text=final_text,
+        pool_doc_ids=pool_doc_ids,
         usage=usage,
+        trajectory={"final_docs": [d.id for d in documents]},
         metadata={
             "backend": "openai_chat",
             "model": model,
             "tool_calls": tool_call_count,
             "tool_types_used": ",".join(sorted(tool_types_used)),
+        },
+        timing={
+            "llm_s": round(timing["llm_s"], 2),
+            "tools_s": round(timing["tools_s"], 2),
+            "retrieval_s": round(timing["retrieval_s"], 2),
+            "rerank_s": round(timing["rerank_s"], 2),
+            **{f"tool.{k}_s": round(v, 2) for k, v in tool_s.items()},
         },
     )
 
@@ -284,7 +324,14 @@ def run_responses_search(
     search_history: list[str] = []
     turn_tools: list[list[str]] = []
 
+    # per-phase timing (seconds)
+    import collections as _collections
+    timing = {"llm_s": 0.0, "tools_s": 0.0, "retrieval_s": 0.0, "rerank_s": 0.0}
+    tool_s = _collections.defaultdict(float)
+
+    _t = time.perf_counter()
     response = client.responses.create(input=prompt, **common)
+    timing["llm_s"] += time.perf_counter() - _t
     num_turns = 1
     _acc_responses_usage(usage, response)
 
@@ -313,7 +360,15 @@ def run_responses_search(
                 output = f"Error: unknown tool '{name}'."
             else:
                 try:
+                    _tt = time.perf_counter()
                     output, _metadata = tool(args)
+                    _dt = time.perf_counter() - _tt
+                    timing["tools_s"] += _dt
+                    tool_s[name] += _dt
+                    _rs = getattr(_metadata, "retrieval_s", None)
+                    if _rs is not None:
+                        timing["retrieval_s"] += _rs
+                        timing["rerank_s"] += getattr(_metadata, "rerank_s", 0.0) or 0.0
                     _collect_doc_text(output, doc_text)
                 except Exception as exc:
                     logger.warning("responses_tool_error", tool=name, error=str(exc))
@@ -322,9 +377,11 @@ def run_responses_search(
                 {"type": "function_call_output", "call_id": fc.call_id, "output": output}
             )
 
+        _t = time.perf_counter()
         response = client.responses.create(
             previous_response_id=response.id, input=outputs, **common
         )
+        timing["llm_s"] += time.perf_counter() - _t
         num_turns += 1
         _acc_responses_usage(usage, response)
 
@@ -357,6 +414,13 @@ def run_responses_search(
             "model": model,
             "tool_calls": tool_call_count,
             "tool_types_used": ",".join(sorted(tool_types_used)),
+        },
+        timing={
+            "llm_s": round(timing["llm_s"], 2),
+            "tools_s": round(timing["tools_s"], 2),
+            "retrieval_s": round(timing["retrieval_s"], 2),
+            "rerank_s": round(timing["rerank_s"], 2),
+            **{f"tool.{k}_s": round(v, 2) for k, v in tool_s.items()},
         },
     )
 

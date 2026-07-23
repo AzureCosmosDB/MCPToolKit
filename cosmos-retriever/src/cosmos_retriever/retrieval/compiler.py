@@ -39,8 +39,6 @@ class CosmosQueryCompiler:
         s = self.schema
         mapping: dict[str, CosmosPath | None] = {
             "item_id": s.item_id_path,
-            "text": s.primary_text_path,
-            "primary_text": s.primary_text_path,
             "document_id": s.document_id_path,
             "chunk_id": s.chunk_id_path,
             "chunk_order": s.chunk_order_path,
@@ -68,7 +66,6 @@ class CosmosQueryCompiler:
             aliases[logical] = logical
 
         add("item_id", s.item_id_path)
-        add("text", s.primary_text_path)
         add("document_id", s.document_id_path)
         add("chunk_id", s.chunk_id_path)
         add("chunk_order", s.chunk_order_path)
@@ -167,7 +164,7 @@ class CosmosQueryCompiler:
         vec_p = bag.add(query_vector, prefix="qVec")
         select, aliases = self.projection(limit_p)
         where = self._where(filters, ignored_item_ids, bag)
-        order = f" ORDER BY RANK VectorDistance({vector_path.render(_ALIAS)}, {vec_p})"
+        order = f" ORDER BY VectorDistance({vector_path.render(_ALIAS)}, {vec_p})"
         return CompiledCosmosQuery(
             sql=select + where + order,
             parameters=bag.params,

@@ -37,8 +37,7 @@ class DunderChunkCodec:
 
 class CorpusSchema(BaseModel):
     item_id_path: PathField
-    text_paths: list[PathField]
-    primary_text_path: PathField
+    text_paths: list[PathField] = []
     vector_fields: list[VectorFieldConfig] = []
     document_id_path: PathField | None = None
     chunk_id_path: PathField | None = None
@@ -55,12 +54,11 @@ class CorpusSchema(BaseModel):
     @model_validator(mode="after")
     def _check(self) -> CorpusSchema:
         errors: list[str] = []
-        primary = str(self.primary_text_path)
-        if primary not in {str(p) for p in self.text_paths}:
-            errors.append("primary_text_path must be one of text_paths")
         for v in self.vector_fields:
             if v.dimensions <= 0:
                 errors.append(f"vector field {v.path} has non-positive dimensions")
+        if not self.text_paths and not self.vector_fields:
+            errors.append("schema must declare at least one text or vector field")
         if errors:
             raise InvalidCorpusSchema("; ".join(errors))
         return self
@@ -101,16 +99,17 @@ class CorpusSchema(BaseModel):
             out[name] = vf.path
         return out
 
-    def primary_text_field_name(self) -> str:
-        for name, p in self.text_field_map().items():
-            if str(p) == str(self.primary_text_path):
-                return name
-        return self._seg_name(self.primary_text_path)
-
     def resolve_text_fields(self, names: list[str] | None) -> list[CosmosPath]:
-        if not names:
-            return [self.primary_text_path]
         m = self.text_field_map()
+        if not names:
+            if len(m) == 1:
+                return [next(iter(m.values()))]
+            if not m:
+                return []
+            raise UnknownField(
+                "multiple text fields are available; specify one or more of "
+                f"{sorted(m)}"
+            )
         paths: list[CosmosPath] = []
         for n in names:
             if n not in m:
@@ -140,11 +139,12 @@ class CorpusSchema(BaseModel):
         tm = self.text_field_map()
         vm = self.vector_field_map()
         lines: list[str] = []
-        tparts = []
-        for n, p in tm.items():
-            d = self.text_field_descriptions.get(n) or self.text_field_descriptions.get(str(p))
-            tparts.append(f"'{n}'" + (f" — {d}" if d else ""))
-        lines.append("Text fields (keyword / BM25): " + ", ".join(tparts))
+        if tm:
+            tparts = []
+            for n, p in tm.items():
+                d = self.text_field_descriptions.get(n) or self.text_field_descriptions.get(str(p))
+                tparts.append(f"'{n}'" + (f" — {d}" if d else ""))
+            lines.append("Text fields (keyword / BM25): " + ", ".join(tparts))
         if vm:
             vparts = []
             for n, p in vm.items():
@@ -152,9 +152,22 @@ class CorpusSchema(BaseModel):
                 d = cfg.description if cfg else None
                 vparts.append(f"'{n}'" + (f" — {d}" if d else ""))
             lines.append("Vector fields (semantic): " + ", ".join(vparts))
+        text_names = list(tm)
         default_v = next(iter(vm), None)
-        default = f"hybrid over text='{self.primary_text_field_name()}'"
-        if default_v:
-            default += f" + vector='{default_v}'"
-        lines.append(f"Default when unspecified: {default}.")
+        if len(text_names) > 1:
+            lines.append(
+                "You must choose which text field(s) to search on each call "
+                f"(available: {text_names})."
+            )
+        elif len(text_names) == 1 and default_v:
+            lines.append(
+                f"Default when unspecified: hybrid over text='{text_names[0]}' "
+                f"+ vector='{default_v}'."
+            )
+        elif len(text_names) == 1:
+            lines.append(f"Default when unspecified: full-text over '{text_names[0]}'.")
+        elif default_v:
+            lines.append(f"Default when unspecified: vector search over '{default_v}'.")
+        else:
+            lines.append("Default when unspecified: structured item lookup.")
         return "\n".join(lines)

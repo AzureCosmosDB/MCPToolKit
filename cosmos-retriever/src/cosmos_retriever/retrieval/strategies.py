@@ -75,7 +75,6 @@ class NativeHybridStrategy(SearchStrategy):
             channels=["vector", "full_text"],
             projected_aliases=compiled.projected_aliases,
             queried_text_fields=req.text_fields,
-            primary_text_field=ctx.schema.primary_text_field_name(),
         )
 
 
@@ -101,9 +100,7 @@ class VectorSearchStrategy(SearchStrategy):
             strategy=self.name,
             channels=["vector"],
             projected_aliases=compiled.projected_aliases,
-            primary_text_field=ctx.schema.primary_text_field_name(),
         )
-
 
 class FullTextSearchStrategy(SearchStrategy):
     name = "full_text"
@@ -128,7 +125,6 @@ class FullTextSearchStrategy(SearchStrategy):
             channels=["full_text"],
             projected_aliases=compiled.projected_aliases,
             queried_text_fields=req.text_fields,
-            primary_text_field=ctx.schema.primary_text_field_name(),
         )
 
 
@@ -185,7 +181,11 @@ class BoundedScanStrategy(SearchStrategy):
         )
         compiled.warnings.append("bounded scan active")
         rows = ctx.executor.run(compiled)
-        return normalize_rows(rows, strategy=self.name)
+        return normalize_rows(
+            rows,
+            strategy=self.name,
+            projected_aliases=compiled.projected_aliases,
+        )
 
 
 
@@ -224,5 +224,4 @@ class FullTextGrepCandidateStrategy(GrepCandidateStrategy):
             channels=["full_text"],
             projected_aliases=compiled.projected_aliases,
             queried_text_fields=[req.text_field] if req.text_field else None,
-            primary_text_field=ctx.schema.primary_text_field_name(),
         )

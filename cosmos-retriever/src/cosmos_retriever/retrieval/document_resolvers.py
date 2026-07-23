@@ -16,6 +16,7 @@ from cosmos_retriever.retrieval.models import (
     PartitionQueryPolicy,
     ReadDocumentRequest,
 )
+from cosmos_retriever.retrieval.normalization import assemble_text, row_text_fields
 from cosmos_retriever.retrieval.schema import CorpusSchema
 
 DEFAULT_MAX_CHUNKS = 300
@@ -62,10 +63,11 @@ class ItemIsDocumentResolver(DocumentResolver):
             cross_partition=request.partition_key is None,
         )
         rows = self.executor.run(compiled)
+        aliases = compiled.projected_aliases
         return NormalizedDocument(
             document_id=item_id,
 
-            chunk_texts=[r.get("text", "") or "" for r in rows],
+            chunk_texts=[assemble_text(row_text_fields(r, aliases)) for r in rows],
             chunk_ids=[str(r.get("item_id")) for r in rows],
         )
 
@@ -87,10 +89,11 @@ class ChunkedDocumentResolver(DocumentResolver):
             cross_partition=False,
         )
         rows = self._sorted_rows(self.executor.run(compiled))
+        aliases = compiled.projected_aliases
         return NormalizedDocument(
 
             document_id=doc_id,
-            chunk_texts=[r.get("text", "") or "" for r in rows],
+            chunk_texts=[assemble_text(row_text_fields(r, aliases)) for r in rows],
 
             chunk_ids=[str(r.get("item_id")) for r in rows],
         )
@@ -116,11 +119,12 @@ class CrossPartitionChunkedDocumentResolver(DocumentResolver):
             cross_partition=request.partition_key is None,
         )
         rows = self._sorted_rows(self.executor.run(compiled))
-        
+        aliases = compiled.projected_aliases
+
         return NormalizedDocument(
             document_id=doc_id,
 
-            chunk_texts=[r.get("text", "") or "" for r in rows],
+            chunk_texts=[assemble_text(row_text_fields(r, aliases)) for r in rows],
             chunk_ids=[str(r.get("item_id")) for r in rows],
 
             warnings=["cross-partition document reconstruction"],

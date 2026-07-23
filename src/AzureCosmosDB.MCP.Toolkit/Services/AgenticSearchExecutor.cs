@@ -68,6 +68,16 @@ public static class AgenticSearchExecutor
     /// <param name="logger">Logger for request lifecycle events.</param>
     /// <param name="database">Optional Cosmos database override.</param>
     /// <param name="container">Optional Cosmos container override.</param>
+    /// <param name="temperature">Optional LLM sampling temperature (0.0–2.0).</param>
+    /// <param name="maxTurns">Optional cap on agent reasoning turns (1–200).</param>
+    /// <param name="reasoningEffort">Optional reasoning effort ("low"/"medium"/"high").</param>
+    /// <param name="schemaOverride">Optional schema override as a JSON object (keys:
+    /// document_id_path, chunk_id_path, chunk_order_path, title_path, source_path,
+    /// item_id_path, use_dunder_codec), or "none" for pure discovery.</param>
+    /// <param name="searchDisplayLimit">Optional cap on hits surfaced per search (1–50).</param>
+    /// <param name="accountUri">Optional Cosmos account endpoint override for this call.</param>
+    /// <param name="embeddingModel">Optional embedding model/deployment override for this call.</param>
+    /// <param name="embeddingEndpoint">Optional embedding endpoint base URL override for this call.</param>
     /// <param name="cancellationToken">Cooperative cancellation.</param>
     /// <returns>
     /// The service's response body, expected to be a single JSON document. On
@@ -75,12 +85,26 @@ public static class AgenticSearchExecutor
     /// body) returns a serialised <c>{ "error": "...", ... }</c> envelope so
     /// the MCP tool always returns parseable JSON to the caller.
     /// </returns>
+    /// <remarks>
+    /// The optional tuning knobs are forwarded to the retriever service as a
+    /// per-request <c>overrides</c> object (mapping to the Python
+    /// <c>RuntimeConfig</c>). Only non-null values are sent; anything omitted
+    /// falls back to the retriever's own configured defaults.
+    /// </remarks>
     public static async Task<string> RunAsync(
         string query,
         int maxDocuments,
         ILogger logger,
         string? database = null,
         string? container = null,
+        double? temperature = null,
+        int? maxTurns = null,
+        string? reasoningEffort = null,
+        string? schemaOverride = null,
+        int? searchDisplayLimit = null,
+        string? accountUri = null,
+        string? embeddingModel = null,
+        string? embeddingEndpoint = null,
         CancellationToken cancellationToken = default)
     {
         var baseUrl = ResolveString(BaseUrlEnvVar, defaultValue: DefaultBaseUrl).TrimEnd('/');
@@ -95,9 +119,36 @@ public static class AgenticSearchExecutor
         if (!string.IsNullOrWhiteSpace(database)) payload["database"] = database;
         if (!string.IsNullOrWhiteSpace(container)) payload["container"] = container;
 
+        // Per-request tuning knobs -> the retriever's RuntimeConfig overrides.
+        // Only include knobs the caller actually set; omit the rest so the
+        // service applies its own defaults.
+        var overrides = new Dictionary<string, object?>();
+        if (temperature is not null) overrides["chat_temperature"] = temperature;
+        if (maxTurns is not null) overrides["chat_max_turns"] = maxTurns;
+        if (!string.IsNullOrWhiteSpace(reasoningEffort)) overrides["chat_reasoning_effort"] = reasoningEffort;
+        if (!string.IsNullOrWhiteSpace(schemaOverride) && !string.Equals(schemaOverride, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            // Forward the schema override as a nested JSON object so the retriever
+            // receives a structured override (its RuntimeConfig coerces it).
+            try
+            {
+                using var doc = JsonDocument.Parse(schemaOverride);
+                overrides["schema_override"] = doc.RootElement.Clone();
+            }
+            catch (JsonException)
+            {
+                overrides["schema_override"] = schemaOverride;
+            }
+        }
+        if (searchDisplayLimit is not null) overrides["search_display_limit"] = searchDisplayLimit;
+        if (!string.IsNullOrWhiteSpace(accountUri)) overrides["account_uri"] = accountUri;
+        if (!string.IsNullOrWhiteSpace(embeddingModel)) overrides["openai_embedding_model"] = embeddingModel;
+        if (!string.IsNullOrWhiteSpace(embeddingEndpoint)) overrides["embed_endpoint"] = embeddingEndpoint;
+        if (overrides.Count > 0) payload["overrides"] = overrides;
+
         logger.LogInformation(
-            "agentic_search: POST {RequestUri} (database={Database} container={Container} timeout={Timeout}s)",
-            requestUri, database ?? "<env>", container ?? "<env>", timeoutSeconds);
+            "agentic_search: POST {RequestUri} (database={Database} container={Container} timeout={Timeout}s overrides={OverrideCount})",
+            requestUri, database ?? "<env>", container ?? "<env>", timeoutSeconds, overrides.Count);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));

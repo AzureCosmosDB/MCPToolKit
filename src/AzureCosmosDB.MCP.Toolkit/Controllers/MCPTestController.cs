@@ -137,7 +137,18 @@ public class MCPTestController : ControllerBase
             : 20;
         string? database = parameters.ContainsKey("database") ? GetRequiredParameter<string>(parameters, "database") : null;
         string? container = parameters.ContainsKey("container") ? GetRequiredParameter<string>(parameters, "container") : null;
-        return await _cosmosDbTools.AgenticSearch(query, maxDocuments, database, container);
+        double? temperature = parameters.ContainsKey("temperature") ? GetRequiredParameter<double>(parameters, "temperature") : null;
+        int? maxTurns = parameters.ContainsKey("maxTurns") ? GetRequiredParameter<int>(parameters, "maxTurns") : null;
+        string? reasoningEffort = parameters.ContainsKey("reasoningEffort") ? GetRequiredParameter<string>(parameters, "reasoningEffort") : null;
+        string? schemaOverride = parameters.ContainsKey("schemaOverride") ? GetRequiredParameter<string>(parameters, "schemaOverride") : null;
+        int? searchDisplayLimit = parameters.ContainsKey("searchDisplayLimit") ? GetRequiredParameter<int>(parameters, "searchDisplayLimit") : null;
+        string? accountUri = parameters.ContainsKey("accountUri") ? GetRequiredParameter<string>(parameters, "accountUri") : null;
+        string? embeddingModel = parameters.ContainsKey("embeddingModel") ? GetRequiredParameter<string>(parameters, "embeddingModel") : null;
+        string? embeddingEndpoint = parameters.ContainsKey("embeddingEndpoint") ? GetRequiredParameter<string>(parameters, "embeddingEndpoint") : null;
+        return await _cosmosDbTools.AgenticSearch(
+            query, maxDocuments, database, container,
+            temperature, maxTurns, reasoningEffort, schemaOverride, searchDisplayLimit,
+            accountUri, embeddingModel, embeddingEndpoint);
     }
 
     private T GetRequiredParameter<T>(Dictionary<string, object> parameters, string paramName)

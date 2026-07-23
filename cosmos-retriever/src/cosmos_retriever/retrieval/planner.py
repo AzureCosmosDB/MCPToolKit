@@ -56,6 +56,13 @@ class RetrievalPlanner:
         if not self.capabilities.full_text_supported:
             return False
         names = req.text_fields if req is not None else None
+        if not names:
+            # No specific field requested. Full-text is available as long as the
+            # schema exposes at least one full-text-capable field; the concrete
+            # field(s) must be chosen by the caller at execution time.
+            return any(
+                self.capabilities.has_full_text_path(p) for p in self.schema.text_paths
+            )
         try:
             paths = self.schema.resolve_text_fields(names)
         except Exception:

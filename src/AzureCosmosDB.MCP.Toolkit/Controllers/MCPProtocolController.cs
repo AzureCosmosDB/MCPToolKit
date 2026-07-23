@@ -269,7 +269,15 @@ public class MCPProtocolController : ControllerBase
                                             query = new { type = "string", description = "Natural-language information need to retrieve documents for", maxLength = 4096 },
                                             maxDocuments = new { type = "integer", description = "Maximum number of curated documents to return (1-50, default 20)", minimum = 1, maximum = 50, @default = 20 },
                                             database = new { type = "string", description = "Optional Cosmos database override (else COSMOS_DATABASE env var)", maxLength = 256 },
-                                            container = new { type = "string", description = "Optional Cosmos corpus container override (else COSMOS_CORPUS_CONTAINER env var)", maxLength = 256 }
+                                            container = new { type = "string", description = "Optional Cosmos container to narrow to. Omit to search the whole database (all searchable collections).", maxLength = 256 },
+                                            temperature = new { type = "number", description = "Optional LLM sampling temperature for this call (0.0-2.0). Lower is more deterministic.", minimum = 0.0, maximum = 2.0 },
+                                            maxTurns = new { type = "integer", description = "Optional cap on the agent's reasoning/search turns for this call (1-200)", minimum = 1, maximum = 200 },
+                                            reasoningEffort = new { type = "string", description = "Optional reasoning effort for reasoning models: 'low', 'medium', or 'high'", @enum = new[] { "low", "medium", "high" } },
+                                            schemaOverride = new { type = "object", description = "Optional schema override as a JSON object (keys: document_id_path, chunk_id_path, chunk_order_path, title_path, source_path, item_id_path, use_dunder_codec). Omit for pure discovery." },
+                                            searchDisplayLimit = new { type = "integer", description = "Optional cap on how many hits each internal search surfaces (1-50)", minimum = 1, maximum = 50 },
+                                            accountUri = new { type = "string", description = "Optional Cosmos account endpoint URL to target a different account for this call (else the server's configured account), e.g. https://<account>.documents.azure.com:443/", maxLength = 512 },
+                                            embeddingModel = new { type = "string", description = "Optional embedding model/deployment name for this call (must match how the target container was embedded)", maxLength = 256 },
+                                            embeddingEndpoint = new { type = "string", description = "Optional embedding endpoint base URL for this call, e.g. https://<resource>.services.ai.azure.com/openai/v1", maxLength = 512 }
                                         },
                                         required = new string[] { "query" },
                                         additionalProperties = false
@@ -472,6 +480,14 @@ public class MCPProtocolController : ControllerBase
                 GetOptionalIntArg(args, "maxDocuments", 20),
                 GetOptionalStringArg(args, "database"),
                 GetOptionalStringArg(args, "container"),
+                GetNullableDoubleArg(args, "temperature"),
+                GetNullableIntArg(args, "maxTurns"),
+                GetOptionalStringArg(args, "reasoningEffort"),
+                GetOptionalSchemaOverrideArg(args, "schemaOverride"),
+                GetNullableIntArg(args, "searchDisplayLimit"),
+                GetOptionalStringArg(args, "accountUri"),
+                GetOptionalStringArg(args, "embeddingModel"),
+                GetOptionalStringArg(args, "embeddingEndpoint"),
                 cancellationToken),
             _ => throw new ArgumentException($"Unknown tool: {toolName}")
         };
@@ -487,6 +503,50 @@ public class MCPProtocolController : ControllerBase
         if (!args.TryGetValue(key, out var value)) return null;
         var s = value?.ToString();
         return string.IsNullOrWhiteSpace(s) ? null : s;
+    }
+
+    // schemaOverride may arrive as a JSON object (JsonElement) or a string. Return
+    // its JSON text form so it can be forwarded to the retriever, which parses it.
+    private static string? GetOptionalSchemaOverrideArg(Dictionary<string, object> args, string key)
+    {
+        if (!args.TryGetValue(key, out var value) || value is null) return null;
+        if (value is System.Text.Json.JsonElement el)
+        {
+            return el.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.Null => null,
+                System.Text.Json.JsonValueKind.String => el.GetString(),
+                System.Text.Json.JsonValueKind.Object => el.GetRawText(),
+                _ => el.GetRawText(),
+            };
+        }
+        var s = value.ToString();
+        return string.IsNullOrWhiteSpace(s) ? null : s;
+    }
+
+    private static int? GetNullableIntArg(Dictionary<string, object> args, string key)
+    {
+        if (!args.TryGetValue(key, out var value)) return null;
+        if (value is int intValue) return intValue;
+        if (int.TryParse(value?.ToString(), out var parsed)) return parsed;
+        return null;
+    }
+
+    private static double? GetNullableDoubleArg(Dictionary<string, object> args, string key)
+    {
+        if (!args.TryGetValue(key, out var value)) return null;
+        if (value is double dblValue) return dblValue;
+        if (value is int intValue) return intValue;
+        if (double.TryParse(value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        return null;
+    }
+
+    private static bool? GetNullableBoolArg(Dictionary<string, object> args, string key)
+    {
+        if (!args.TryGetValue(key, out var value)) return null;
+        if (value is bool boolValue) return boolValue;
+        if (bool.TryParse(value?.ToString(), out var parsed)) return parsed;
+        return null;
     }
 
     private static int GetRequiredIntArg(Dictionary<string, object> args, string key)

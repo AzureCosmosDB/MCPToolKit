@@ -711,9 +711,21 @@ public class CosmosDbToolsService
         int maxDocuments = 20,
         string? database = null,
         string? container = null,
+        double? temperature = null,
+        int? maxTurns = null,
+        string? reasoningEffort = null,
+        string? schemaOverride = null,
+        int? searchDisplayLimit = null,
+        string? accountUri = null,
+        string? embeddingModel = null,
+        string? embeddingEndpoint = null,
         CancellationToken cancellationToken = default)
     {
-        var raw = await AgenticSearchExecutor.RunAsync(query, maxDocuments, _logger, database, container, cancellationToken);
+        var raw = await AgenticSearchExecutor.RunAsync(
+            query, maxDocuments, _logger, database, container,
+            temperature, maxTurns, reasoningEffort, schemaOverride, searchDisplayLimit,
+            accountUri, embeddingModel, embeddingEndpoint,
+            cancellationToken);
         // Pass the JSON string through verbatim so the MCP envelope serialises it
         // as a single string (matching the other tools, which also return JSON strings).
         return raw;

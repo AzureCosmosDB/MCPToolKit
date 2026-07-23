@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any, TypeAlias
 
 import openai
 import structlog
-from azure.cosmos import DatabaseProxy
+from azure.cosmos import CosmosClient, DatabaseProxy
 from pydantic import BaseModel, Field
 
 from cosmos_retriever.rerank import Reranker
@@ -18,8 +19,9 @@ from cosmos_retriever.retrieval import (
     GrepRequest,
     QueryEmbedder,
     ReadDocumentRequest,
+    SchemaOverride,
     SearchRequest,
-    build_default_retriever,
+    build_capability_retriever_from_live,
 )
 from cosmos_retriever.retrieval.errors import UnknownField, UnsupportedRetrievalCapability
 from cosmos_retriever.retrieval.executor import COSMOS_QUERY_MAX_CONCURRENCY
@@ -209,8 +211,8 @@ def _search_schema_for(schema: CorpusSchema) -> ToolSchema:
             "type": "array",
             "items": {"type": "string", "enum": text_names},
             "description": (
-                "Optional. Text field(s) to keyword-match against "
-                f"(available: {text_names}). Defaults to the primary text field."
+                "Required. Text field(s) to keyword-match against "
+                f"(available: {text_names}). Choose one or more on every call."
             ),
         }
     if len(vector_names) > 1:
@@ -236,8 +238,9 @@ def _search_schema_for(schema: CorpusSchema) -> ToolSchema:
         "Returns a section of the document that is relevant to the query.\n\n"
         "Queryable schema:\n" + schema.agent_field_summary()
     )
+    required = ["query"] + (["fields"] if len(text_names) > 1 else [])
     return ToolSchema(
-        name="search_corpus", description=desc, parameters=params, required=["query"]
+        name="search_corpus", description=desc, parameters=params, required=required
     )
 
 
@@ -255,16 +258,17 @@ def _grep_schema_for(schema: CorpusSchema) -> ToolSchema:
             "type": "string",
             "enum": text_names,
             "description": (
-                "Optional. Text field to search "
-                f"(available: {text_names}). Defaults to the primary text field."
+                "Required. Text field to search "
+                f"(available: {text_names}). Choose one on every call."
             ),
         }
     desc = (
         "Performs a regex search on the corpus to find documents matching the query.\n\n"
         "Queryable text fields: " + ", ".join(f"'{n}'" for n in text_names)
     )
+    required = ["pattern"] + (["field"] if len(text_names) > 1 else [])
     return ToolSchema(
-        name="grep_corpus", description=desc, parameters=params, required=["pattern"]
+        name="grep_corpus", description=desc, parameters=params, required=required
     )
 
 
@@ -272,6 +276,8 @@ class SearchCorpusToolCallMetadata(ToolCallMetadata):
 
     returned_chunk_ids: list[str]
     pre_rerank_chunk_ids: list[str] | None = None
+    retrieval_s: float = 0.0
+    rerank_s: float = 0.0
 
 
 class SearchCorpusTool(Tool):
@@ -335,7 +341,9 @@ class SearchCorpusTool(Tool):
             mode=mode,
         )
         try:
+            _t = time.perf_counter()
             items = self._retriever.search(request)
+            retrieval_s = time.perf_counter() - _t
         except (UnknownField, UnsupportedRetrievalCapability) as exc:
             log.warning("search_field_error", error=str(exc))
             return (
@@ -350,8 +358,11 @@ class SearchCorpusTool(Tool):
         )
 
         token_counts: list[int | None] = [None] * len(ids)
+        rerank_s = 0.0
         if self._reranker is not None and ids:
+            _t = time.perf_counter()
             rerank_results = self._reranker(query, documents, max_tokens=max_tokens_override)
+            rerank_s = time.perf_counter() - _t
             ids = [ids[r.original_index] for r in rerank_results]
             documents = [r.document for r in rerank_results]
             token_counts = [r.tokens for r in rerank_results]
@@ -360,7 +371,11 @@ class SearchCorpusTool(Tool):
         triples = list(zip(ids, documents, token_counts, strict=True))[: self._display_limit]
         text = format_result_blocks(triples)
         returned = [t[0] for t in triples]
-        return text, SearchCorpusToolCallMetadata(returned_chunk_ids=returned)
+        return text, SearchCorpusToolCallMetadata(
+            returned_chunk_ids=returned,
+            retrieval_s=round(retrieval_s, 3),
+            rerank_s=round(rerank_s, 3),
+        )
 
 
 class GrepCorpusToolCallMetadata(ToolCallMetadata):
@@ -524,6 +539,143 @@ class PruneChunksTool(Tool):
         return "Pruned", None
 
 
+RUN_QUERY_SCHEMA = ToolSchema(
+    name="execute_query",
+    description=(
+        "Author and execute a READ-ONLY Azure Cosmos DB NoSQL (SQL) SELECT query "
+        "against a chosen database/container in the account.\n\n"
+        "RESTRICTED USE — call this ONLY when the user's request cannot be answered "
+        "by semantic/keyword retrieval and specifically requires precise structured "
+        "access to the data, such as:\n"
+        "  - exact field-value filters (e.g. status = 'closed', author = 'X'),\n"
+        "  - numeric or date range filters,\n"
+        "  - counts / aggregations (COUNT, SUM, AVG, MIN, MAX),\n"
+        "  - DISTINCT values or GROUP BY,\n"
+        "  - deterministic ordering by a specific field.\n"
+        "Do NOT use it for ordinary topical, conceptual, or semantic questions — use "
+        "search_corpus, grep_corpus, and read_document for those. Only SELECT queries "
+        "are permitted (writes are impossible via this API); results are truncated. "
+        "Typical pattern: use it to pinpoint document ids by structured criteria, then "
+        "read_document those ids or include them in your final ranked output."
+    ),
+    parameters={
+        "query": {
+            "type": "string",
+            "description": (
+                "A single read-only Cosmos DB NoSQL SELECT query. The container is "
+                "aliased as 'c' (e.g. SELECT c.id, c.title FROM c WHERE c.status = 'open')."
+            ),
+        },
+        "database": {
+            "type": "string",
+            "description": "Target database id. Defaults to the current corpus database.",
+        },
+        "container": {
+            "type": "string",
+            "description": "Target container/collection id. Defaults to the current corpus container.",
+        },
+    },
+    required=["query"],
+)
+
+
+_SELECT_RE = re.compile(r"^\s*\(*\s*select\b", re.IGNORECASE | re.DOTALL)
+
+
+def _sanitize_query_value(value: Any) -> Any:
+
+    if isinstance(value, list):
+        # Collapse embedding-like numeric vectors so they don't flood context.
+        if len(value) > 32 and all(isinstance(x, (int, float)) for x in value[:8]):
+            return f"<vector: {len(value)} values>"
+        return [_sanitize_query_value(x) for x in value]
+    if isinstance(value, dict):
+        return {k: _sanitize_query_value(v) for k, v in value.items()}
+    if isinstance(value, str) and len(value) > 4000:
+        return value[:4000] + "\u2026"
+    return value
+
+
+class RunQueryTool(Tool):
+
+    tool_schema: ToolSchema
+    _client: CosmosClient
+    _default_database: str
+    _default_container: str
+    _max_rows: int
+    _max_chars: int
+
+    def __init__(
+        self,
+        client: CosmosClient,
+        default_database: str = "",
+        default_container: str = "",
+        max_rows: int = 20,
+        max_chars: int = 20_000,
+    ) -> None:
+        super().__init__(tool_schema=RUN_QUERY_SCHEMA)
+        self._client = client
+        self._default_database = default_database
+        self._default_container = default_container
+        self._max_rows = max_rows
+        self._max_chars = max_chars
+
+    def __call__(
+        self,
+        params: dict[Any, Any],
+        overrides: dict[Any, Any] | None = None,
+    ) -> tuple[str, ToolCallMetadata | None]:
+        log = logger.bind(tool=self.tool_schema.name)
+        if not isinstance(params, dict) or "query" not in params:
+            log.error("invalid_params", params_type=type(params).__name__)
+            raise ValueError(f"Invalid params type: {type(params)}")
+
+        query = str(params["query"] or "").strip()
+        database = str(params.get("database") or self._default_database or "").strip()
+        container = str(params.get("container") or self._default_container or "").strip()
+
+        if not query:
+            return "execute_query error: 'query' must be a non-empty SELECT query.", None
+        if not _SELECT_RE.match(query):
+            return (
+                "execute_query error: only read-only SELECT queries are allowed.",
+                None,
+            )
+        if not database or not container:
+            return (
+                "execute_query error: specify both 'database' and 'container'.",
+                None,
+            )
+
+        log.info("execute_query", database=database, container=container, query=query[:200])
+        try:
+            cont = self._client.get_database_client(database).get_container_client(container)
+            rows: list[Any] = []
+            for item in cont.query_items(
+                query=query,
+                enable_cross_partition_query=True,
+                max_item_count=self._max_rows,
+            ):
+                rows.append(item)
+                if len(rows) >= self._max_rows:
+                    break
+        except Exception as exc:  # noqa: BLE001
+            log.warning("execute_query_error", error=str(exc))
+            return f"execute_query error: {type(exc).__name__}: {exc}", None
+
+        sanitized = [_sanitize_query_value(r) for r in rows]
+        body = json.dumps(sanitized, ensure_ascii=False, default=str)
+        truncated = len(body) > self._max_chars
+        if truncated:
+            body = body[: self._max_chars] + "\u2026"
+        header = (
+            f"# execute_query: {len(rows)} row(s) from {database}/{container}"
+            + (f" (capped at {self._max_rows})" if len(rows) >= self._max_rows else "")
+            + (" [output truncated]" if truncated else "")
+        )
+        return f"{header}\n{body}", None
+
+
 _ToolSetT: TypeAlias = "ToolSet"
 
 
@@ -614,6 +766,9 @@ class ToolSet(BaseModel):
         search_limit: int = 50,
         search_display_limit: int = 10,
         name: str | None = None,
+        schema_override: SchemaOverride | None = None,
+        cosmos_client: CosmosClient | None = None,
+        enable_raw_query: bool = False,
     ) -> ToolSet:
 
         if retriever is None:
@@ -628,10 +783,11 @@ class ToolSet(BaseModel):
                 model=openai_embedding_model,
                 query_instruction=embed_query_instruction,
             )
-            retriever = build_default_retriever(
+            retriever = build_capability_retriever_from_live(
                 container=container,
+                database=getattr(cosmos_database, "id", "") or "",
                 embedder=embedder,
-                embedding_model=openai_embedding_model,
+                override=schema_override,
             )
 
         toolset = cls(name=name)
@@ -658,6 +814,14 @@ class ToolSet(BaseModel):
             )
         )
         toolset.add_tool(PruneChunksTool())
+        if enable_raw_query and cosmos_client is not None:
+            toolset.add_tool(
+                RunQueryTool(
+                    client=cosmos_client,
+                    default_database=getattr(cosmos_database, "id", "") or "",
+                    default_container=cosmos_container_name or "",
+                )
+            )
         return toolset
 
 
@@ -673,6 +837,8 @@ __all__ = [
     "PruneChunksTool",
     "READ_DOCUMENT_SCHEMA",
     "ReadDocumentTool",
+    "RUN_QUERY_SCHEMA",
+    "RunQueryTool",
     "SEARCH_CORPUS_SCHEMA",
     "SearchCorpusTool",
     "SearchCorpusToolCallMetadata",

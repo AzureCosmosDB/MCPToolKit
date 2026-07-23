@@ -20,12 +20,12 @@ def _build_parser() -> argparse.ArgumentParser:
     search.add_argument(
         "--database",
         default=None,
-        help="Override Cosmos database name (else COSMOS_DATABASE env var).",
+        help="Cosmos database name to query (required).",
     )
     search.add_argument(
         "--container",
         default=None,
-        help="Override Cosmos corpus container name (else COSMOS_CORPUS_CONTAINER env var).",
+        help="Optional Cosmos container to narrow to; omit to search the whole database.",
     )
 
     serve = sub.add_parser(
@@ -54,7 +54,9 @@ def _cmd_search(args: argparse.Namespace) -> int:
     if args.database:
         settings.cosmos_database = args.database
 
-    retriever = CosmosRetriever(settings=settings, corpus_name=args.container)
+    # Container is optional: default to the whole database (cross-collection).
+    container = args.container or "*"
+    retriever = CosmosRetriever(settings=settings, corpus_name=container)
     result = retriever.search(args.query, max_documents=args.max_documents)
     json.dump(asdict(result), sys.stdout, default=str, ensure_ascii=False)
     sys.stdout.write("\n")
