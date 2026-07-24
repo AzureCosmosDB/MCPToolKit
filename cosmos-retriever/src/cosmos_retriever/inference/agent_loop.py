@@ -11,11 +11,159 @@ import openai
 import requests
 import structlog
 
-from cosmos_retriever.prompts import get_retrieval_subagent_prompt
+from cosmos_retriever.prompts import (
+    get_retrieval_subagent_budget_exhausted_message,
+    get_retrieval_subagent_prompt,
+)
 from cosmos_retriever.tools import ToolSet
 from cosmos_retriever.utils import ProviderFormat
 
 logger = structlog.get_logger("cosmos_retriever.inference.agent_loop")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Token-budget system — faithfully ported from the upstream harness
+# (harness/agent.py::TokenBudgetRetrievalSubagent + DeduplicatingPruningSearchAgent
+# and harness/agent.py::prune_chunks_from_trajectory). Defaults match upstream.
+# ─────────────────────────────────────────────────────────────────────────────
+_DEFAULT_THRESHOLD_BUDGET = 16384   # soft cap: prompt prune/conclude + restrict to prune
+_DEFAULT_TOKEN_BUDGET = 32268       # hard cap (gpt-oss-20b 32k input on tinker)
+_DEFAULT_TOOL_OUTPUT_BUDGET = 4096  # clamp search/read output when remaining < this
+_DEFAULT_SPILLAGE_FRACTION = 0.5    # allowed spillage past threshold before hard reject
+
+# Marker appended to each observation so pruning never removes past it (upstream parity).
+_TOKEN_MARKER_RE = re.compile(r"\n\n\[Token usage:")
+
+
+def _remove_chunks_from_text(text: str, chunk_ids: set[str]) -> str:
+    """Remove pruned ``# DOCUMENT ID: <id>`` blocks from an observation.
+
+    Faithful port of ``prune_chunks_from_trajectory._remove_chunks_from_text``:
+    excises each block whose id is in ``chunk_ids``, stopping before the
+    ``[Token usage: ...]`` marker so usage accounting stays intact, then
+    collapses runs of blank lines.
+    """
+    if not text or not chunk_ids:
+        return text
+    matches = list(_DOC_RESULT_RE.finditer(text))
+    if not matches:
+        return text
+    marker = _TOKEN_MARKER_RE.search(text)
+    text_end = marker.start() if marker else len(text)
+
+    remove_ranges: list[tuple[int, int]] = []
+    for idx, match in enumerate(matches):
+        doc_id = match.group("id")
+        if doc_id in chunk_ids:
+            start = match.start()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else text_end
+            remove_ranges.append((start, end))
+    if not remove_ranges:
+        return text
+
+    parts: list[str] = []
+    last = 0
+    for start, end in remove_ranges:
+        parts.append(text[last:start])
+        last = end
+    parts.append(text[last:])
+    pruned = re.sub(r"\n{3,}", "\n\n", "".join(parts))
+    return pruned.strip()
+
+
+class _BudgetController:
+    """Per-query token-budget + dedup enforcer.
+
+    Mirrors the upstream ``DeduplicatingPruningSearchAgent`` (cross-turn
+    dedup via ``ignore_ids`` + read-reranking query passthrough) and
+    ``TokenBudgetRetrievalSubagent`` (token accounting, threshold prune/conclude
+    prompt, spillage/rejection cutoff, tool-output clamping, real pruning).
+    """
+
+    def __init__(
+        self,
+        *,
+        text_token_counter,
+        threshold_budget: int = _DEFAULT_THRESHOLD_BUDGET,
+        token_budget: int = _DEFAULT_TOKEN_BUDGET,
+        tool_output_budget: int = _DEFAULT_TOOL_OUTPUT_BUDGET,
+        spillage_fraction: float = _DEFAULT_SPILLAGE_FRACTION,
+    ) -> None:
+        self._count = text_token_counter or (lambda s: len(s) // 4)
+        self.threshold_budget = threshold_budget
+        self.token_budget = token_budget
+        self.tool_output_budget = tool_output_budget
+        spillage = int((token_budget - threshold_budget) * spillage_fraction)
+        self.rejection_budget = threshold_budget + spillage
+        # dedup state
+        self._ids_seen: set[str] = set()
+        self._doc_id_to_query: dict[str, str] = {}
+        # prune state
+        self._pruned_chunk_ids: set[str] = set()
+        # per-step (parallel tool calls in one turn) token tracking
+        self._step_tokens_used: int = 0
+
+    # ── dedup (DeduplicatingPruningSearchAgent._call_tool) ────────────────
+    def search_overrides(self) -> dict:
+        return {"ignore_ids": list(self._ids_seen)}
+
+    def record_search(self, returned_chunk_ids, query: str) -> None:
+        self._ids_seen.update(returned_chunk_ids)
+        for chunk_id in returned_chunk_ids:
+            doc_id = chunk_id.split("_")[0] if "_" in chunk_id else chunk_id
+            self._doc_id_to_query.setdefault(doc_id, query)
+
+    def read_overrides(self, params: dict) -> dict:
+        doc_id = params.get("doc_id") or params.get("id", "")
+        if "_" in doc_id:
+            doc_id = doc_id.split("_")[0]
+        if doc_id in self._doc_id_to_query:
+            return {"query": self._doc_id_to_query[doc_id]}
+        return {}
+
+    # ── real pruning (prune_chunks_from_trajectory) ──────────────────────
+    def record_prune(self, chunk_ids) -> None:
+        if isinstance(chunk_ids, (list, tuple, set)):
+            self._pruned_chunk_ids.update(str(c) for c in chunk_ids)
+
+    def prune_text(self, text: str) -> str:
+        return _remove_chunks_from_text(text, self._pruned_chunk_ids)
+
+    # ── token accounting (TokenBudgetRetrievalSubagent) ──────────────────
+    def reset_step(self) -> None:
+        self._step_tokens_used = 0
+
+    def add_step_tokens(self, text: str) -> None:
+        self._step_tokens_used += self._count(text)
+
+    def annotate(self, text: str, current_usage: int) -> str:
+        """observe(): persist the usage marker on the observation."""
+        return f"{text}\n\n[Token usage: {current_usage}/{self.threshold_budget}]"
+
+    def tool_max_tokens(self, tool_name: str, current_usage: int) -> int | None:
+        """_call_tool(): clamp search/read output when budget is tight."""
+        if tool_name in ("search_corpus", "read_document"):
+            remaining = self.token_budget - current_usage - self._step_tokens_used
+            if remaining < self.tool_output_budget:
+                return max(512, remaining // 2)
+        return None
+
+    def should_reject(self, tool_name: str, current_usage: int) -> bool:
+        """_call_tool(): hard-reject non-prune tools past the rejection budget."""
+        effective = current_usage + self._step_tokens_used
+        return effective > self.rejection_budget and tool_name != "prune_chunks"
+
+    def rejection_message(self, current_usage: int) -> str:
+        effective = current_usage + self._step_tokens_used
+        return (
+            f"Error: Token budget exceeded ({effective}/{self.threshold_budget} tokens). "
+            "You must use prune_chunks to reduce context size or provide your final answer."
+        )
+
+    def over_threshold(self, current_usage: int) -> bool:
+        return current_usage > self.threshold_budget
+
+    def over_token_budget(self, current_usage: int) -> bool:
+        return current_usage > self.token_budget
 
 _CHAT_TOOL_NAMES = (
     "search_corpus",
@@ -150,6 +298,22 @@ def _extract_documents(
     return documents
 
 
+def _count_messages(messages: list[dict], counter) -> int:
+    """Token count of a chat-completions transcript (post-prune)."""
+    total = 0
+    for m in messages:
+        c = m.get("content")
+        if isinstance(c, str):
+            total += counter(c)
+        for tc in m.get("tool_calls", []) or []:
+            fn = tc.get("function", {})
+            for key in ("name", "arguments"):
+                v = fn.get(key)
+                if isinstance(v, str):
+                    total += counter(v)
+    return total
+
+
 def run_chat_search(
     *,
     toolset: ToolSet,
@@ -160,6 +324,9 @@ def run_chat_search(
     max_turns: int = 20,
     temperature: float = 0.7,
     max_tokens: int = 4096,
+    text_token_counter=None,
+    threshold_budget: int = _DEFAULT_THRESHOLD_BUDGET,
+    token_budget: int = _DEFAULT_TOKEN_BUDGET,
 ) -> AgentSearchResult:
 
     tool_specs = [
@@ -167,6 +334,17 @@ def run_chat_search(
         for name, tool in toolset.tools.items()
         if name in _CHAT_TOOL_NAMES
     ]
+    prune_specs = [
+        tool.get_format(ProviderFormat.OPENAI_HARMONY)
+        for name, tool in toolset.tools.items()
+        if name == "prune_chunks"
+    ]
+
+    budget = _BudgetController(
+        text_token_counter=text_token_counter,
+        threshold_budget=threshold_budget,
+        token_budget=token_budget,
+    )
 
     messages: list[dict] = [
         {"role": "system", "content": get_retrieval_subagent_prompt(query, num_output_docs=max_documents)},
@@ -192,14 +370,35 @@ def run_chat_search(
     tool_s = _collections.defaultdict(float)
 
     for _ in range(max_turns):
+        # ── prepare_for_inference: prune tool messages, count, decide state
+        for m in messages:
+            if m.get("role") == "tool" and isinstance(m.get("content"), str):
+                m["content"] = budget.prune_text(m["content"])
+        current_usage = _count_messages(messages, budget._count)
+
+        turn_messages = messages
+        turn_specs = tool_specs
+        if budget.over_threshold(current_usage) and not budget.over_token_budget(current_usage):
+            turn_messages = messages + [
+                {
+                    "role": "user",
+                    "content": get_retrieval_subagent_budget_exhausted_message(
+                        current_usage, budget.threshold_budget
+                    ),
+                }
+            ]
+            turn_specs = prune_specs or tool_specs
+
+        out_cap = max(256, min(max_tokens, budget.token_budget - current_usage))
+
         _t = time.perf_counter()
         response = client.chat.completions.create(
             model=model,
-            messages=messages,
-            tools=tool_specs,
+            messages=turn_messages,
+            tools=turn_specs,
             tool_choice="auto",
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=out_cap,
         )
         timing["llm_s"] += time.perf_counter() - _t
         num_turns += 1
@@ -223,6 +422,8 @@ def run_chat_search(
             final_text = message.content or ""
             break
 
+        # ── act + observe
+        budget.reset_step()
         for tc in tool_calls:
             name = tc.function.name
             tool_types_used.add(name)
@@ -231,10 +432,21 @@ def run_chat_search(
             tool = toolset.get_tool(name)
             if tool is None:
                 output = f"Error: unknown tool '{name}'."
+            elif budget.should_reject(name, current_usage):
+                output = budget.rejection_message(current_usage)
+                logger.warning("tool_rejected_over_budget", tool=name, usage=current_usage)
             else:
+                overrides: dict = {}
+                if name == "search_corpus":
+                    overrides.update(budget.search_overrides())
+                elif name == "read_document":
+                    overrides.update(budget.read_overrides(args))
+                clamp = budget.tool_max_tokens(name, current_usage)
+                if clamp is not None:
+                    overrides["max_tokens"] = clamp
                 try:
                     _tt = time.perf_counter()
-                    output, _metadata = tool(args)
+                    output, _metadata = tool(args, overrides or None)
                     _dt = time.perf_counter() - _tt
                     timing["tools_s"] += _dt
                     tool_s[name] += _dt
@@ -243,9 +455,18 @@ def run_chat_search(
                         timing["retrieval_s"] += _rs
                         timing["rerank_s"] += getattr(_metadata, "rerank_s", 0.0) or 0.0
                     _collect_doc_text(output, doc_text)
-                except Exception as exc:
+                    if name == "search_corpus" and _metadata is not None:
+                        budget.record_search(
+                            getattr(_metadata, "returned_chunk_ids", []) or [], str(args.get("query", ""))
+                        )
+                    elif name == "prune_chunks":
+                        budget.record_prune(args.get("chunk_ids"))
+                    budget.add_step_tokens(output)
+                except Exception as exc:  # noqa: BLE001 — surface tool errors to the model
                     logger.warning("chat_tool_error", tool=name, error=str(exc))
                     output = f"Error executing '{name}': {exc}"
+
+            output = budget.annotate(output, current_usage)
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": output})
     else:
         for entry in reversed(messages):
@@ -262,6 +483,7 @@ def run_chat_search(
         num_turns=num_turns,
         num_documents=len(documents),
         tool_calls=tool_call_count,
+        pruned_chunks=len(budget._pruned_chunk_ids),
     )
 
     return AgentSearchResult(
@@ -287,6 +509,31 @@ def run_chat_search(
     )
 
 
+def _responses_output_to_call_item(fc) -> dict:
+    """Render a model function_call output item back into an input item so the
+    transcript can be resent (we drive the /responses API without
+    previous_response_id, which is what makes real pruning possible)."""
+    return {
+        "type": "function_call",
+        "call_id": fc.call_id,
+        "name": fc.name,
+        "arguments": fc.arguments,
+    }
+
+
+def _count_items(items: list[dict], counter) -> int:
+    """Token count of a /responses input-items transcript (post-prune)."""
+    total = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        for key in ("content", "output", "arguments", "name"):
+            val = it.get(key)
+            if isinstance(val, str):
+                total += counter(val)
+    return total
+
+
 def run_responses_search(
     *,
     toolset: ToolSet,
@@ -297,6 +544,9 @@ def run_responses_search(
     max_turns: int = 20,
     max_tokens: int = 4096,
     reasoning_effort: str | None = None,
+    text_token_counter=None,
+    threshold_budget: int = _DEFAULT_THRESHOLD_BUDGET,
+    token_budget: int = _DEFAULT_TOKEN_BUDGET,
 ) -> AgentSearchResult:
 
     tool_specs = [
@@ -304,6 +554,18 @@ def run_responses_search(
         for name, tool in toolset.tools.items()
         if name in _CHAT_TOOL_NAMES
     ]
+    # Prune-only toolset for the over-threshold "prune or conclude" state.
+    prune_specs = [
+        tool.get_format(ProviderFormat.OPENAI)
+        for name, tool in toolset.tools.items()
+        if name == "prune_chunks"
+    ]
+
+    budget = _BudgetController(
+        text_token_counter=text_token_counter,
+        threshold_budget=threshold_budget,
+        token_budget=token_budget,
+    )
 
     prompt = (
         get_retrieval_subagent_prompt(query, num_output_docs=max_documents)
@@ -312,9 +574,12 @@ def run_responses_search(
         "relevant documents. Do not answer the question yourself."
     )
 
-    common: dict = {"model": model, "tools": tool_specs, "max_output_tokens": max_tokens}
+    common: dict = {"model": model, "tools": tool_specs}
     if reasoning_effort:
         common["reasoning"] = {"effort": reasoning_effort}
+
+    # Local transcript (no previous_response_id) so we can prune it in place.
+    input_items: list[dict] = [{"role": "user", "content": prompt}]
 
     doc_text: dict[str, str] = {}
     tool_types_used: set[str] = set()
@@ -324,18 +589,41 @@ def run_responses_search(
     search_history: list[str] = []
     turn_tools: list[list[str]] = []
 
-    # per-phase timing (seconds)
     import collections as _collections
     timing = {"llm_s": 0.0, "tools_s": 0.0, "retrieval_s": 0.0, "rerank_s": 0.0}
     tool_s = _collections.defaultdict(float)
 
-    _t = time.perf_counter()
-    response = client.responses.create(input=prompt, **common)
-    timing["llm_s"] += time.perf_counter() - _t
-    num_turns = 1
-    _acc_responses_usage(usage, response)
-
+    num_turns = 0
     while True:
+        # ── prepare_for_inference: prune the transcript, count tokens, decide state
+        for it in input_items:
+            if isinstance(it, dict) and it.get("type") == "function_call_output":
+                it["output"] = budget.prune_text(it["output"])
+        current_usage = _count_items(input_items, budget._count)
+
+        turn_input = input_items
+        turn_specs = tool_specs
+        if budget.over_threshold(current_usage) and not budget.over_token_budget(current_usage):
+            # Force prune-or-conclude: inject the budget message and restrict to prune.
+            turn_input = input_items + [
+                {
+                    "role": "user",
+                    "content": get_retrieval_subagent_budget_exhausted_message(
+                        current_usage, budget.threshold_budget
+                    ),
+                }
+            ]
+            turn_specs = prune_specs or tool_specs
+
+        out_cap = max(256, min(max_tokens, budget.token_budget - current_usage))
+        call_kwargs = {**common, "tools": turn_specs, "max_output_tokens": out_cap}
+
+        _t = time.perf_counter()
+        response = client.responses.create(input=turn_input, **call_kwargs)
+        timing["llm_s"] += time.perf_counter() - _t
+        num_turns += 1
+        _acc_responses_usage(usage, response)
+
         function_calls = [o for o in response.output if getattr(o, "type", None) == "function_call"]
         if not function_calls:
             final_text = getattr(response, "output_text", "") or ""
@@ -345,7 +633,8 @@ def run_responses_search(
             break
 
         turn_tools.append([fc.name for fc in function_calls])
-        outputs: list[dict] = []
+        # ── act: execute tools with dedup + reject + clamp; observe: annotate
+        budget.reset_step()
         for fc in function_calls:
             name = fc.name
             tool_types_used.add(name)
@@ -355,13 +644,27 @@ def run_responses_search(
                 q = args.get("query") or args.get("pattern") or args.get("q") or ""
                 if q:
                     search_history.append(f"{name}: {str(q)[:100]}")
+
+            input_items.append(_responses_output_to_call_item(fc))
+
             tool = toolset.get_tool(name)
             if tool is None:
                 output = f"Error: unknown tool '{name}'."
+            elif budget.should_reject(name, current_usage):
+                output = budget.rejection_message(current_usage)
+                logger.warning("tool_rejected_over_budget", tool=name, usage=current_usage)
             else:
+                overrides: dict = {}
+                if name == "search_corpus":
+                    overrides.update(budget.search_overrides())
+                elif name == "read_document":
+                    overrides.update(budget.read_overrides(args))
+                clamp = budget.tool_max_tokens(name, current_usage)
+                if clamp is not None:
+                    overrides["max_tokens"] = clamp
                 try:
                     _tt = time.perf_counter()
-                    output, _metadata = tool(args)
+                    output, _metadata = tool(args, overrides or None)
                     _dt = time.perf_counter() - _tt
                     timing["tools_s"] += _dt
                     tool_s[name] += _dt
@@ -370,23 +673,23 @@ def run_responses_search(
                         timing["retrieval_s"] += _rs
                         timing["rerank_s"] += getattr(_metadata, "rerank_s", 0.0) or 0.0
                     _collect_doc_text(output, doc_text)
-                except Exception as exc:
+                    if name == "search_corpus" and _metadata is not None:
+                        budget.record_search(
+                            getattr(_metadata, "returned_chunk_ids", []) or [], str(args.get("query", ""))
+                        )
+                    elif name == "prune_chunks":
+                        budget.record_prune(args.get("chunk_ids"))
+                    budget.add_step_tokens(output)
+                except Exception as exc:  # noqa: BLE001 — surface tool errors to the model
                     logger.warning("responses_tool_error", tool=name, error=str(exc))
                     output = f"Error executing '{name}': {exc}"
-            outputs.append(
+
+            output = budget.annotate(output, current_usage)
+            input_items.append(
                 {"type": "function_call_output", "call_id": fc.call_id, "output": output}
             )
 
-        _t = time.perf_counter()
-        response = client.responses.create(
-            previous_response_id=response.id, input=outputs, **common
-        )
-        timing["llm_s"] += time.perf_counter() - _t
-        num_turns += 1
-        _acc_responses_usage(usage, response)
-
     documents = _extract_documents(final_text, doc_text, max_documents)
-
     pool_doc_ids = sorted({cid.split("__")[0] for cid in doc_text})
 
     logger.info(
@@ -396,6 +699,7 @@ def run_responses_search(
         num_documents=len(documents),
         tool_calls=tool_call_count,
         pool_size=len(pool_doc_ids),
+        pruned_chunks=len(budget._pruned_chunk_ids),
     )
 
     return AgentSearchResult(

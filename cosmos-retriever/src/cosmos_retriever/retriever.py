@@ -205,6 +205,9 @@ class CosmosRetriever:
             max_turns=exec_params.turns,
             temperature=exec_params.temperature,
             max_tokens=exec_params.max_tokens,
+            text_token_counter=self._text_token_counter,
+            threshold_budget=self.settings.cosmos_retriever_threshold_budget,
+            token_budget=self.settings.cosmos_retriever_token_budget,
         )
         elapsed = time.perf_counter() - start
 
@@ -254,6 +257,9 @@ class CosmosRetriever:
             max_turns=exec_params.turns,
             max_tokens=exec_params.max_tokens,
             reasoning_effort=exec_params.reasoning_effort,
+            text_token_counter=self._text_token_counter,
+            threshold_budget=self.settings.cosmos_retriever_threshold_budget,
+            token_budget=self.settings.cosmos_retriever_token_budget,
         )
         elapsed = time.perf_counter() - start
 

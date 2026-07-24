@@ -122,7 +122,14 @@ class RetrieverSettings(BaseSettings):
         description='Auth header name for the anthropic_messages endpoint (e.g. "x-api-key" or "api-key").',
     )
 
-    account_uri: str = Field(description="Cosmos DB account URI to serve.")
+    account_uri: str | None = Field(
+        default=None,
+        description=(
+            "Fallback Cosmos account URI for corpora not found in the registry. "
+            "Registry entries provide their own account_uri (which wins), so this "
+            "is only needed when querying an unregistered database/container."
+        ),
+    )
     cosmos_database: str | None = Field(
         default=None,
         description=(
@@ -275,6 +282,11 @@ class RetrieverSettings(BaseSettings):
                     "(the MCP client selects it per call); there is no server default."
                 )
             base, key, model = _resolve_default_embed()
+            if not self.account_uri:
+                raise ValueError(
+                    f"No Cosmos account for corpus '{target}': it is not in the "
+                    "registry and no fallback ACCOUNT_URI is configured."
+                )
             return CorpusConfig(
                 container=target,
                 account_uri=self.account_uri,
@@ -326,9 +338,16 @@ class RetrieverSettings(BaseSettings):
         if schema_override is None:
             schema_override = self.cosmos_retriever_schema_override
 
+        account_uri = entry.get("account_uri") or self.account_uri
+        if not account_uri:
+            raise ValueError(
+                f"Corpus '{target}' has no account_uri configured (registry entry "
+                "omits it and no fallback ACCOUNT_URI is set)."
+            )
+
         return CorpusConfig(
             container=target,
-            account_uri=entry.get("account_uri") or self.account_uri,
+            account_uri=account_uri,
             database=database,
             embed_base_url=embed_base_url,
             embed_api_key=embed_api_key,
