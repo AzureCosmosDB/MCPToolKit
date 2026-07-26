@@ -212,7 +212,7 @@ def test_dedup_records_and_exposes_ignore_ids():
 def test_prune_state_removes_recorded_chunks():
     c = _BudgetController(text_token_counter=counter, threshold_budget=100, token_budget=200)
     c.record_prune(["X"])
-    assert c.prune_text("# DOCUMENT ID: X \nbody") == ""
+    assert c.prune_text("# DOCUMENT ID: X \nbody") == "# DOCUMENT ID: X [pruned]"
 
 
 def test_reject_and_clamp_and_marker():

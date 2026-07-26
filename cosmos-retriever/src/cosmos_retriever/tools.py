@@ -487,6 +487,20 @@ class ReadDocumentTool(Tool):
             overrides.get("max_tokens") if overrides and "max_tokens" in overrides else None
         ) or self._max_tokens
 
+        # Item-is-document mode: each item is a whole, single-chunk document, so
+        # there are no sub-chunks to rerank or select. Read the item directly and
+        # return it verbatim — no reranker call and no query-based filtering.
+        if self._retriever.schema.is_item_document_mode:
+            document = self._retriever.read_document(
+                ReadDocumentRequest(document_id=doc_id)
+            )
+            assembled = document.assembled
+            log.info("read_item_document", doc_id=doc_id)
+            if self._token_counter is not None:
+                token_count = self._token_counter(assembled)
+                return f"# Document ({token_count} tokens)\n{assembled}", None
+            return assembled, None
+
         document = self._retriever.read_document(
             ReadDocumentRequest(document_id=doc_id, query=query)
         )

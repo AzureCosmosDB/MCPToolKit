@@ -4,13 +4,7 @@
     "embed_base_url": "http://172.17.0.2:8002/v1",
     "embed_api_key_env": null,
     "embed_model":  "qwen3-embed",
-    "embed_query_instruction": "Given a question, retrieve documents that answer it",
-    "schema_override": {
-      "document_id_path": "/docid",
-      "chunk_id_path": "/id",
-      "chunk_order_path": "/chunk_idx",
-      "use_dunder_codec": true
-    }
+    "embed_query_instruction": "Given a question, retrieve documents that answer it"
   },
   "search_retrieval_database/browsecomp_corpus_container": {
     "account_uri":  "https://aryans-internship-cosmos.documents.azure.com:443/",

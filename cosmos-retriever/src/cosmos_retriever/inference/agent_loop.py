@@ -20,13 +20,9 @@ from cosmos_retriever.utils import ProviderFormat
 
 logger = structlog.get_logger("cosmos_retriever.inference.agent_loop")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Token-budget system — faithfully ported from the upstream harness
-# (harness/agent.py::TokenBudgetRetrievalSubagent + DeduplicatingPruningSearchAgent
-# and harness/agent.py::prune_chunks_from_trajectory). Defaults match upstream.
-# ─────────────────────────────────────────────────────────────────────────────
+
 _DEFAULT_THRESHOLD_BUDGET = 16384   # soft cap: prompt prune/conclude + restrict to prune
-_DEFAULT_TOKEN_BUDGET = 32268       # hard cap (gpt-oss-20b 32k input on tinker)
+_DEFAULT_TOKEN_BUDGET = 32268       # hard cap
 _DEFAULT_TOOL_OUTPUT_BUDGET = 4096  # clamp search/read output when remaining < this
 _DEFAULT_SPILLAGE_FRACTION = 0.5    # allowed spillage past threshold before hard reject
 
@@ -35,12 +31,14 @@ _TOKEN_MARKER_RE = re.compile(r"\n\n\[Token usage:")
 
 
 def _remove_chunks_from_text(text: str, chunk_ids: set[str]) -> str:
-    """Remove pruned ``# DOCUMENT ID: <id>`` blocks from an observation.
+    """Replace pruned ``# DOCUMENT ID: <id>`` blocks with a tombstone marker.
 
-    Faithful port of ``prune_chunks_from_trajectory._remove_chunks_from_text``:
-    excises each block whose id is in ``chunk_ids``, stopping before the
-    ``[Token usage: ...]`` marker so usage accounting stays intact, then
-    collapses runs of blank lines.
+    Rather than deleting the block outright (which silently rewrites the single
+    physical copy of the chunk that lives in an earlier observation), the block
+    body is swapped for a compact ``# DOCUMENT ID: <id> [pruned]`` line. This
+    reclaims almost all of the tokens while leaving a trace so the model can see
+    that *it* pruned the chunk. The operation is idempotent: re-pruning a
+    tombstone yields the same tombstone.
     """
     if not text or not chunk_ids:
         return text
@@ -50,20 +48,21 @@ def _remove_chunks_from_text(text: str, chunk_ids: set[str]) -> str:
     marker = _TOKEN_MARKER_RE.search(text)
     text_end = marker.start() if marker else len(text)
 
-    remove_ranges: list[tuple[int, int]] = []
+    prune_ranges: list[tuple[int, int, str]] = []
     for idx, match in enumerate(matches):
         doc_id = match.group("id")
         if doc_id in chunk_ids:
             start = match.start()
             end = matches[idx + 1].start() if idx + 1 < len(matches) else text_end
-            remove_ranges.append((start, end))
-    if not remove_ranges:
+            prune_ranges.append((start, end, doc_id))
+    if not prune_ranges:
         return text
 
     parts: list[str] = []
     last = 0
-    for start, end in remove_ranges:
+    for start, end, doc_id in prune_ranges:
         parts.append(text[last:start])
+        parts.append(f"# DOCUMENT ID: {doc_id} [pruned]\n\n")
         last = end
     parts.append(text[last:])
     pruned = re.sub(r"\n{3,}", "\n\n", "".join(parts))
@@ -72,11 +71,6 @@ def _remove_chunks_from_text(text: str, chunk_ids: set[str]) -> str:
 
 class _BudgetController:
     """Per-query token-budget + dedup enforcer.
-
-    Mirrors the upstream ``DeduplicatingPruningSearchAgent`` (cross-turn
-    dedup via ``ignore_ids`` + read-reranking query passthrough) and
-    ``TokenBudgetRetrievalSubagent`` (token accounting, threshold prune/conclude
-    prompt, spillage/rejection cutoff, tool-output clamping, real pruning).
     """
 
     def __init__(
@@ -97,12 +91,13 @@ class _BudgetController:
         # dedup state
         self._ids_seen: set[str] = set()
         self._doc_id_to_query: dict[str, str] = {}
+
         # prune state
         self._pruned_chunk_ids: set[str] = set()
+
         # per-step (parallel tool calls in one turn) token tracking
         self._step_tokens_used: int = 0
 
-    # ── dedup (DeduplicatingPruningSearchAgent._call_tool) ────────────────
     def search_overrides(self) -> dict:
         return {"ignore_ids": list(self._ids_seen)}
 
@@ -120,7 +115,6 @@ class _BudgetController:
             return {"query": self._doc_id_to_query[doc_id]}
         return {}
 
-    # ── real pruning (prune_chunks_from_trajectory) ──────────────────────
     def record_prune(self, chunk_ids) -> None:
         if isinstance(chunk_ids, (list, tuple, set)):
             self._pruned_chunk_ids.update(str(c) for c in chunk_ids)
@@ -136,7 +130,6 @@ class _BudgetController:
         self._step_tokens_used += self._count(text)
 
     def annotate(self, text: str, current_usage: int) -> str:
-        """observe(): persist the usage marker on the observation."""
         return f"{text}\n\n[Token usage: {current_usage}/{self.threshold_budget}]"
 
     def tool_max_tokens(self, tool_name: str, current_usage: int) -> int | None:
@@ -422,7 +415,6 @@ def run_chat_search(
             final_text = message.content or ""
             break
 
-        # ── act + observe
         budget.reset_step()
         for tc in tool_calls:
             name = tc.function.name

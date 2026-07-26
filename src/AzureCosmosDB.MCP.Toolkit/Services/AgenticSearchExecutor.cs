@@ -44,6 +44,14 @@ public static class AgenticSearchExecutor
 {
     public const string BaseUrlEnvVar = "COSMOS_RETRIEVER_URL";
 
+    /// <summary>
+    /// Optional JSON map of <c>{ "&lt;database&gt;": "&lt;retriever base url&gt;" }</c>.
+    /// When a request targets a database present in this map, that retriever
+    /// endpoint is used instead of <see cref="BaseUrlEnvVar"/>. Lets different
+    /// databases be served by different retriever deployments.
+    /// </summary>
+    public const string BaseUrlMapEnvVar = "COSMOS_RETRIEVER_URL_MAP";
+
     public const string TimeoutEnvVar = "COSMOS_RETRIEVER_TIMEOUT_S";
 
     public const string DefaultBaseUrl = "http://127.0.0.1:9000";
@@ -107,7 +115,7 @@ public static class AgenticSearchExecutor
         string? embeddingEndpoint = null,
         CancellationToken cancellationToken = default)
     {
-        var baseUrl = ResolveString(BaseUrlEnvVar, defaultValue: DefaultBaseUrl).TrimEnd('/');
+        var baseUrl = ResolveBaseUrl(database).TrimEnd('/');
         var timeoutSeconds = ResolveInt(TimeoutEnvVar, DefaultTimeoutSeconds);
         var requestUri = $"{baseUrl}/search";
 
@@ -211,6 +219,41 @@ public static class AgenticSearchExecutor
     {
         var value = Environment.GetEnvironmentVariable(envVar);
         return string.IsNullOrWhiteSpace(value) ? defaultValue : value;
+    }
+
+    // Resolve the retriever base URL for a request, preferring a per-database
+    // override from COSMOS_RETRIEVER_URL_MAP (JSON {"<db>":"<url>"}) and falling
+    // back to COSMOS_RETRIEVER_URL / the built-in default.
+    private static string ResolveBaseUrl(string? database)
+    {
+        if (!string.IsNullOrWhiteSpace(database))
+        {
+            var raw = Environment.GetEnvironmentVariable(BaseUrlMapEnvVar);
+            if (!string.IsNullOrWhiteSpace(raw) && LooksLikeJson(raw))
+            {
+                try
+                {
+                    var map = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                        raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (map is not null)
+                    {
+                        foreach (var kv in map)
+                        {
+                            if (string.Equals(kv.Key, database, StringComparison.OrdinalIgnoreCase)
+                                && !string.IsNullOrWhiteSpace(kv.Value))
+                            {
+                                return kv.Value;
+                            }
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Malformed map -> fall through to the default endpoint.
+                }
+            }
+        }
+        return ResolveString(BaseUrlEnvVar, defaultValue: DefaultBaseUrl);
     }
 
     private static int ResolveInt(string envVar, int defaultValue)
