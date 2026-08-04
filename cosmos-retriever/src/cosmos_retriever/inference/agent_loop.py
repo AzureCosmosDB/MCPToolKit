@@ -21,6 +21,10 @@ from cosmos_retriever.utils import ProviderFormat
 logger = structlog.get_logger("cosmos_retriever.inference.agent_loop")
 
 
+# Library-level fallback budgets, used only when run_* is called directly without
+# explicit values. Through CosmosRetriever these are always overridden by settings
+# (COSMOS_RETRIEVER_THRESHOLD_BUDGET / COSMOS_RETRIEVER_TOKEN_BUDGET env vars, or a
+# live PATCH /config), so tuning happens there, not by editing these constants.
 _DEFAULT_THRESHOLD_BUDGET = 16384   # soft cap: prompt prune/conclude + restrict to prune
 _DEFAULT_TOKEN_BUDGET = 32268       # hard cap
 _DEFAULT_TOOL_OUTPUT_BUDGET = 4096  # clamp search/read output when remaining < this
@@ -307,6 +311,16 @@ def _count_messages(messages: list[dict], counter) -> int:
     return total
 
 
+# The three sibling run_* entry points (chat / responses / anthropic) deliberately
+# duplicate the agent-loop scaffolding rather than sharing one parametrized function
+# because each targets a different provider wire protocol: they differ in tool-call
+# serialization (Harmony vs. OpenAI vs. Anthropic formats), transcript shape (a
+# `messages` list vs. a locally-pruned `input_items` list vs. system-separate
+# messages), and per-turn response bookkeeping. Folding them together would produce a
+# function dominated by per-backend `if` branches that is hard to read and to test in
+# isolation. Keeping them separate trades a little duplicated setup for three linear,
+# independently-testable control flows; `CosmosRetriever` picks the right one from the
+# configured `inference_backend`.
 def run_chat_search(
     *,
     toolset: ToolSet,
@@ -321,6 +335,17 @@ def run_chat_search(
     threshold_budget: int = _DEFAULT_THRESHOLD_BUDGET,
     token_budget: int = _DEFAULT_TOKEN_BUDGET,
 ) -> AgentSearchResult:
+
+    """Run the multi-turn retrieval agent against an OpenAI-compatible **Chat
+    Completions** endpoint.
+
+    Drives the search loop using the ``/chat/completions`` wire format: tools are
+    serialized as Harmony-style function specs, the transcript is a plain
+    ``messages`` list, and sampling is controlled by ``temperature``. Targets
+    standard (non-reasoning) chat deployments such as Azure AI Foundry, OpenAI, or
+    a local vLLM server. Returns an :class:`AgentSearchResult` carrying the ranked
+    documents, token usage, and trajectory.
+    """
 
     tool_specs = [
         tool.get_format(ProviderFormat.OPENAI_HARMONY)
@@ -541,6 +566,16 @@ def run_responses_search(
     token_budget: int = _DEFAULT_TOKEN_BUDGET,
 ) -> AgentSearchResult:
 
+    """Run the multi-turn retrieval agent against an OpenAI **Responses** endpoint.
+
+    Same search loop as :func:`run_chat_search` but speaks the ``/responses`` API
+    used by reasoning models (gpt-5.x, o-series): tools use the plain OpenAI
+    function format, the transcript is a local ``input_items`` list (kept
+    client-side with no ``previous_response_id`` so it can be pruned in place), and
+    behaviour is tuned via ``reasoning_effort`` instead of ``temperature``. Returns
+    an :class:`AgentSearchResult`.
+    """
+
     tool_specs = [
         tool.get_format(ProviderFormat.OPENAI)
         for name, tool in toolset.tools.items()
@@ -740,6 +775,51 @@ def _anthropic_messages_url(base_url: str) -> str:
     return b + "/v1/messages"
 
 
+def _count_anthropic_messages(messages: list[dict], counter) -> int:
+    """Token count of an Anthropic Messages transcript (post-prune)."""
+    total = 0
+    for m in messages:
+        c = m.get("content")
+        if isinstance(c, str):
+            total += counter(c)
+            continue
+        if isinstance(c, list):
+            for block in c:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type")
+                if btype == "text" and isinstance(block.get("text"), str):
+                    total += counter(block["text"])
+                elif btype == "tool_use":
+                    inp = block.get("input")
+                    if inp is not None:
+                        total += counter(json.dumps(inp))
+                    if isinstance(block.get("name"), str):
+                        total += counter(block["name"])
+                elif btype == "tool_result" and isinstance(block.get("content"), str):
+                    total += counter(block["content"])
+    return total
+
+
+def _with_appended_text(message: dict, text: str) -> dict:
+    """Return a copy of a user message with an extra text block appended.
+
+    Used to inject the budget-exhausted 'prune or conclude' instruction without
+    adding a second consecutive user message (which the Anthropic API rejects).
+    """
+    content = message.get("content")
+    if isinstance(content, str):
+        new_content: list[dict] = [
+            {"type": "text", "text": content},
+            {"type": "text", "text": text},
+        ]
+    elif isinstance(content, list):
+        new_content = content + [{"type": "text", "text": text}]
+    else:
+        new_content = [{"type": "text", "text": text}]
+    return {**message, "content": new_content}
+
+
 def run_anthropic_search(
     *,
     toolset: ToolSet,
@@ -753,12 +833,33 @@ def run_anthropic_search(
     anthropic_version: str = "2023-06-01",
     auth_header: str = "x-api-key",
     timeout_s: int = 600,
+    text_token_counter=None,
+    threshold_budget: int = _DEFAULT_THRESHOLD_BUDGET,
+    token_budget: int = _DEFAULT_TOKEN_BUDGET,
 ) -> AgentSearchResult:
+    """Run the multi-turn retrieval agent against an **Anthropic Messages** endpoint.
+
+    Same search loop as the other backends but targets the Anthropic Messages API
+    (e.g. Claude served on Azure AI Foundry) over raw HTTP: it builds the request
+    URL and auth headers itself, serializes tools in Anthropic format, and passes
+    the system prompt separately from the ``messages`` list. Returns an
+    :class:`AgentSearchResult`.
+    """
     tools = [
         tool.get_format(ProviderFormat.ANTHROPIC)
         for name, tool in toolset.tools.items()
         if name in _CHAT_TOOL_NAMES
     ]
+    prune_specs = [
+        tool.get_format(ProviderFormat.ANTHROPIC)
+        for name, tool in toolset.tools.items()
+        if name == "prune_chunks"
+    ]
+    budget = _BudgetController(
+        text_token_counter=text_token_counter,
+        threshold_budget=threshold_budget,
+        token_budget=token_budget,
+    )
     system = get_retrieval_subagent_prompt(query, num_output_docs=max_documents)
     messages: list[dict] = [
         {
@@ -787,17 +888,45 @@ def run_anthropic_search(
     search_history: list[str] = []
     turn_tools: list[list[str]] = []
 
+    import collections as _collections
+    timing = {"llm_s": 0.0, "tools_s": 0.0, "retrieval_s": 0.0, "rerank_s": 0.0}
+    tool_s = _collections.defaultdict(float)
+
     for _ in range(max_turns):
+        # ── prepare_for_inference: prune tool results, count tokens, decide state
+        for m in messages:
+            if m.get("role") == "user" and isinstance(m.get("content"), list):
+                for block in m["content"]:
+                    if (
+                        isinstance(block, dict)
+                        and block.get("type") == "tool_result"
+                        and isinstance(block.get("content"), str)
+                    ):
+                        block["content"] = budget.prune_text(block["content"])
+        current_usage = _count_anthropic_messages(messages, budget._count)
+
+        turn_messages = messages
+        turn_tool_specs = tools
+        if budget.over_threshold(current_usage) and not budget.over_token_budget(current_usage):
+            budget_msg = get_retrieval_subagent_budget_exhausted_message(
+                current_usage, budget.threshold_budget
+            )
+            turn_messages = messages[:-1] + [_with_appended_text(messages[-1], budget_msg)]
+            turn_tool_specs = prune_specs or tools
+
+        out_cap = max(256, min(max_tokens, budget.token_budget - current_usage))
         payload = {
             "model": model,
-            "max_tokens": max_tokens,
+            "max_tokens": out_cap,
             "system": system,
-            "messages": messages,
-            "tools": tools,
+            "messages": turn_messages,
+            "tools": turn_tool_specs,
         }
+        _t = time.perf_counter()
         response = requests.post(url, json=payload, headers=headers, timeout=timeout_s)
         response.raise_for_status()
         data = response.json()
+        timing["llm_s"] += time.perf_counter() - _t
         num_turns += 1
         _acc_anthropic_usage(usage, data)
 
@@ -812,6 +941,7 @@ def run_anthropic_search(
             break
 
         turn_tools.append([tu.get("name", "") for tu in tool_uses])
+        budget.reset_step()
         tool_results: list[dict] = []
         for tu in tool_uses:
             name = tu.get("name", "")
@@ -825,13 +955,40 @@ def run_anthropic_search(
             tool = toolset.get_tool(name)
             if tool is None:
                 output = f"Error: unknown tool '{name}'."
+            elif budget.should_reject(name, current_usage):
+                output = budget.rejection_message(current_usage)
+                logger.warning("tool_rejected_over_budget", tool=name, usage=current_usage)
             else:
+                overrides: dict = {}
+                if name == "search_corpus":
+                    overrides.update(budget.search_overrides())
+                elif name == "read_document":
+                    overrides.update(budget.read_overrides(args))
+                clamp = budget.tool_max_tokens(name, current_usage)
+                if clamp is not None:
+                    overrides["max_tokens"] = clamp
                 try:
-                    output, _metadata = tool(args)
+                    _tt = time.perf_counter()
+                    output, _metadata = tool(args, overrides or None)
+                    _dt = time.perf_counter() - _tt
+                    timing["tools_s"] += _dt
+                    tool_s[name] += _dt
+                    _rs = getattr(_metadata, "retrieval_s", None)
+                    if _rs is not None:
+                        timing["retrieval_s"] += _rs
+                        timing["rerank_s"] += getattr(_metadata, "rerank_s", 0.0) or 0.0
                     _collect_doc_text(output, doc_text)
-                except Exception as exc:
+                    if name == "search_corpus" and _metadata is not None:
+                        budget.record_search(
+                            getattr(_metadata, "returned_chunk_ids", []) or [], str(args.get("query", ""))
+                        )
+                    elif name == "prune_chunks":
+                        budget.record_prune(args.get("chunk_ids"))
+                    budget.add_step_tokens(output)
+                except Exception as exc:  # noqa: BLE001 — surface tool errors to the model
                     logger.warning("anthropic_tool_error", tool=name, error=str(exc))
                     output = f"Error executing '{name}': {exc}"
+            output = budget.annotate(output, current_usage)
             tool_results.append(
                 {"type": "tool_result", "tool_use_id": tu.get("id"), "content": output}
             )
@@ -867,6 +1024,13 @@ def run_anthropic_search(
             "model": model,
             "tool_calls": tool_call_count,
             "tool_types_used": ",".join(sorted(tool_types_used)),
+        },
+        timing={
+            "llm_s": round(timing["llm_s"], 2),
+            "tools_s": round(timing["tools_s"], 2),
+            "retrieval_s": round(timing["retrieval_s"], 2),
+            "rerank_s": round(timing["rerank_s"], 2),
+            **{f"tool.{k}_s": round(v, 2) for k, v in tool_s.items()},
         },
     )
 

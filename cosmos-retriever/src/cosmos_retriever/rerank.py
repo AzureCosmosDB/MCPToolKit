@@ -27,6 +27,17 @@ class RerankResult:
 
 class Reranker(ABC):
 
+    """Abstract base for rerankers: score query–document relevance, then rank.
+
+    Concrete subclasses implement :meth:`_rerank` — call their scoring backend and
+    return :class:`RerankResult` objects sorted by descending score. The base
+    supplies the public ``__call__`` template: run ``_rerank``, warn if it is
+    slow, then apply optional token-budget truncation (``_truncate_results``) so
+    the returned set fits within ``max_tokens`` (which requires a
+    ``token_counter``). Implementations in this module are ``BasetenReranker`` and
+    ``VLLMQwen3Reranker`` (Qwen3-Reranker) and ``ContextualReranker``.
+    """
+
     def __init__(
         self,
         token_counter: Optional[Callable[[str], int]] = None,
@@ -96,6 +107,16 @@ class Reranker(ABC):
 
 class BasetenReranker(Reranker):
 
+    """Qwen3-Reranker served via Baseten's ``classify`` endpoint.
+
+    The yes/no framing in ``PREFIX`` is the reranker's scoring template, not a
+    free-text answer the code parses. ``classify`` returns a structured
+    ``{label, score}`` per document; the relevance score is the probability mass
+    on the ``"yes"`` label (0.0 if absent). The model is never in a generative
+    mode where it could reply with anything other than the fixed classifier
+    labels, so there is no brittle string-matching on model prose.
+    """
+
     PREFIX = '<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be "yes" or "no".<|im_end|>\n<|im_start|>user\n'
     SUFFIX = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
     DEFAULT_INSTRUCTION = (
@@ -152,6 +173,10 @@ class BasetenReranker(Reranker):
         results = []
         for idx, (doc, group) in enumerate(zip(documents, response.data)):
             score = 0.0
+            # The reranker is a yes/no classifier, not a text generator: the
+            # relevance score is the probability the judgment token is "yes"
+            # (softmax over the yes/no logits, computed server-side). We take that
+            # P("yes") as the score; 0.0 if the label is absent.
             for result in group:
                 if result.label == "yes":
                     score = result.score
@@ -242,6 +267,16 @@ class VLLMQwen3Reranker(Reranker):
 
 
 class ContextualReranker(Reranker):
+
+    """Reranker backed by Contextual AI's hosted ``/rerank`` API.
+
+    Sends the query, candidate documents, and an optional ``instruction`` to the
+    Contextual endpoint and maps each returned ``relevance_score`` onto a
+    :class:`RerankResult`, sorted by descending score. Unlike the Qwen3 rerankers
+    this is a managed HTTP service with no local model or logits — the API returns
+    relevance scores directly. The API key is taken from the constructor argument
+    or, if omitted, from ``get_config()``.
+    """
 
     API_URL = "https://api.contextual.ai/v1/rerank"
     DEFAULT_MODEL = "ctxl-rerank-v2-instruct-multilingual"

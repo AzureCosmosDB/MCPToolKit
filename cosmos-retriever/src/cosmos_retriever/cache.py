@@ -23,8 +23,19 @@ class CacheStats:
 
 
 class BoundedTTLCache(Generic[K, V]):
-    def __init__(
-        self,
+    """Generic, thread-safe LRU cache with a per-entry time-to-live.
+
+    A reusable utility (it knows nothing about retrieval): entries expire after
+    ``ttl_seconds`` and the least-recently-used entry is evicted once the cache
+    exceeds ``max_entries``. An optional ``on_evict`` callback disposes of
+    values that are dropped (evicted, expired, invalidated, or cleared).
+
+    In this service it is used server-side by ``server._RetrieverPool`` to pool
+    expensive-to-build ``CosmosRetriever`` engines keyed by corpus scope; it does
+    **not** cache queries or search results.
+    """
+
+    def __init__(        self,
         *,
         max_entries: int = 128,
         ttl_seconds: float = 900.0,

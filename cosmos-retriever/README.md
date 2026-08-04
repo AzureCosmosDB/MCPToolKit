@@ -87,9 +87,11 @@ at the repo root). Required:
 
 | Variable | Purpose |
 |---|---|
-| `VLLM_BASE_URL` | OpenAI-compatible vLLM endpoint serving the local model |
+| `CHAT_BASE_URL` / `CHAT_API_KEY` / `CHAT_MODEL` | LLM endpoint that drives the retrieval agent |
 | `ACCOUNT_URI` / `COSMOS_DATABASE` / `COSMOS_CORPUS_CONTAINER` | Cosmos target |
-| `OPENAI_API_KEY` *(or `AZURE_OPENAI_*`)* | Embeddings backend |
+| `OPENAI_API_KEY` / `OPENAI_EMBEDDING_MODEL` | Embeddings backend (set `EMBED_ENDPOINT` for Azure or a local server) |
+
+See [`.env.example`](.env.example) for the complete list of settings and their defaults.
 
 ### Inference backend
 
@@ -138,4 +140,4 @@ src/cosmos_retriever/
 
 ## License
 
-Apache 2.0.
+MIT — this package is covered by the repository's top-level [LICENSE](../LICENSE).

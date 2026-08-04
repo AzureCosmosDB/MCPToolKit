@@ -78,6 +78,11 @@ class CosmosRetriever:
         self.settings = settings or get_settings()
         self.corpus: CorpusConfig = self.settings.resolve_corpus(corpus_name)
 
+        # Single approximate tokenizer used only for budget/truncation heuristics
+        # (not billing or context-limit enforcement). o200k_harmony is exact for
+        # gpt-oss/Harmony models and within a few percent for other o200k-family
+        # models; non-OpenAI models (Claude, Qwen) are approximated. Budgets are
+        # set with headroom to absorb the drift.
         self._tiktoken = tiktoken.get_encoding("o200k_harmony")
         self._reranker = reranker or self._build_default_reranker()
 
@@ -105,6 +110,7 @@ class CosmosRetriever:
                 openai_client=self.settings.build_openai_client(self.corpus),
                 openai_embedding_model=self.corpus.embed_model,
                 embed_query_instruction=self.corpus.embed_query_instruction,
+                embed_dimensions=self.corpus.embed_dimensions,
                 reranker=self._reranker,
                 token_counter=self._text_token_counter,
                 search_display_limit=self.settings.cosmos_retriever_search_display_limit,
@@ -131,6 +137,7 @@ class CosmosRetriever:
             embed_base_url=self.corpus.embed_base_url,
             embed_model=self.corpus.embed_model,
             embed_query_instruction=self.corpus.embed_query_instruction,
+            embed_dimensions=self.corpus.embed_dimensions,
             reranker=type(self._reranker).__name__ if self._reranker is not None else None,
         )
 
@@ -316,6 +323,9 @@ class CosmosRetriever:
             max_tokens=exec_params.max_tokens,
             anthropic_version=exec_params.anthropic_version,
             auth_header=exec_params.anthropic_auth_header,
+            text_token_counter=self._text_token_counter,
+            threshold_budget=self.settings.cosmos_retriever_threshold_budget,
+            token_budget=self.settings.cosmos_retriever_token_budget,
         )
         elapsed = time.perf_counter() - start
 
@@ -331,7 +341,7 @@ class CosmosRetriever:
             elapsed_s=round(elapsed, 3),
             pool_doc_ids=chat_result.pool_doc_ids,
             usage=chat_result.usage,
-            trajectory=chat_result.trajectory,
+            trajectory={**chat_result.trajectory, "timing": chat_result.timing},
             metadata=chat_result.metadata,
         )
         logger.info(
@@ -352,6 +362,7 @@ class CosmosRetriever:
             client=self.settings.build_openai_client(self.corpus),
             model=self.corpus.embed_model,
             query_instruction=self.corpus.embed_query_instruction,
+            dimensions=self.corpus.embed_dimensions,
         )
         catalog = ResourceCatalog(_StaticCosmosConnection(cosmos_client))
         targets = select_search_targets(catalog, self.corpus.database)

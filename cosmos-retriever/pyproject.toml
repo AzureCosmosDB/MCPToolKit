@@ -4,13 +4,13 @@ version = "0.1.0"
 description = "Multi-turn Cosmos DB search agent (driven by any OpenAI-compatible model) as a Python library + CLI, designed to be invoked by the Azure Cosmos DB MCP Toolkit's `agentic_search` tool."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
+license = { text = "MIT" }
 authors = [{ name = "Cosmos Retriever Contributors" }]
 keywords = ["retrieval", "rag", "cosmos-db", "vllm", "agent"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: Apache Software License",
+  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -37,6 +37,7 @@ baseten = ["baseten-performance-client>=0.4,<1"]
 dev = [
   "mypy>=1.10,<2",
   "ruff>=0.6,<1",
+  "pytest>=8,<9",
 ]
 
 [project.scripts]

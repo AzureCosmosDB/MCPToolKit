@@ -227,6 +227,12 @@ cannot produce injectable SQL.
 at 30 terms; `fts_literal_args()` escapes each term into the quoted argument list
 that `FullTextScore(path, "t1", "t2", …)` expects.
 
+The stopword list is **English-only**. Tokenization itself is Unicode-aware, so
+non-English queries are still tokenized, lower-cased, de-duplicated, and searched
+— their function words just aren't removed. The only degenerate case is a query
+made entirely of English stopwords, which can reduce to zero terms. Add
+per-language stopword lists in `expressions.py` if broader support is needed.
+
 ## 7. Document reconstruction (`document_resolvers.py`)
 
 `read_document` reassembles a full document from its chunks. The factory

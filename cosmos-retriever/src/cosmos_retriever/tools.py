@@ -167,6 +167,15 @@ class ToolCallMetadata(BaseModel):
 
 class Tool(ABC, BaseModel):
 
+    """Abstract base for every agent tool in this package.
+
+    Concrete tools (search / grep / read / prune / …) implement ``__call__`` to
+    run the action and return ``(text_output, metadata)``; ``get_format``
+    serializes the tool's schema into the requested provider wire format. This is
+    the Python service's own tool abstraction — the .NET MCP Toolkit's tools are a
+    separate C# hierarchy and are not shared here.
+    """
+
     tool_schema: ToolSchema
 
     @abstractmethod
@@ -773,6 +782,7 @@ class ToolSet(BaseModel):
         openai_client: openai.OpenAI | None = None,
         openai_embedding_model: str = "text-embedding-3-small",
         embed_query_instruction: str | None = None,
+        embed_dimensions: int | None = None,
         retriever: CorpusRetriever | None = None,
         reranker: Reranker | None = None,
         token_counter: Callable[[str], int] | None = None,
@@ -796,6 +806,7 @@ class ToolSet(BaseModel):
                 client=openai_client,
                 model=openai_embedding_model,
                 query_instruction=embed_query_instruction,
+                dimensions=embed_dimensions,
             )
             retriever = build_capability_retriever_from_live(
                 container=container,

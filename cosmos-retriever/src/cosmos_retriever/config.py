@@ -1,3 +1,25 @@
+"""Configuration for the Cosmos Retriever service.
+
+Defines the single settings object (:class:`RetrieverSettings`) and the resolved
+per-corpus view (:class:`CorpusConfig`) the rest of the service reads from. The
+module has two distinct halves:
+
+* **User-facing input schema** — the ``RetrieverSettings`` *fields*. These are the
+  environment variables / ``.env`` keys an operator sets (``INFERENCE_BACKEND``,
+  ``CHAT_BASE_URL``, ``ACCOUNT_URI``, token budgets, cache sizing, …); each
+  field's default and ``description`` documents the knob. This is the public
+  surface.
+* **Internal resolution** — the methods (``resolve_corpus``, ``_load_registry``,
+  ``build_*_client``, ``apply_structural_overrides``, and the ``use_*_backend``
+  properties). These are consumed only by the code to turn raw settings plus the
+  corpus registry into concrete clients and a resolved ``CorpusConfig``; users
+  never call them.
+
+So the file is user-facing in its *inputs* and internal in its *logic*. The two
+halves share a module because the resolution methods are tightly coupled to the
+field set; the natural split if this grows is ``settings.py`` (fields) +
+``resolution.py`` (methods).
+"""
 
 from __future__ import annotations
 
@@ -56,6 +78,14 @@ def init_logging(
 @dataclass(frozen=True)
 class CorpusConfig:
 
+    """Fully-resolved configuration for a single corpus (internal).
+
+    Produced by :meth:`RetrieverSettings.resolve_corpus` by merging a corpus
+    registry entry with the server defaults: the concrete Cosmos account /
+    database / container plus the embedding endpoint, model, and (optional)
+    output dimensionality and query instruction used to search it.
+    """
+
     container: str
     account_uri: str
     database: str
@@ -64,12 +94,21 @@ class CorpusConfig:
     embed_api_key: SecretStr | None
     embed_model: str
     embed_query_instruction: str | None = None
+    embed_dimensions: int | None = None
 
     cosmos_key: SecretStr | None = None
     schema_override: SchemaOverride | None = None
 
 
 class RetrieverSettings(BaseSettings):
+
+    """Service settings (pydantic-settings), sourced from env vars + ``.env``.
+
+    The *fields* below are the user-facing configuration schema; the *methods*
+    (``resolve_corpus``, ``build_*_client``, ``apply_structural_overrides``, the
+    ``use_*_backend`` properties) are internal resolution used by the server. See
+    the module docstring for the split.
+    """
 
     model_config = SettingsConfigDict(
         env_file=DEFAULT_ENV_FILES,
@@ -148,6 +187,15 @@ class RetrieverSettings(BaseSettings):
 
     openai_api_key: SecretStr | None = None
     openai_embedding_model: str | None = None
+    openai_embedding_dimensions: int | None = Field(
+        default=None,
+        description=(
+            "Requested embedding output dimensionality. Set when the query "
+            "embedder supports Matryoshka/`dimensions` truncation (e.g. serving "
+            "Qwen3-Embedding-8B at 2560 dims to match a corpus). Corpus-registry "
+            "entries may override this per corpus via 'embed_dimensions'."
+        ),
+    )
     embed_endpoint: str | None = Field(
         default=None,
         description=(
@@ -295,6 +343,7 @@ class RetrieverSettings(BaseSettings):
                 embed_api_key=key,
                 embed_model=model,
                 embed_query_instruction=self.embed_query_instruction,
+                embed_dimensions=self.openai_embedding_dimensions,
                 cosmos_key=self.cosmos_key,
                 schema_override=self.cosmos_retriever_schema_override,
             )
@@ -354,6 +403,9 @@ class RetrieverSettings(BaseSettings):
             embed_model=entry.get("embed_model") or self.openai_embedding_model,
             embed_query_instruction=entry.get("embed_query_instruction")
             or self.embed_query_instruction,
+            embed_dimensions=entry.get("embed_dimensions")
+            if entry.get("embed_dimensions") is not None
+            else self.openai_embedding_dimensions,
             cosmos_key=cosmos_key_value,
             schema_override=schema_override,
         )

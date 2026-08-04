@@ -72,6 +72,17 @@ class SearchRequest(BaseModel):
 
 class _RetrieverPool:
 
+    """Server-side pool of built ``CosmosRetriever`` engines.
+
+    Constructing a retriever is expensive (opens Cosmos clients, builds the
+    embedding client and reranker, runs live schema discovery), so one engine is
+    built per unique ``(RetrievalScope, structural-overrides)`` key and reused
+    across requests via a :class:`BoundedTTLCache`. Only the engine is cached —
+    every search still runs fresh against Cosmos. A per-key ``asyncio.Lock``
+    serializes requests that share an engine, and a single ``_build_lock`` gives
+    double-checked building so concurrent first-hits don't construct duplicates.
+    """
+
     def __init__(self, settings: RetrieverSettings) -> None:
         self._settings = settings
         self._cache: BoundedTTLCache[tuple, CosmosRetriever] = BoundedTTLCache(
@@ -177,6 +188,9 @@ def create_app(settings: RetrieverSettings | None = None) -> FastAPI:
 
     @app.get("/config")
     async def get_config() -> JSONResponse:
+        """Admin/operator endpoint: return the current server-level settings
+        (secrets redacted) plus retriever-pool stats. Read-only; not part of the
+        search request path and not end-user facing."""
         pool: _RetrieverPool = app.state.pool
         return JSONResponse(
             content={"config": pool.settings.redacted_config(), "pool": pool.stats()}
@@ -184,6 +198,11 @@ def create_app(settings: RetrieverSettings | None = None) -> FastAPI:
 
     @app.patch("/config")
     async def patch_config(update: ServerConfigUpdate) -> JSONResponse:
+        """Admin/operator endpoint: mutate server-level *default* settings at
+        runtime (not part of the search request path, not end-user facing).
+        Applies only the provided fields, then rebuilds the retriever pool so
+        subsequent requests pick them up. Per-request tweaks instead go through
+        ``RuntimeConfig`` in the ``/search`` body."""
         pool: _RetrieverPool = app.state.pool
         try:
             new_settings = pool.settings.apply_server_updates(update)

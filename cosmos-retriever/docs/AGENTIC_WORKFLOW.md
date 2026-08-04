@@ -257,7 +257,17 @@ issued, per-turn tool calls, and the final document set) is also captured on the
 | Same-corpus thread-safety | per-corpus `asyncio.Lock` |
 | Cosmos overload / throttling | executor `BoundedSemaphore` + tenacity retries |
 | Runaway agents | `max_turns` + token budgets + pruning |
-| Query injection | bound `@params` + `CosmosPath` validation (retrieval layer) |
+| Query injection | bound `@params` (values) + `CosmosPath` allowlist (identifiers) |
+
+Because the agent is LLM-driven, tool-call arguments are untrusted. Query
+injection is blocked on two fronts: user/LLM-supplied **values** (filter values,
+ids, vectors) are never concatenated into SQL — they go into bound `@params`
+that Cosmos binds separately, so `2020'; DROP TABLE…` is treated as a literal
+string. Field **paths/identifiers** can't be parameterized, so every path flows
+through `CosmosPath`, which allowlists each segment
+(`^[A-Za-z_][A-Za-z0-9_ .\-]*$`), rejects unsafe characters, and escapes on
+render. Values are parameterized, identifiers are validated — neither can escape
+into executable SQL.
 
 ---
 

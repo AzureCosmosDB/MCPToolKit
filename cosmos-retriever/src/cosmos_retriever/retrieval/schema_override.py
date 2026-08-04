@@ -20,6 +20,17 @@ class SchemaOverride(BaseModel):
       - ``item_id_path``      path of the item id (defaults to ``/id``)
       - ``use_dunder_codec``  chunk ids are encoded ``<docid>__<chunkindex>``
 
+    These paths are **not** canonical Cosmos fields and are not guaranteed to
+    exist. Cosmos DB is schema-agnostic: the only field present on every
+    document is ``/id`` (plus system props like ``_rid``/``_ts``), which is why
+    ``item_id_path`` defaults to ``/id``. The remaining paths are
+    application-specific — they exist only if the ingestion pipeline created
+    them — and are only meaningful for *chunked* (RAG) corpora where one logical
+    document is split across many records. For one-record-per-document data,
+    omit them: each item is then treated as its own document
+    (see ``CorpusSchema.is_item_document_mode``). ``use_dunder_codec`` is a
+    naming convention, not a Cosmos feature.
+
     All fields are optional; omit the object entirely for pure discovery.
     """
 

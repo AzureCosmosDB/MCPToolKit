@@ -1,22 +1,28 @@
 {
-  "model_enterprise_data": {
-    "account_uri":  "https://aryans-internship-cosmos-prov.documents.azure.com:443/",
-    "embed_base_url": "http://172.17.0.2:8002/v1",
-    "embed_api_key_env": null,
-    "embed_model":  "qwen3-embed",
-    "embed_query_instruction": "Given a question, retrieve documents that answer it"
+  "_comment": "EXAMPLE corpus registry. Each key is '<database>/<container>' (most specific), or just '<container>', or '<database>' (a DB-wide default). Copy this file, replace every <PLACEHOLDER> with your own values, and point CORPUS_REGISTRY_FILE at your copy. API keys are NEVER stored here: 'embed_api_key_env' / 'cosmos_key_env' name the environment variables that hold them. Two labelled entries follow: a FULL end-to-end example (every supported field) and a MINIMAL one (only what's needed).",
+
+  "your_database/full_example_container": {
+    "account_uri": "https://<your-cosmos-account>.documents.azure.com:443/",
+    "database": "your_database",
+    "embed_base_url": "https://<your-embedding-resource>.services.ai.azure.com/openai/v1",
+    "embed_api_key_env": "MY_EMBED_API_KEY",
+    "embed_model": "text-embedding-3-small",
+    "embed_dimensions": 1536,
+    "embed_query_instruction": "Given a question, retrieve documents that answer it",
+    "cosmos_key_env": "MY_COSMOS_KEY",
+    "schema_override": {
+      "document_id_path": "/docid",
+      "chunk_id_path": "/id",
+      "chunk_order_path": "/chunk_idx",
+      "title_path": "/title",
+      "source_path": "/source_type",
+      "use_dunder_codec": true
+    }
   },
-  "search_retrieval_database/browsecomp_corpus_container": {
-    "account_uri":  "https://aryans-internship-cosmos.documents.azure.com:443/",
-    "embed_base_url": "https://embedding-west-us-resource.services.ai.azure.com/openai/v1",
-    "embed_api_key_env": "AZURE_OPENAI_EMBED_API_KEY",
-    "embed_model":  "text-embedding-3-small"
-  },
-  "search_retrieval_database/enterprise_ragbench_corpus": {
-    "account_uri":  "https://aryans-internship-cosmos-prov.documents.azure.com:443/",
-    "embed_base_url": "http://172.17.0.2:8002/v1",
-    "embed_api_key_env": null,
-    "embed_model":  "qwen3-embed",
-    "embed_query_instruction": "Given a question, retrieve documents that answer it"
+
+  "minimal_example_container": {
+    "account_uri": "https://<your-cosmos-account>.documents.azure.com:443/",
+    "embed_model": "text-embedding-3-small"
   }
 }
+
