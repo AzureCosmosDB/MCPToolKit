@@ -65,6 +65,10 @@ public sealed class OperationConfiguration
     [JsonPropertyName("partitionKey")]
     public string? PartitionKey { get; set; }
 
+    /// <summary>Hierarchical (subpartitioned) partition key components. Takes precedence over <see cref="PartitionKey"/>.</summary>
+    [JsonPropertyName("partitionKeys")]
+    public List<string>? PartitionKeys { get; set; }
+
     // query
     [JsonPropertyName("statement")]
     public string? Statement { get; set; }
@@ -152,6 +156,9 @@ public sealed class StepConfiguration
 
     [JsonPropertyName("partitionKey")]
     public string? PartitionKey { get; set; }
+
+    [JsonPropertyName("partitionKeys")]
+    public List<string>? PartitionKeys { get; set; }
 
     [JsonPropertyName("operations")]
     public List<PatchOperationConfiguration>? Operations { get; set; }

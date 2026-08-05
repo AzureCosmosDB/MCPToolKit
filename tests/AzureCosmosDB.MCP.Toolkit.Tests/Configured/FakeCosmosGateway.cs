@@ -17,7 +17,8 @@ public sealed class FakeCosmosGateway : ICosmosGateway
     public JsonNode? PatchResult { get; set; }
 
     public string? LastId { get; private set; }
-    public string? LastPartitionKey { get; private set; }
+    public IReadOnlyList<string>? LastPartitionKeyComponents { get; private set; }
+    public string? LastPartitionKey => LastPartitionKeyComponents is null ? null : string.Join("|", LastPartitionKeyComponents);
     public string? LastContainer { get; private set; }
     public QueryRequest? LastQuery { get; private set; }
     public SearchRequest? LastSearch { get; private set; }
@@ -28,11 +29,11 @@ public sealed class FakeCosmosGateway : ICosmosGateway
 
     public Func<string, JsonNode?>? PointReadHandler { get; set; }
 
-    public Task<JsonNode?> PointReadAsync(string database, string container, string id, string partitionKey, CancellationToken cancellationToken)
+    public Task<JsonNode?> PointReadAsync(string database, string container, string id, IReadOnlyList<string> partitionKey, CancellationToken cancellationToken)
     {
         LastContainer = container;
         LastId = id;
-        LastPartitionKey = partitionKey;
+        LastPartitionKeyComponents = partitionKey;
         return Task.FromResult(PointReadHandler is not null ? PointReadHandler(id) : PointReadResult);
     }
 
@@ -40,6 +41,7 @@ public sealed class FakeCosmosGateway : ICosmosGateway
     {
         LastQuery = request;
         LastContainer = request.Container;
+        LastPartitionKeyComponents = request.PartitionKey;
         return Task.FromResult(QueryResult);
     }
 
@@ -61,47 +63,47 @@ public sealed class FakeCosmosGateway : ICosmosGateway
         return Task.FromResult(SearchResult);
     }
 
-    public Task<JsonNode?> CreateAsync(string database, string container, JsonObject document, string partitionKey, CancellationToken cancellationToken)
+    public Task<JsonNode?> CreateAsync(string database, string container, JsonObject document, IReadOnlyList<string> partitionKey, CancellationToken cancellationToken)
     {
         LastContainer = container;
         LastDocument = document;
-        LastPartitionKey = partitionKey;
+        LastPartitionKeyComponents = partitionKey;
         return Task.FromResult(CreateResult ?? (JsonNode?)document.DeepClone());
     }
 
-    public Task<JsonNode?> ReplaceAsync(string database, string container, string id, JsonObject document, string partitionKey, string? ifMatch, CancellationToken cancellationToken)
+    public Task<JsonNode?> ReplaceAsync(string database, string container, string id, JsonObject document, IReadOnlyList<string> partitionKey, string? ifMatch, CancellationToken cancellationToken)
     {
         LastContainer = container;
         LastId = id;
         LastDocument = document;
-        LastPartitionKey = partitionKey;
+        LastPartitionKeyComponents = partitionKey;
         LastIfMatch = ifMatch;
         return Task.FromResult((JsonNode?)document.DeepClone());
     }
 
-    public Task<JsonNode?> PatchAsync(string database, string container, string id, string partitionKey, IReadOnlyList<ResolvedPatchOperation> operations, string? ifMatch, CancellationToken cancellationToken)
+    public Task<JsonNode?> PatchAsync(string database, string container, string id, IReadOnlyList<string> partitionKey, IReadOnlyList<ResolvedPatchOperation> operations, string? ifMatch, CancellationToken cancellationToken)
     {
         LastContainer = container;
         LastId = id;
-        LastPartitionKey = partitionKey;
+        LastPartitionKeyComponents = partitionKey;
         LastPatch = operations;
         LastIfMatch = ifMatch;
         return Task.FromResult<JsonNode?>(PatchResult ?? new JsonObject { ["id"] = id, ["patched"] = true });
     }
 
-    public Task<JsonNode?> DeleteAsync(string database, string container, string id, string partitionKey, string? ifMatch, CancellationToken cancellationToken)
+    public Task<JsonNode?> DeleteAsync(string database, string container, string id, IReadOnlyList<string> partitionKey, string? ifMatch, CancellationToken cancellationToken)
     {
         LastContainer = container;
         LastId = id;
-        LastPartitionKey = partitionKey;
+        LastPartitionKeyComponents = partitionKey;
         LastIfMatch = ifMatch;
         return Task.FromResult<JsonNode?>(new JsonObject { ["id"] = id, ["deleted"] = true });
     }
 
-    public Task<JsonArray> TransactionalBatchAsync(string database, string container, string partitionKey, IReadOnlyList<ResolvedBatchStep> steps, CancellationToken cancellationToken)
+    public Task<JsonArray> TransactionalBatchAsync(string database, string container, IReadOnlyList<string> partitionKey, IReadOnlyList<ResolvedBatchStep> steps, CancellationToken cancellationToken)
     {
         LastContainer = container;
-        LastPartitionKey = partitionKey;
+        LastPartitionKeyComponents = partitionKey;
         LastBatch = steps;
         var results = new JsonArray();
         foreach (var step in steps)

@@ -69,6 +69,40 @@ tools:
         node.AsObject().ContainsKey("internalRiskScore").Should().BeFalse();
     }
 
+    private const string HierarchicalYaml = """
+version: "1.0"
+sources:
+  banking: { type: cosmos, endpoint: "${COSMOS_ENDPOINT}", database: banking }
+tools:
+  bank_balance:
+    description: balance
+    source: banking
+    operation:
+      type: point-read
+      container: accounts
+      id: "${accountId}"
+      partitionKeys: ["${tenantId}", "${accountId}"]
+    input:
+      type: object
+      required: [tenantId, accountId]
+      properties:
+        tenantId: { type: string }
+        accountId: { type: string }
+""";
+
+    [Fact]
+    public async Task Point_read_supports_hierarchical_partition_key()
+    {
+        var tool = BuildTool(HierarchicalYaml, "bank_balance");
+        var gateway = new FakeCosmosGateway { PointReadResult = new JsonObject { ["accountId"] = "A1", ["balance"] = 10.0 } };
+        var executor = new ConfiguredToolExecutor(gateway, NullLogger.Instance);
+
+        var result = await executor.ExecuteAsync(tool, Input(("tenantId", JsonValue.Create("Contoso")), ("accountId", JsonValue.Create("A1"))), Bypass, default);
+
+        result.IsError.Should().BeFalse(result.Json);
+        gateway.LastPartitionKeyComponents.Should().Equal("Contoso", "A1");
+    }
+
     [Fact]
     public async Task Invalid_input_returns_structured_validation_error()
     {

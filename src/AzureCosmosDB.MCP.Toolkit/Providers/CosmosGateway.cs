@@ -28,9 +28,23 @@ public sealed class CosmosGateway : ICosmosGateway
 
     private Container GetContainer(string database, string container) => _client.GetContainer(database, container);
 
-    private static PartitionKey ToPartitionKey(string value) => new(value);
+    private static PartitionKey ToPartitionKey(IReadOnlyList<string> components)
+    {
+        if (components.Count == 1)
+        {
+            return new PartitionKey(components[0]);
+        }
 
-    public async Task<JsonNode?> PointReadAsync(string database, string container, string id, string partitionKey, CancellationToken cancellationToken)
+        var builder = new PartitionKeyBuilder();
+        foreach (var component in components)
+        {
+            builder.Add(component);
+        }
+
+        return builder.Build();
+    }
+
+    public async Task<JsonNode?> PointReadAsync(string database, string container, string id, IReadOnlyList<string> partitionKey, CancellationToken cancellationToken)
     {
         var c = GetContainer(database, container);
         using var response = await c.ReadItemStreamAsync(id, ToPartitionKey(partitionKey), cancellationToken: cancellationToken);
@@ -53,7 +67,7 @@ public sealed class CosmosGateway : ICosmosGateway
         }
 
         var options = new QueryRequestOptions { MaxItemCount = request.MaxItems };
-        if (!request.AllowCrossPartition && !string.IsNullOrEmpty(request.PartitionKey))
+        if (!request.AllowCrossPartition && request.PartitionKey is { Count: > 0 })
         {
             options.PartitionKey = ToPartitionKey(request.PartitionKey);
         }
@@ -101,7 +115,7 @@ public sealed class CosmosGateway : ICosmosGateway
         return await DrainAsync(iterator, request.TopK, cancellationToken);
     }
 
-    public async Task<JsonNode?> CreateAsync(string database, string container, JsonObject document, string partitionKey, CancellationToken cancellationToken)
+    public async Task<JsonNode?> CreateAsync(string database, string container, JsonObject document, IReadOnlyList<string> partitionKey, CancellationToken cancellationToken)
     {
         var c = GetContainer(database, container);
         using var stream = ToStream(document);
@@ -110,7 +124,7 @@ public sealed class CosmosGateway : ICosmosGateway
         return await ParseStreamAsync(response.Content, cancellationToken) ?? document.DeepClone();
     }
 
-    public async Task<JsonNode?> ReplaceAsync(string database, string container, string id, JsonObject document, string partitionKey, string? ifMatch, CancellationToken cancellationToken)
+    public async Task<JsonNode?> ReplaceAsync(string database, string container, string id, JsonObject document, IReadOnlyList<string> partitionKey, string? ifMatch, CancellationToken cancellationToken)
     {
         var c = GetContainer(database, container);
         using var stream = ToStream(document);
@@ -120,7 +134,7 @@ public sealed class CosmosGateway : ICosmosGateway
         return await ParseStreamAsync(response.Content, cancellationToken) ?? document.DeepClone();
     }
 
-    public async Task<JsonNode?> PatchAsync(string database, string container, string id, string partitionKey, IReadOnlyList<ResolvedPatchOperation> operations, string? ifMatch, CancellationToken cancellationToken)
+    public async Task<JsonNode?> PatchAsync(string database, string container, string id, IReadOnlyList<string> partitionKey, IReadOnlyList<ResolvedPatchOperation> operations, string? ifMatch, CancellationToken cancellationToken)
     {
         var c = GetContainer(database, container);
         var patchOps = operations.Select(ToCosmosPatch).ToList();
@@ -135,7 +149,7 @@ public sealed class CosmosGateway : ICosmosGateway
         return await ParseStreamAsync(response.Content, cancellationToken);
     }
 
-    public async Task<JsonNode?> DeleteAsync(string database, string container, string id, string partitionKey, string? ifMatch, CancellationToken cancellationToken)
+    public async Task<JsonNode?> DeleteAsync(string database, string container, string id, IReadOnlyList<string> partitionKey, string? ifMatch, CancellationToken cancellationToken)
     {
         var c = GetContainer(database, container);
         var options = ifMatch is null ? null : new ItemRequestOptions { IfMatchEtag = ifMatch };
@@ -148,7 +162,7 @@ public sealed class CosmosGateway : ICosmosGateway
         return new JsonObject { ["id"] = id, ["deleted"] = true };
     }
 
-    public async Task<JsonArray> TransactionalBatchAsync(string database, string container, string partitionKey, IReadOnlyList<ResolvedBatchStep> steps, CancellationToken cancellationToken)
+    public async Task<JsonArray> TransactionalBatchAsync(string database, string container, IReadOnlyList<string> partitionKey, IReadOnlyList<ResolvedBatchStep> steps, CancellationToken cancellationToken)
     {
         var c = GetContainer(database, container);
         var batch = c.CreateTransactionalBatch(ToPartitionKey(partitionKey));

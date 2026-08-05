@@ -1,5 +1,4 @@
 using System.Text.Json;
-using YamlDotNet.Serialization;
 
 namespace AzureCosmosDB.MCP.Toolkit.Configuration;
 
@@ -23,6 +22,8 @@ public sealed class ConfigurationLoader
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString,
+        Converters = { new FlexibleBooleanConverter() },
     };
 
     private readonly IReadOnlyDictionary<string, string?> _environment;
@@ -80,10 +81,8 @@ public sealed class ConfigurationLoader
         {
             try
             {
-                var deserializer = new DeserializerBuilder().Build();
-                var yamlObject = deserializer.Deserialize<object?>(substituted);
-                var serializer = new SerializerBuilder().JsonCompatible().Build();
-                json = serializer.Serialize(yamlObject);
+                var node = YamlToJsonConverter.Parse(substituted);
+                json = node?.ToJsonString() ?? "null";
             }
             catch (Exception ex)
             {

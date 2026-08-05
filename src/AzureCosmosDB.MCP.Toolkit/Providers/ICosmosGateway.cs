@@ -19,7 +19,7 @@ public sealed record QueryRequest(
     string Container,
     string Statement,
     IReadOnlyDictionary<string, JsonNode?> Parameters,
-    string? PartitionKey,
+    IReadOnlyList<string>? PartitionKey,
     int MaxItems,
     bool AllowCrossPartition);
 
@@ -32,7 +32,7 @@ public sealed record SearchRequest(
     string? TextPath,
     IReadOnlyList<string> Select,
     int TopK,
-    string? PartitionKey);
+    IReadOnlyList<string>? PartitionKey);
 
 /// <summary>
 /// Shared abstraction over Cosmos DB data operations. Both the (existing) built-in tools' logic
@@ -41,7 +41,7 @@ public sealed record SearchRequest(
 /// </summary>
 public interface ICosmosGateway
 {
-    Task<JsonNode?> PointReadAsync(string database, string container, string id, string partitionKey, CancellationToken cancellationToken);
+    Task<JsonNode?> PointReadAsync(string database, string container, string id, IReadOnlyList<string> partitionKey, CancellationToken cancellationToken);
 
     Task<JsonArray> QueryAsync(QueryRequest request, CancellationToken cancellationToken);
 
@@ -51,13 +51,13 @@ public interface ICosmosGateway
 
     Task<JsonArray> HybridSearchAsync(SearchRequest request, CancellationToken cancellationToken);
 
-    Task<JsonNode?> CreateAsync(string database, string container, JsonObject document, string partitionKey, CancellationToken cancellationToken);
+    Task<JsonNode?> CreateAsync(string database, string container, JsonObject document, IReadOnlyList<string> partitionKey, CancellationToken cancellationToken);
 
-    Task<JsonNode?> ReplaceAsync(string database, string container, string id, JsonObject document, string partitionKey, string? ifMatch, CancellationToken cancellationToken);
+    Task<JsonNode?> ReplaceAsync(string database, string container, string id, JsonObject document, IReadOnlyList<string> partitionKey, string? ifMatch, CancellationToken cancellationToken);
 
-    Task<JsonNode?> PatchAsync(string database, string container, string id, string partitionKey, IReadOnlyList<ResolvedPatchOperation> operations, string? ifMatch, CancellationToken cancellationToken);
+    Task<JsonNode?> PatchAsync(string database, string container, string id, IReadOnlyList<string> partitionKey, IReadOnlyList<ResolvedPatchOperation> operations, string? ifMatch, CancellationToken cancellationToken);
 
-    Task<JsonNode?> DeleteAsync(string database, string container, string id, string partitionKey, string? ifMatch, CancellationToken cancellationToken);
+    Task<JsonNode?> DeleteAsync(string database, string container, string id, IReadOnlyList<string> partitionKey, string? ifMatch, CancellationToken cancellationToken);
 
-    Task<JsonArray> TransactionalBatchAsync(string database, string container, string partitionKey, IReadOnlyList<ResolvedBatchStep> steps, CancellationToken cancellationToken);
+    Task<JsonArray> TransactionalBatchAsync(string database, string container, IReadOnlyList<string> partitionKey, IReadOnlyList<ResolvedBatchStep> steps, CancellationToken cancellationToken);
 }

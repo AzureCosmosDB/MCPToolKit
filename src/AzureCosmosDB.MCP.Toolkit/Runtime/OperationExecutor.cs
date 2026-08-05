@@ -27,7 +27,7 @@ public sealed class OperationExecutor
         {
             case "point-read":
                 return await _gateway.PointReadAsync(
-                    database, op.Container!, RequireString(context, op.Id, "id"), RequireString(context, op.PartitionKey, "partitionKey"), cancellationToken);
+                    database, op.Container!, RequireString(context, op.Id, "id"), ResolvePartitionKey(context, op.PartitionKeys, op.PartitionKey), cancellationToken);
 
             case "query":
                 return await ExecuteQueryAsync(op, database, governance, context, cancellationToken);
@@ -46,26 +46,26 @@ public sealed class OperationExecutor
             case "create":
                 return await _gateway.CreateAsync(
                     database, op.Container!, BuildDocument(context, op.Document),
-                    RequireString(context, op.PartitionKey, "partitionKey"), cancellationToken);
+                    ResolvePartitionKey(context, op.PartitionKeys, op.PartitionKey), cancellationToken);
 
             case "replace":
                 return await _gateway.ReplaceAsync(
                     database, op.Container!, RequireString(context, op.Id, "id"), BuildDocument(context, op.Document),
-                    RequireString(context, op.PartitionKey, "partitionKey"), context.BindToString(op.Concurrency?.IfMatch), cancellationToken);
+                    ResolvePartitionKey(context, op.PartitionKeys, op.PartitionKey), context.BindToString(op.Concurrency?.IfMatch), cancellationToken);
 
             case "patch":
                 return await _gateway.PatchAsync(
-                    database, op.Container!, RequireString(context, op.Id, "id"), RequireString(context, op.PartitionKey, "partitionKey"),
+                    database, op.Container!, RequireString(context, op.Id, "id"), ResolvePartitionKey(context, op.PartitionKeys, op.PartitionKey),
                     ResolvePatchOperations(context, op.Operations!), context.BindToString(op.Concurrency?.IfMatch), cancellationToken);
 
             case "delete":
                 return await _gateway.DeleteAsync(
-                    database, op.Container!, RequireString(context, op.Id, "id"), RequireString(context, op.PartitionKey, "partitionKey"),
+                    database, op.Container!, RequireString(context, op.Id, "id"), ResolvePartitionKey(context, op.PartitionKeys, op.PartitionKey),
                     context.BindToString(op.Concurrency?.IfMatch), cancellationToken);
 
             case "transactional-batch":
                 return await _gateway.TransactionalBatchAsync(
-                    database, op.Container!, RequireString(context, op.PartitionKey, "partitionKey"),
+                    database, op.Container!, ResolvePartitionKey(context, op.PartitionKeys, op.PartitionKey),
                     ResolveBatchSteps(context, op.Steps!), cancellationToken);
 
             case "sequence":
@@ -92,7 +92,7 @@ public sealed class OperationExecutor
             op.Container!,
             op.Statement!,
             parameters,
-            context.BindToString(op.PartitionKey),
+            ResolvePartitionKeyOrNull(context, op.PartitionKeys, op.PartitionKey),
             governance.MaxItems ?? 100,
             governance.AllowCrossPartition ?? false);
 
@@ -121,6 +121,7 @@ public sealed class OperationExecutor
                 Container = op.Container,
                 Id = step.ItemId,
                 PartitionKey = step.PartitionKey ?? op.PartitionKey,
+                PartitionKeys = step.PartitionKeys ?? op.PartitionKeys,
                 Document = step.Document,
                 Operations = step.Operations,
                 Concurrency = step.Concurrency,
@@ -143,7 +144,7 @@ public sealed class OperationExecutor
             op.TextPath,
             op.Select ?? new List<string>(),
             ResolveLimit(context, op.TopK, governance.MaxTopK ?? 50, governance.MaxTopK ?? 50),
-            context.BindToString(op.PartitionKey));
+            ResolvePartitionKeyOrNull(context, op.PartitionKeys, op.PartitionKey));
 
     private static JsonObject BuildDocument(BindingContext context, Dictionary<string, object?>? document)
     {
@@ -183,6 +184,42 @@ public sealed class OperationExecutor
         }
 
         return value;
+    }
+
+    private static IReadOnlyList<string> ResolvePartitionKey(BindingContext context, List<string>? components, string? single)
+    {
+        var resolved = ResolvePartitionKeyOrNull(context, components, single);
+        if (resolved is null || resolved.Count == 0)
+        {
+            throw new BindingFailedException("Could not resolve a value for 'partitionKey'.");
+        }
+
+        return resolved;
+    }
+
+    private static IReadOnlyList<string>? ResolvePartitionKeyOrNull(BindingContext context, List<string>? components, string? single)
+    {
+        var templates = components is { Count: > 0 }
+            ? components
+            : (single is not null ? new List<string> { single } : null);
+        if (templates is null)
+        {
+            return null;
+        }
+
+        var result = new List<string>(templates.Count);
+        foreach (var template in templates)
+        {
+            var value = context.BindToString(template);
+            if (string.IsNullOrEmpty(value))
+            {
+                throw new BindingFailedException($"Could not resolve partition key component '{template}'.");
+            }
+
+            result.Add(value);
+        }
+
+        return result;
     }
 
     private static int ResolveLimit(BindingContext context, string? template, int fallback, int max)

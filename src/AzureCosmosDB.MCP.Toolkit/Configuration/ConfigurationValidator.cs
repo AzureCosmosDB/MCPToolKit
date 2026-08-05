@@ -145,7 +145,7 @@ public static class ConfigurationValidator
             case "point-read":
                 Require(op.Container, $"Tool '{name}': point-read requires 'container'.", result);
                 Require(op.Id, $"Tool '{name}': point-read requires 'id'.", result);
-                Require(op.PartitionKey, $"Tool '{name}': point-read requires 'partitionKey'.", result);
+                RequirePartitionKey(name, op, "point-read", result);
                 break;
             case "query":
                 Require(op.Container, $"Tool '{name}': query requires 'container'.", result);
@@ -171,7 +171,7 @@ public static class ConfigurationValidator
                 break;
             case "create":
                 Require(op.Container, $"Tool '{name}': create requires 'container'.", result);
-                Require(op.PartitionKey, $"Tool '{name}': create requires 'partitionKey'.", result);
+                RequirePartitionKey(name, op, "create", result);
                 if (op.Document is null || op.Document.Count == 0)
                 {
                     result.Errors.Add($"Tool '{name}': create requires a non-empty 'document'.");
@@ -180,7 +180,7 @@ public static class ConfigurationValidator
             case "replace":
                 Require(op.Container, $"Tool '{name}': replace requires 'container'.", result);
                 Require(op.Id, $"Tool '{name}': replace requires 'id'.", result);
-                Require(op.PartitionKey, $"Tool '{name}': replace requires 'partitionKey'.", result);
+                RequirePartitionKey(name, op, "replace", result);
                 if (op.Document is null || op.Document.Count == 0)
                 {
                     result.Errors.Add($"Tool '{name}': replace requires a non-empty 'document'.");
@@ -189,17 +189,17 @@ public static class ConfigurationValidator
             case "patch":
                 Require(op.Container, $"Tool '{name}': patch requires 'container'.", result);
                 Require(op.Id, $"Tool '{name}': patch requires 'id'.", result);
-                Require(op.PartitionKey, $"Tool '{name}': patch requires 'partitionKey'.", result);
+                RequirePartitionKey(name, op, "patch", result);
                 ValidatePatchOperations(name, op.Operations, governance, result);
                 break;
             case "delete":
                 Require(op.Container, $"Tool '{name}': delete requires 'container'.", result);
                 Require(op.Id, $"Tool '{name}': delete requires 'id'.", result);
-                Require(op.PartitionKey, $"Tool '{name}': delete requires 'partitionKey'.", result);
+                RequirePartitionKey(name, op, "delete", result);
                 break;
             case "transactional-batch":
                 Require(op.Container, $"Tool '{name}': transactional-batch requires 'container'.", result);
-                Require(op.PartitionKey, $"Tool '{name}': transactional-batch requires 'partitionKey'.", result);
+                RequirePartitionKey(name, op, "transactional-batch", result);
                 if (op.Steps is null || op.Steps.Count == 0)
                 {
                     result.Errors.Add($"Tool '{name}': transactional-batch requires at least one step.");
@@ -270,6 +270,16 @@ public static class ConfigurationValidator
         if (string.IsNullOrWhiteSpace(value))
         {
             result.Errors.Add(error);
+        }
+    }
+
+    private static void RequirePartitionKey(string name, OperationConfiguration op, string opName, ConfigurationValidationResult result)
+    {
+        var hasSingle = !string.IsNullOrWhiteSpace(op.PartitionKey);
+        var hasHierarchical = op.PartitionKeys is { Count: > 0 };
+        if (!hasSingle && !hasHierarchical)
+        {
+            result.Errors.Add($"Tool '{name}': {opName} requires 'partitionKey' or 'partitionKeys'.");
         }
     }
 }
