@@ -13,6 +13,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using AzureCosmosDB.MCP.Toolkit.Services;
+using AzureCosmosDB.MCP.Toolkit.Mcp;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -227,9 +228,18 @@ builder.Services.AddSingleton<AzureCosmosDB.MCP.Toolkit.Services.McpToolRequestV
 
 // Register MCP server with SDK transport (SSE + Streamable HTTP) for AI Foundry and other MCP clients.
 // Tools are defined below using [McpServerTool] attributes on CosmosDbMcpTools class.
-builder.Services.AddMcpServer()
+var mcpServerBuilder = builder.Services.AddMcpServer()
     .WithHttpTransport()
     .WithToolsFromAssembly();
+
+// Additive, opt-in declarative business-facing tools (vNext).
+// This is a no-op unless COSMOS_TOOLS_CONFIG (or CosmosMcp:ToolsConfigPath) points at a config file,
+// so existing GA deployments are completely unaffected.
+using (var startupLoggerFactory = LoggerFactory.Create(logging => logging.AddConsole()))
+{
+    var startupLogger = startupLoggerFactory.CreateLogger("ConfiguredTools");
+    mcpServerBuilder.AddConfiguredCosmosTools(builder.Configuration, startupLogger);
+}
 
 // Configure forwarded headers for proxy scenarios
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
