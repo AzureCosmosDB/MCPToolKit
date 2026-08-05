@@ -23,7 +23,7 @@ public sealed class ConfigurationLoader
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
         NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString,
-        Converters = { new FlexibleBooleanConverter() },
+        Converters = { new FlexibleBooleanConverter(), new FlexibleStringConverter() },
     };
 
     private readonly IReadOnlyDictionary<string, string?> _environment;

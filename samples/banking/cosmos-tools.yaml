@@ -1,0 +1,320 @@
+# =====================================================================================
+# Azure Cosmos DB MCP Toolkit — Declarative business tools for the Banking sample
+# =====================================================================================
+# This file is OPT-IN. Point the toolkit at it with COSMOS_TOOLS_CONFIG (or the
+# CosmosMcp:ToolsConfigPath setting). Without it, the toolkit exposes only its GA
+# built-in tools and behaves exactly as before.
+#
+# The banking workshop stores everything in an "accounts" container that uses a
+# HIERARCHICAL partition key [tenantId, accountId] and a `type` discriminator field
+# (BankAccount, BankTransaction, ServiceRequest). Offers live in an "offers" container
+# partitioned by [tenantId].
+# =====================================================================================
+
+version: "1.0"
+
+sources:
+  banking:
+    type: cosmos
+    endpoint: "${COSMOS_ENDPOINT}"        # environment substitution at load time
+    database: "${COSMOS_DATABASE}"
+    authentication:
+      type: managed-identity
+
+defaults:
+  source: banking
+  governance:
+    timeoutMs: 5000
+    maxItems: 100
+    readOnly: true                        # writes must be explicitly enabled per tool
+
+tools:
+
+  # ---------------------------------------------------------------------------
+  # bank_balance — point read of a single account (read-only)
+  # Original: BankingDataService.GetAccountDetailsAsync (ReadItemAsync)
+  # ---------------------------------------------------------------------------
+  bank_balance:
+    description: Returns the current balance and details for one of the caller's accounts.
+    version: "1.0"
+    tags: [banking, accounts, read]
+    operation:
+      type: point-read
+      container: accounts
+      id: "${accountId}"
+      partitionKeys: ["${tenantId}", "${accountId}"]   # hierarchical partition key
+    input:
+      type: object
+      required: [tenantId, accountId]
+      properties:
+        tenantId: { type: string, description: Tenant identifier (from caller identity). }
+        accountId: { type: string, description: Account identifier, e.g. Acc001. }
+    output:
+      select:
+        accountId: accountId
+        name: name
+        balance: balance
+        accountType: accountType
+    authorization:
+      tenantClaim: tid                    # trusted tenant comes from the token, never the model
+      tenantField: tenantId
+    governance:
+      maxItems: 1
+      timeoutMs: 3000
+
+  # ---------------------------------------------------------------------------
+  # get_transaction_history — parameterised, partition-scoped query (read-only)
+  # Original: BankingDataService.GetTransactionsAsync
+  # ---------------------------------------------------------------------------
+  get_transaction_history:
+    description: Returns transactions for an account between two dates (inclusive).
+    version: "1.0"
+    tags: [banking, transactions, read]
+    operation:
+      type: query
+      container: accounts
+      statement: |
+        SELECT TOP @limit c.id, c.accountId, c.amount, c.transactionType, c.transactionDateTime
+        FROM c
+        WHERE c.accountId = @accountId
+          AND c.type = 'BankTransaction'
+          AND c.transactionDateTime >= @startDate
+          AND c.transactionDateTime <= @endDate
+        ORDER BY c.transactionDateTime DESC
+      parameters:
+        accountId: "${accountId}"
+        startDate: "${startDate}"
+        endDate: "${endDate}"
+        limit: "${limit}"
+      partitionKeys: ["${tenantId}", "${accountId}"]
+    input:
+      type: object
+      required: [tenantId, accountId, startDate, endDate]
+      properties:
+        tenantId: { type: string }
+        accountId: { type: string }
+        startDate: { type: string, description: ISO-8601 start date/time. }
+        endDate: { type: string, description: ISO-8601 end date/time. }
+        limit: { type: integer, default: 50, minimum: 1, maximum: 100 }
+    authorization:
+      tenantClaim: tid
+      tenantField: tenantId
+    governance:
+      maxItems: 100
+
+  # ---------------------------------------------------------------------------
+  # get_offer_information — vector search over offer terms (read-only)
+  # Original: BankingDataService.SearchOfferTermsAsync (embedding + vector search)
+  # NOTE: scoped to the tenant partition. Additional metadata filters (type/accountType)
+  # can be layered on with a filtered VectorDistance query if required.
+  # ---------------------------------------------------------------------------
+  get_offer_information:
+    description: Finds banking product offers relevant to a natural-language requirement.
+    version: "1.0"
+    tags: [banking, offers, search]
+    operation:
+      type: vector-search
+      container: offers
+      searchText: "${prompt}"
+      vectorPath: /vector
+      partitionKeys: ["${tenantId}"]
+      topK: 5
+      select:
+        - id
+        - name
+        - text
+        - accountType
+    input:
+      type: object
+      required: [tenantId, prompt]
+      properties:
+        tenantId: { type: string }
+        prompt: { type: string, minLength: 1, maxLength: 1000 }
+    authorization:
+      tenantClaim: tid
+      tenantField: tenantId
+    governance:
+      maxTopK: 10
+
+  # ---------------------------------------------------------------------------
+  # create_account — write (create). Writes are explicitly enabled here.
+  # Original: create_account tool / BankAccount creation
+  # ---------------------------------------------------------------------------
+  create_account:
+    description: Opens a new bank account for the caller with an initial balance.
+    version: "1.0"
+    tags: [banking, accounts, write]
+    governance:
+      readOnly: false                     # explicit opt-in to allow writes
+    operation:
+      type: create
+      container: accounts
+      partitionKeys: ["${tenantId}", "${generated.accountId}"]
+      document:
+        id: "${generated.accountId}"
+        type: "BankAccount"
+        tenantId: "${tenantId}"
+        userId: "${userId}"
+        name: "${accountHolder}"
+        balance: "${balance}"
+        accountType: "Savings"
+        createdAt: "${system.utcNow}"
+    input:
+      type: object
+      required: [tenantId, userId, accountHolder, balance]
+      properties:
+        tenantId: { type: string }
+        userId: { type: string }
+        accountHolder: { type: string, minLength: 1, maxLength: 200 }
+        balance: { type: number, minimum: 0 }
+    output:
+      select:
+        accountId: id
+        name: name
+        balance: balance
+    authorization:
+      tenantClaim: tid
+      tenantField: tenantId
+
+  # ---------------------------------------------------------------------------
+  # service_request — write (create). Records a customer service request.
+  # Original: service_request / BankingDataService.AddServiceRequestAsync
+  # ---------------------------------------------------------------------------
+  service_request:
+    description: Files a customer service request against an account.
+    version: "1.0"
+    tags: [banking, service, write]
+    governance:
+      readOnly: false
+    operation:
+      type: create
+      container: accounts
+      partitionKeys: ["${tenantId}", "${accountId}"]
+      document:
+        id: "${generated.requestId}"
+        type: "ServiceRequest"
+        SRType: "Complaint"
+        tenantId: "${tenantId}"
+        accountId: "${accountId}"
+        userId: "${userId}"
+        requestSummary: "${requestSummary}"
+        recipientEmail: "${recipientEmail}"
+        recipientPhone: "${recipientPhone}"
+        status: "Open"
+        createdAt: "${system.utcNow}"
+    input:
+      type: object
+      required: [tenantId, accountId, userId, requestSummary]
+      properties:
+        tenantId: { type: string }
+        accountId: { type: string }
+        userId: { type: string }
+        requestSummary: { type: string, minLength: 1, maxLength: 2000 }
+        recipientEmail: { type: string, default: "" }
+        recipientPhone: { type: string, default: "" }
+    authorization:
+      tenantClaim: tid
+      tenantField: tenantId
+
+  # ---------------------------------------------------------------------------
+  # bank_transfer — REQUEST-BASED form (faithful to the C# workshop).
+  # Original: TransactionPlugin.AddFunTransferRequest ->
+  #           BankingDataService.CreateFundTransferRequestAsync (a single create of a
+  #           ServiceRequest of type FundTransfer that is fulfilled asynchronously).
+  #
+  # WHY NOT A SINGLE TRANSACTIONAL BATCH?
+  #   The accounts container is partitioned by [tenantId, accountId]. A transfer debits
+  #   the SOURCE account and credits the DESTINATION account — two DIFFERENT accountId
+  #   values and therefore two DIFFERENT logical partitions. A Cosmos transactional batch
+  #   is scoped to a SINGLE logical partition, so a two-account transfer cannot be a single
+  #   atomic batch under this (unchanged, GA) partition design. True atomic cross-partition
+  #   transfer would require a cross-partition/2-phase transaction, which Cosmos DB does not
+  #   provide and which is explicitly out of scope for a Cosmos-only toolkit. The workshop's
+  #   request-based model (record intent, fulfil asynchronously) is the correct pattern and
+  #   is fully declarative, shown here.
+  # ---------------------------------------------------------------------------
+  bank_transfer:
+    description: Requests a funds transfer from one of the caller's accounts to a recipient.
+    version: "1.0"
+    tags: [banking, transactions, write]
+    governance:
+      readOnly: false
+    operation:
+      type: create
+      container: accounts
+      partitionKeys: ["${tenantId}", "${fromAccount}"]
+      document:
+        id: "${generated.transferId}"
+        type: "ServiceRequest"
+        SRType: "FundTransfer"
+        tenantId: "${tenantId}"
+        accountId: "${fromAccount}"
+        userId: "${userId}"
+        toAccount: "${toAccount}"
+        amount: "${amount}"
+        status: "Requested"
+        createdAt: "${system.utcNow}"
+    input:
+      type: object
+      required: [tenantId, userId, fromAccount, toAccount, amount]
+      properties:
+        tenantId: { type: string }
+        userId: { type: string }
+        fromAccount: { type: string }
+        toAccount: { type: string }
+        amount: { type: number, minimum: 0.01 }
+    output:
+      select:
+        transferId: id
+        status: status
+        amount: amount
+    authorization:
+      tenantClaim: tid
+      tenantField: tenantId
+
+  # ---------------------------------------------------------------------------
+  # same_account_adjustment — TRANSACTIONAL BATCH demonstration.
+  # When both write legs share a single logical partition (here, one account), the
+  # toolkit expresses an atomic multi-step write as one transactional batch: adjust the
+  # balance AND append an immutable transaction record together, all-or-nothing.
+  # ---------------------------------------------------------------------------
+  post_account_transaction:
+    description: Atomically adjusts an account balance and records the matching transaction.
+    version: "1.0"
+    tags: [banking, transactions, write]
+    governance:
+      readOnly: false
+      allowedPatchPaths: ["/balance"]
+    operation:
+      type: transactional-batch
+      container: accounts
+      partitionKeys: ["${tenantId}", "${accountId}"]
+      steps:
+        - id: adjustBalance
+          type: patch
+          itemId: "${accountId}"
+          operations:
+            - op: increment
+              path: /balance
+              value: "${amount}"
+        - id: recordTransaction
+          type: create
+          document:
+            id: "${generated.transactionId}"
+            type: "BankTransaction"
+            tenantId: "${tenantId}"
+            accountId: "${accountId}"
+            amount: "${amount}"
+            transactionType: "${transactionType}"
+            transactionDateTime: "${system.utcNow}"
+    input:
+      type: object
+      required: [tenantId, accountId, amount, transactionType]
+      properties:
+        tenantId: { type: string }
+        accountId: { type: string }
+        amount: { type: number }
+        transactionType: { type: string, enum: [Credit, Debit] }
+    authorization:
+      tenantClaim: tid
+      tenantField: tenantId

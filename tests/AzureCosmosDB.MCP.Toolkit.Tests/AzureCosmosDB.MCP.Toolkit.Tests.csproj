@@ -24,4 +24,10 @@
     <ProjectReference Include="..\..\src\AzureCosmosDB.MCP.Toolkit\AzureCosmosDB.MCP.Toolkit.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\samples\banking\cosmos-tools.yaml" Link="samples\banking-cosmos-tools.yaml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
