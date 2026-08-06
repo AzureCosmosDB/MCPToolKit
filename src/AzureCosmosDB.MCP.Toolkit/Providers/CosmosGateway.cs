@@ -309,6 +309,11 @@ public sealed class CosmosGateway : ICosmosGateway
         while (iterator.HasMoreResults && results.Count < maxItems)
         {
             using var response = await iterator.ReadNextAsync(cancellationToken);
+            if (response.Content is null)
+            {
+                continue;
+            }
+
             using var doc = await JsonDocument.ParseAsync(response.Content, cancellationToken: cancellationToken);
             if (doc.RootElement.TryGetProperty("Documents", out var documents))
             {
