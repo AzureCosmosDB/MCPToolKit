@@ -58,3 +58,44 @@ public class BankingSampleConfigTests
         tools.Single(t => t.Name == "post_account_transaction").Governance.ReadOnly.Should().BeFalse();
     }
 }
+
+/// <summary>
+/// Validates the non-banking (e-commerce) sample. Its sole purpose is to prove the runtime is
+/// generic: a completely different domain loads and registers on the identical engine with no code
+/// changes — only a different YAML file.
+/// </summary>
+public class EcommerceSampleConfigTests
+{
+    private static string SamplePath => Path.Combine(AppContext.BaseDirectory, "samples", "ecommerce-cosmos-tools.yaml");
+
+    private static Dictionary<string, string?> Env => new(StringComparer.Ordinal)
+    {
+        ["COSMOS_ENDPOINT"] = "https://shop.documents.azure.com/",
+        ["COSMOS_DATABASE"] = "catalog",
+    };
+
+    [Fact]
+    public void Sample_loads_and_validates()
+    {
+        var result = new ConfigurationLoader(Env).LoadFromFile(SamplePath);
+        result.IsValid.Should().BeTrue(string.Join("; ", result.Errors));
+        result.Configuration!.Sources.Should().ContainKey("catalog");
+    }
+
+    [Fact]
+    public void Sample_registers_expected_ecommerce_tools_on_the_same_engine()
+    {
+        var result = new ConfigurationLoader(Env).LoadFromFile(SamplePath);
+        var tools = ConfiguredToolSet.Build(result.Configuration!);
+
+        tools.Select(t => t.Name).Should().Contain(new[]
+        {
+            "get_product", "search_catalog", "list_customer_orders",
+            "update_product_price", "reserve_inventory",
+        });
+
+        tools.Single(t => t.Name == "get_product").IsWrite.Should().BeFalse();
+        tools.Single(t => t.Name == "update_product_price").IsWrite.Should().BeTrue();
+        tools.Single(t => t.Name == "reserve_inventory").Governance.ReadOnly.Should().BeFalse();
+    }
+}

@@ -84,5 +84,14 @@ It is deliberately **not** a workflow engine, saga orchestrator, or scripting ru
 
 ## A complete example
 
-See [`samples/banking/cosmos-tools.yaml`](../../samples/banking/cosmos-tools.yaml) for a full,
-working configuration covering point reads, queries, vector search, creates, and a transactional batch.
+The toolkit engine is **domain-agnostic** — it executes whatever a config file describes. See the
+[samples overview](../../samples/README.md), which includes two configs built on the identical engine
+with no code differences:
+
+- [`samples/banking/cosmos-tools.yaml`](../../samples/banking/cosmos-tools.yaml) — retail banking
+  (hierarchical partition keys, tenant isolation, point-read, query, vector-search, create, transactional-batch).
+- [`samples/ecommerce/cosmos-tools.yaml`](../../samples/ecommerce/cosmos-tools.yaml) — a different
+  domain (catalog/orders) using point-read, query, hybrid-search, patch with an allow-list, and a
+  bounded `sequence` with an assertion.
+
+Anything expressible with the supported operation types works for any Cosmos-backed application.

@@ -1,0 +1,157 @@
+# =====================================================================================
+# Azure Cosmos DB MCP Toolkit — E-COMMERCE example (non-banking)
+# =====================================================================================
+# This sample intentionally uses a completely different domain than the banking sample to
+# demonstrate that the toolkit runtime is GENERIC. It shares NO toolkit code with the banking
+# sample — only a different YAML file. Enable it with COSMOS_TOOLS_CONFIG.
+#
+# Assumed data model:
+#   products  container — partition key /category, docs have /price, /description, /embedding
+#   orders    container — partition key /customerId
+#   inventory container — partition key /sku, docs have /available
+# =====================================================================================
+
+version: "1.0"
+
+sources:
+  catalog:
+    type: cosmos
+    endpoint: "${COSMOS_ENDPOINT}"
+    database: "${COSMOS_DATABASE}"
+    authentication:
+      type: managed-identity
+
+defaults:
+  source: catalog
+  governance:
+    timeoutMs: 5000
+    maxItems: 100
+    readOnly: true
+
+tools:
+
+  # Point read -------------------------------------------------------------------------
+  get_product:
+    description: Returns a single product by id.
+    tags: [catalog, read]
+    operation:
+      type: point-read
+      container: products
+      id: "${productId}"
+      partitionKey: "${category}"
+    input:
+      type: object
+      required: [category, productId]
+      properties:
+        category: { type: string }
+        productId: { type: string }
+    output:
+      select:
+        id: id
+        name: name
+        price: price
+        inStock: inStock
+
+  # Hybrid search ----------------------------------------------------------------------
+  search_catalog:
+    description: Finds products matching a natural-language query (semantic + keyword).
+    tags: [catalog, search]
+    operation:
+      type: hybrid-search
+      container: products
+      searchText: "${query}"
+      vectorPath: /embedding
+      textPath: /description
+      topK: 10
+      select: [id, name, price, description]
+    input:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1, maxLength: 500 }
+    governance:
+      maxTopK: 20
+
+  # Parameterised, partition-scoped query ----------------------------------------------
+  list_customer_orders:
+    description: Lists a customer's most recent orders.
+    tags: [orders, read]
+    operation:
+      type: query
+      container: orders
+      statement: |
+        SELECT TOP @limit c.id, c.total, c.status, c.placedAt
+        FROM c
+        WHERE c.customerId = @customerId
+        ORDER BY c.placedAt DESC
+      parameters:
+        customerId: "${customerId}"
+        limit: "${limit}"
+      partitionKey: "${customerId}"
+    input:
+      type: object
+      required: [customerId]
+      properties:
+        customerId: { type: string }
+        limit: { type: integer, default: 20, minimum: 1, maximum: 100 }
+
+  # Patch with an allow-list (write, explicitly enabled) --------------------------------
+  update_product_price:
+    description: Updates a product's list price.
+    tags: [catalog, write]
+    governance:
+      readOnly: false
+      allowedPatchPaths: ["/price"]
+    operation:
+      type: patch
+      container: products
+      id: "${productId}"
+      partitionKey: "${category}"
+      operations:
+        - op: replace
+          path: /price
+          value: "${newPrice}"
+      concurrency:
+        ifMatch: "${etag}"
+    input:
+      type: object
+      required: [category, productId, newPrice]
+      properties:
+        category: { type: string }
+        productId: { type: string }
+        newPrice: { type: number, minimum: 0 }
+        etag: { type: string, default: "" }
+
+  # Bounded Cosmos-only composition: read → assert → write, within one partition ---------
+  reserve_inventory:
+    description: Reserves stock for a SKU if enough is available.
+    tags: [inventory, write]
+    governance:
+      readOnly: false
+      allowedPatchPaths: ["/available"]
+    operation:
+      type: sequence
+      container: inventory
+      partitionKey: "${sku}"
+      steps:
+        - id: current
+          type: point-read
+          itemId: "${sku}"
+        - id: checkStock
+          type: assert
+          expression: "${steps.current.available >= input.quantity}"
+          message: Insufficient stock for the requested quantity.
+        - id: reserve
+          type: patch
+          itemId: "${sku}"
+          operations:
+            - op: increment
+              path: /available
+              value: "${negativeQuantity}"
+    input:
+      type: object
+      required: [sku, quantity, negativeQuantity]
+      properties:
+        sku: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        negativeQuantity: { type: integer, maximum: -1 }

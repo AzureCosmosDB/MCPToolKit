@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hierarchical (subpartitioned) partition key support (`partitionKeys: [...]`).
 - Shared `ICosmosGateway` provider surface, injection-resistant parameter binding, closed input
   schema generation, and output projection/redaction.
-- `samples/banking/cosmos-tools.yaml` and `docs/declarative-tools/*` (YAML reference, security &
+- `samples/banking/cosmos-tools.yaml`, `samples/ecommerce/cosmos-tools.yaml` (a non-banking example
+  proving the engine is domain-agnostic), and `docs/declarative-tools/*` (YAML reference, security &
   governance, GA compatibility matrix, banking migration walkthrough).
 
 ### Compatibility
