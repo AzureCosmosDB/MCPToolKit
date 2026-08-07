@@ -1,5 +1,28 @@
+"""
 
+the front door to corpus search.
 
+This module ties the retrieval pieces together into one object that the rest of
+the system talks to. 
+
+Give it a container plus a description of that container (its
+schema and capabilities) and it can answer three kinds of request: search for the
+most relevant items, find candidate rows for a grep, and read back a whole
+document by id.
+
+Under the hood it wires up and drives the components: the planner picks a
+strategy for each request, the compiler turns that into SQL, and the executor
+runs it (each covered in its own file). 
+
+When a request needs a query embedding
+and none was supplied, it asks the configured embedder to produce one first,
+document reads are handed off to a resolver built for the container's layout. All
+of that is hidden behind the three methods, so callers never touch the moving
+parts directly.
+
+This is the object that binding.py assembles and hands out, and it is where a
+search request begins its journey through the system.
+"""
 
 from __future__ import annotations
 

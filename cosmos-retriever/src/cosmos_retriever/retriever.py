@@ -1,4 +1,30 @@
 
+"""The top-level entry point for running a search.
+
+This module is what an application actually holds onto: a single CosmosRetriever
+that you point at a corpus and ask questions. It gathers everything a run needs
+from the service settings (see config.py), which corpus to search, how to reach
+Cosmos and the models, which reranker to use, wires those pieces together once at
+construction time, and then answers searches through one search method.
+
+Each search is carried out by the multi-turn retrieval agent, which this class
+hands off to depending on the configured model backend (chat, responses, or
+Anthropic.
+
+The loops themselves live in agent_loop.py). It gives the agent the
+set of tools it can call (the ToolSet), an approximate token counter used for
+budgeting, and a reranker, then packages whatever the agent returns into a plain
+RetrievalResult: the ranked documents plus timing, token usage, and a trace
+of what happened.
+
+It also handles two shapes of corpus. A normal corpus is one Cosmos container, a
+corpus named "*" means search every searchable container in the database at once,
+in which case a cross-collection retriever is built across all of them.
+
+Callers only ever touch three things from here: CosmosRetriever and the two
+result records, RetrievalResult and RetrievedDocument.
+"""
+
 from __future__ import annotations
 
 import time

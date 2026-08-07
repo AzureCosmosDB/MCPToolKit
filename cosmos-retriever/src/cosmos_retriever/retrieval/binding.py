@@ -1,3 +1,20 @@
+"""Turn a container's description into a ready to use retriever.
+
+This module is the bridge between discovery and search. Discovery tells us what a
+Cosmos DB container looks like. the functions here take that description and
+produce the two things a retriever needs to run against it: a statement of what
+the container can do (its capabilities) and a map of where the useful fields live
+(its schema). With those in hand, they assemble a fully wired CorpusRetriever.
+
+The mapping can be nudged by hand. A container's raw settings don't always name
+fields the way this system expects, so a SchemaOverride may be supplied to
+point at the id, chunk, title, or source fields explicitly.
+
+Two builders are offered. One takes a container description you already have; the
+other reads the description straight from a live container first, then builds on
+top of it, so callers with only a connection can get a retriever in one step.
+"""
+
 from __future__ import annotations
 
 from cosmos_retriever.retrieval.capabilities import (

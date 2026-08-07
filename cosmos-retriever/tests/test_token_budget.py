@@ -1,4 +1,4 @@
-"""Comprehensive tests for the ported token-budget system.
+"""Comprehensive tests for the token-budget system.
 
 Covers, against the REAL agent loops (with a scripted fake LLM client + fake
 tools), every feature ported from upstream harness/agent.py:

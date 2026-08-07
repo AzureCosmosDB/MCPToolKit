@@ -1,24 +1,28 @@
-"""Configuration for the Cosmos Retriever service.
+"""All the settings the service runs on, in one place.
 
-Defines the single settings object (:class:`RetrieverSettings`) and the resolved
-per-corpus view (:class:`CorpusConfig`) the rest of the service reads from. The
-module has two distinct halves:
+This module is where the Cosmos Retriever gets its configuration. An operator
+sets values through environment variables or a .env file: which inference
+backend to use, how to reach the chat and embedding endpoints, which Cosmos
+account to query, token budgets, cache sizes, and so on. 
 
-* **User-facing input schema** — the ``RetrieverSettings`` *fields*. These are the
-  environment variables / ``.env`` keys an operator sets (``INFERENCE_BACKEND``,
-  ``CHAT_BASE_URL``, ``ACCOUNT_URI``, token budgets, cache sizing, …); each
-  field's default and ``description`` documents the knob. This is the public
-  surface.
-* **Internal resolution** — the methods (``resolve_corpus``, ``_load_registry``,
-  ``build_*_client``, ``apply_structural_overrides``, and the ``use_*_backend``
-  properties). These are consumed only by the code to turn raw settings plus the
-  corpus registry into concrete clients and a resolved ``CorpusConfig``; users
-  never call them.
+Everything the service
+needs to know about its environment is gathered here and validated on the way in,
+so a bad value is caught at startup rather than mid request.
 
-So the file is user-facing in its *inputs* and internal in its *logic*. The two
-halves share a module because the resolution methods are tightly coupled to the
-field set; the natural split if this grows is ``settings.py`` (fields) +
-``resolution.py`` (methods).
+There are two things to read the module as. The settings object is the list of
+knobs an operator can turn; each one carries a default and a short description of
+what it does, and that set of fields is the whole public surface. The rest of the
+module is the quiet machinery that turns those raw values into things the service
+can actually use: live connections to Cosmos and the model endpoints, and a
+resolved, per-corpus view that pins down the exact account, database, container,
+and embedding details for one corpus. 
+
+Callers ask for that resolved view and the
+clients, they never touch the wiring behind it.
+
+A single corpus can also override the shared defaults through a registry, so one
+deployment can serve several corpora that live in different places or use
+different embedding models.
 """
 
 from __future__ import annotations

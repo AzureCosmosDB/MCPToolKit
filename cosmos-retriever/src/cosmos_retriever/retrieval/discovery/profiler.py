@@ -1,3 +1,17 @@
+"""Work out what kinds of search a Cosmos DB container supports.
+
+Cosmos DB describes each container with a bundle of raw settings: how it is
+partitioned, which fields are indexed, and whether it is set up for full-text or
+vector search. This module turns that raw description into two tidy answers:
+what the container looks like, and what you can do with it.
+
+The work happens in two steps. First the raw settings are read and organised
+into a plain ContainerMetadata record. Then that record is inspected to
+decide which search strategies the container can actually serve: vector search,
+full-text search, a native combination of the two, or a simple lookup by id
+and the answer is returned as a CapabilityProfile.
+"""
+
 from __future__ import annotations
 
 import time

@@ -1,4 +1,28 @@
 
+"""Pick the search strategy that best fits a container.
+
+Different containers can do different things: some are set up for vector search,
+some for full text search, some for both, some for neither. This module looks at
+what a container actually supports and chooses how a given request should be run,
+handing back a ready to use strategy object.
+
+The choice is driven by two inputs. The corpus schema says which fields exist and
+where they live. the capabilities (see the capabilities file) say which of those
+fields are truly searchable, and how. 
+
+A request may also pin a mode outright, 
+in which case the planner either follows through it or raises if the
+container cant satisfy it. Left on auto, it prefers the richest option
+available and falls back gracefully: native hybrid if the container ranks vector
+and text together for you, otherwise combining the two results itself, then
+whichever single mode is available, and finally a bounded scan if the policy
+permits one.
+
+The planner only decides, it does not run anything. The strategy it returns (one
+of the classes defined in the strategies file) is what goes on to build SQL
+through the compiler and run it through the executor.
+"""
+
 from __future__ import annotations
 
 import structlog

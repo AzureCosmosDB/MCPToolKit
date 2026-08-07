@@ -1,3 +1,24 @@
+"""The actions the retrieval agent is allowed to take.
+
+Every move the agent can make during a search is a tool defined here: search the
+corpus, grep it for a pattern, read a whole document, discard chunks it no longer
+needs, and, when explicitly enabled, run a read-only query directly. Each tool
+carries a self-describing schema (its name, what it does, and the arguments it
+accepts) and knows how to run itself, returning both the text the agent sees and
+a little metadata about what happened.
+
+The same tool has to be described in whichever shape the chosen model expects, so
+each schema can render itself into the OpenAI, OpenAI-Harmony, or Anthropic wire
+format on demand. That is what lets one set of tools work across all three
+backends without change.
+
+Tools are gathered into a ToolSet, the bundle handed to the agent loop (see
+agent_loop.py), which is what actually calls them turn by turn. A build helper
+assembles the standard set for a corpus, wiring each tool to the underlying
+corpus retriever and reranker so callers don't construct them piece by piece.
+
+
+"""
 
 from __future__ import annotations
 

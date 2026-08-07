@@ -1,3 +1,21 @@
+"""Run a compiled query against Cosmos DB and hand back the rows.
+
+Once a search has been turned into SQL (for details on how that is done, refer to the compiler), 
+this module is what actually sends it to Cosmos DB and collects the results. It is the last step 
+before raw rows flow back into the retriever.
+
+Running a query here comes with three safeguards. Transient failures are 
+retried automatically with growing pauses between attempts, so a momentary hiccup 
+doesn't sink a request. 
+
+The number of queries allowed to run at the same time is capped, 
+so a burst of searches can't overwhelm the account. 
+
+the cap defaults to a sensible value 
+and can be raised or lowered through an environment variable. And any query that takes
+unusually long is logged, to make slow spots easy to spot.
+"""
+
 from __future__ import annotations
 
 import os

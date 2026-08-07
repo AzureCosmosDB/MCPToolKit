@@ -1,3 +1,18 @@
+"""Browse a Cosmos DB account and remember what each container can do.
+
+This module is the single place the rest of the system asks "what databases and
+containers exist, and what kind of search does this one support?". It talks to
+Cosmos DB to list databases and containers, reads a container's settings when
+asked, and hands back either the raw description or a ready made judgement of
+which search strategies the container supports.
+
+Because reading a container's settings is a network round trip, answers are
+cached and shared. Each cached entry expires after a set time, and the cache
+keeps only a fixed number of the most recently used containers so it never grows
+without bound. The cache can be cleared or refreshed at any time, and every
+operation on it is safe to call from multiple threads at once.
+"""
+
 from __future__ import annotations
 
 import threading

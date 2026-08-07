@@ -1,3 +1,27 @@
+"""Build Cosmos DB SQL queries for the retriever.
+
+A search request in this system is described in high-level terms: find the
+nearest vectors, match this text, keep only rows that pass these filters, skip
+these ids, return this many. This module translates such a request into the exact
+Cosmos DB SQL string and parameter list needed to run it.
+
+Requests speak in logical field names: "title", "document_id", "chunk_id" and
+so on rather than raw document paths. The compiler looks each name up in the
+corpus schema to find where that field actually lives, so the same request works
+against containers that store their data differently.
+
+One method is provided per search style: nearest-vector search, full-text search,
+the two combined into a single ranked query, a plain filter-only lookup, and
+fetching every chunk of one document. 
+
+They share the same building blocks: the
+list of columns to return, the WHERE clause, and the id-exclusion list and all
+put user-supplied values into query parameters rather than into the SQL text, so
+untrusted input can never alter the query's structure.
+
+To follow the query's flow through the system, follow the executor file to see the aftermath.
+"""
+
 from __future__ import annotations
 
 from typing import Any

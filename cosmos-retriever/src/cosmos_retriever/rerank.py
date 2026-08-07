@@ -1,3 +1,15 @@
+"""Re-score a shortlist of documents by how well they match the query.
+
+Search gets you a rough shortlist; reranking sharpens it. Given a query and a
+list of candidate documents, the classes here ask a relevance model to score each
+one and hand the list back sorted best-first. They can also stop once a token
+budget is reached, so a caller only keeps as much text as it has room for.
+
+Connection details and API keys are pulled from the service config (see
+config.py) when not passed in explicitly. The module can also be run directly as
+a small command-line demo that reranks a sample query.
+"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -26,7 +38,6 @@ class RerankResult:
 
 
 class Reranker(ABC):
-
     """Abstract base for rerankers: score query–document relevance, then rank.
 
     Concrete subclasses implement :meth:`_rerank` — call their scoring backend and

@@ -1,4 +1,22 @@
 
+"""The HTTP service that puts the retriever behind an API.
+
+This module wraps the search agent in a small web service so other systems can
+call it over HTTP instead of importing the code. It exposes a /search
+endpoint that takes a natural-language query (plus an optional database and
+container to aim at) and returns the ranked documents, along with a couple of
+operator endpoints for checking health and viewing or adjusting server settings
+while it runs.
+
+Each request may also pin which database and container to search: a database is
+always required, while leaving the container off means "search the whole
+database". Per-request overrides can further tweak model and budget settings for
+that one call without disturbing the server's defaults.
+
+The actual search work is delegated to CosmosRetriever (see retriever.py);
+this module only handles the web layer, caching, and request wiring.
+"""
+
 from __future__ import annotations
 
 import asyncio

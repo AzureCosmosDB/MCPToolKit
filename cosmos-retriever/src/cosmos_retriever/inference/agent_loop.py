@@ -1,3 +1,27 @@
+"""Run a language model as a document-retrieval agent.
+
+This is the only part of the entire folder that interacts with the LLM endpoint, 
+everything else is built on top of the interaction here.
+
+Given a user query and a set of tools, the functions here let a language model
+search a corpus over several turns and hand back the documents it judged most
+relevant. The model works in a loop: it calls tools (to search, read, or discard
+text), reads the results, and repeats until it has gathered enough to answer, at
+which point it emits a ranked list of documents. Each result is returned as an
+AgentSearchResult.
+
+The same loop is offered against three different model APIs, one function per
+API. Callers pick whichever matches the model they are talking to. all three take
+a query and return the same result type, so they are interchangeable from the
+outside.
+
+A running loop keeps its own token budget so a conversation cannot grow without
+bound. As the transcript fills up, old search results are trimmed, duplicate
+documents are skipped, and oversized tool outputs are shortened. If the budget is
+nearly spent, the model is asked to either discard material or give its final
+answer. if it is fully spent, further searching is refused.
+"""
+
 
 from __future__ import annotations
 
@@ -22,9 +46,7 @@ logger = structlog.get_logger("cosmos_retriever.inference.agent_loop")
 
 
 # Library-level fallback budgets, used only when run_* is called directly without
-# explicit values. Through CosmosRetriever these are always overridden by settings
-# (COSMOS_RETRIEVER_THRESHOLD_BUDGET / COSMOS_RETRIEVER_TOKEN_BUDGET env vars, or a
-# live PATCH /config), so tuning happens there, not by editing these constants.
+# explicit values.
 _DEFAULT_THRESHOLD_BUDGET = 16384   # soft cap: prompt prune/conclude + restrict to prune
 _DEFAULT_TOKEN_BUDGET = 32268       # hard cap
 _DEFAULT_TOOL_OUTPUT_BUDGET = 4096  # clamp search/read output when remaining < this
@@ -36,13 +58,6 @@ _TOKEN_MARKER_RE = re.compile(r"\n\n\[Token usage:")
 
 def _remove_chunks_from_text(text: str, chunk_ids: set[str]) -> str:
     """Replace pruned ``# DOCUMENT ID: <id>`` blocks with a tombstone marker.
-
-    Rather than deleting the block outright (which silently rewrites the single
-    physical copy of the chunk that lives in an earlier observation), the block
-    body is swapped for a compact ``# DOCUMENT ID: <id> [pruned]`` line. This
-    reclaims almost all of the tokens while leaving a trace so the model can see
-    that *it* pruned the chunk. The operation is idempotent: re-pruning a
-    tombstone yields the same tombstone.
     """
     if not text or not chunk_ids:
         return text

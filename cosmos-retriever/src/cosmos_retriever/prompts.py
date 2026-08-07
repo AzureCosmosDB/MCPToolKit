@@ -1,3 +1,15 @@
+"""The words the retrieval agent is given to work with.
+
+This module holds the fixed text that steers the retrieval agent: the main
+instructions that tell it what its job is and how to behave, and a short warning
+sent when it is running low on room to work. Both are produced by small helper
+functions that drop the current query or budget numbers into a ready-made
+template, so the surrounding code never has to build these long strings by hand.
+
+These templates are consumed by the agent loop (see agent_loop.py), which feeds
+the main prompt in at the start of a run and injects the budget message when the
+transcript grows too large.
+"""
 
 from __future__ import annotations
 
