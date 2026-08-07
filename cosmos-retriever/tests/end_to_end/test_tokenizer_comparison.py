@@ -8,12 +8,19 @@ Gemini/Gemma, Qwen, Mistral, and older OpenAI encodings) on pure English prose,
 using the actual ``_text_token_counter`` for the harmony side.
 
 The corpus, tokenizer loaders, and harmony reference counts live in
-``tokenizer_panel`` (run ``python tests/tokenizer_panel.py`` to regenerate the
+``tokenizer_panel`` (run ``python tests/end_to_end/tokenizer_panel.py`` to regenerate the
 numbers pinned below). English is the convergence case: modern BPE tokenizers
 agree closely here, so the drift is small and the bounds are tight. Tokenizers
 come from tiktoken (bundled), the local HF cache (Qwen, gpt-oss), and HF community
 ports for the closed models (Claude/Gemini publish no tokenizer file). Anything
 unavailable offline is skipped, never faked.
+
+How to run.
+1. Install tiktoken and tokenizers into the virtual environment.
+2. Allow network access so the model tokenizers can download from Hugging Face, or prime the local cache first.
+3. Run pytest on tests/end_to_end/test_tokenizer_comparison.py.
+
+See tests/README.md for the full setup.
 """
 from __future__ import annotations
 

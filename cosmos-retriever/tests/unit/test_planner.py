@@ -1,10 +1,10 @@
 """Exhaustive tests for `cosmos_retriever.retrieval.planner`.
 
-RetrievalPlanner only *decides*: it inspects schema + capabilities (+ policy)
-and returns a strategy class. Tests fake the schema and capabilities to drive
-_vector_ok / _fts_ok through every branch, and drive plan_search by overriding
-those two helpers on the instance so the mode/auto cascade is checked in
-isolation. No Cosmos / network.
+RetrievalPlanner chooses which search strategy to use for a request (based on the
+schema, capabilities, and policy) but never runs it. Tests fake the schema and
+capabilities to drive _vector_ok / _fts_ok through every branch, and override
+those two helpers to check the plan_search mode/auto cascade in isolation. No
+Cosmos / network.
 """
 from __future__ import annotations
 

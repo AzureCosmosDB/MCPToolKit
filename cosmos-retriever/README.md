@@ -1,13 +1,15 @@
 # Cosmos Retriever (Python helper)
 
-A Python library + FastAPI service that runs a multi-turn search agent
-(a fine-tuned `openai/gpt-oss-20b` served by vLLM, or any OpenAI-compatible
-model) against an Azure Cosmos DB corpus and returns the curated documents as
-JSON.
+This package runs a multi-turn search agent against an Azure Cosmos DB corpus and
+returns the curated documents as JSON. The agent is model-agnostic: it drives any
+OpenAI-compatible endpoint (the `/responses` or `/chat/completions` APIs) or an
+Anthropic Messages endpoint. The same code is available three ways, an importable
+Python package (`CosmosRetriever`), a FastAPI service
+(`python -m cosmos_retriever serve`), and a one-shot CLI
+(`python -m cosmos_retriever search`).
 
-The [Azure Cosmos DB MCP Toolkit](../MCPToolKit/)'s `agentic_search` tool
-calls this service's `POST /search` endpoint over HTTP. A one-shot CLI is also
-provided for local testing.
+The [Azure Cosmos DB MCP Toolkit](../MCPToolKit/)'s `agentic_search` tool calls
+this service's `POST /search` endpoint over HTTP.
 
 ```text
   Claude Desktop / AI Foundry / VS Code
@@ -52,6 +54,8 @@ Endpoints:
 | `GET /health` | `{"status": "ok"}` |
 | `POST /search` | request `{"query": str, "maxDocuments": int, "database": str?, "container": str?}` → the JSON result below |
 
+Example request to test a running service (the query and its answer depend on the corpus you configured):
+
 ```bash
 curl -s http://127.0.0.1:9000/search \
   -H 'content-type: application/json' \
@@ -60,7 +64,9 @@ curl -s http://127.0.0.1:9000/search \
 
 ## CLI
 
-A one-shot CLI for local testing. JSON goes to **stdout**, logs go to **stderr**.
+To smoke-test locally, use the command below to query the service with a single
+question and print the answer documents. JSON goes to **stdout**, logs go to
+**stderr**.
 
 ```bash
 python -m cosmos_retriever search \
@@ -68,7 +74,7 @@ python -m cosmos_retriever search \
   --max-documents 5
 ```
 
-Output (same schema returned by `POST /search`):
+Expected output (same schema returned by `POST /search`):
 ```json
 {
   "query": "Who discovered radium?",
@@ -82,16 +88,19 @@ Output (same schema returned by `POST /search`):
 
 ## Configuration
 
-All settings come from environment variables (or a `.env` / `.env.local` file
-at the repo root). Required:
+All settings come from environment variables, or from a `.env` / `.env.local`
+file in the `cosmos-retriever/` directory. Precedence is real environment
+variables first, then `.env.local`, then `.env`. Use `.env.local` for local
+secrets and overrides, it is gitignored. Required settings:
 
-| Variable | Purpose |
+| Variables | Purpose |
 |---|---|
-| `CHAT_BASE_URL` / `CHAT_API_KEY` / `CHAT_MODEL` | LLM endpoint that drives the retrieval agent |
-| `ACCOUNT_URI` / `COSMOS_DATABASE` / `COSMOS_CORPUS_CONTAINER` | Cosmos target |
-| `OPENAI_API_KEY` / `OPENAI_EMBEDDING_MODEL` | Embeddings backend (set `EMBED_ENDPOINT` for Azure or a local server) |
+| `INFERENCE_BACKEND`, `CHAT_BASE_URL`, `CHAT_API_KEY`, `CHAT_MODEL` | The backend, endpoint, key, and model for the LLM that drives the agent (see Inference backend below) |
+| `ACCOUNT_URI`, `COSMOS_DATABASE`, `COSMOS_CORPUS_CONTAINER` | The Cosmos account, database, and container to search |
+| `OPENAI_API_KEY`, `OPENAI_EMBEDDING_MODEL` | The embeddings key and model (set `EMBED_ENDPOINT` for Azure or a local server) |
 
-See [`.env.example`](.env.example) for the complete list of settings and their defaults.
+Each row is a group of related settings, not alternatives. See
+[`.env.example`](.env.example) for the complete list and defaults.
 
 ### Inference backend
 
@@ -114,9 +123,15 @@ CHAT_MODEL=gpt-4o \
 python -m cosmos_retriever serve
 ```
 
-Optional reranker (pick at most one):
-- `BASETEN_API_KEY` + `BASETEN_MODEL_URL` — Baseten Qwen3-Reranker-8B classify
-- `VLLM_RERANKER_URL` — local vLLM `/score` endpoint with Qwen3-Reranker-8B
+### Optional reranker
+
+An independent reranker model can be configured to reorder the retrieved
+documents by relevance before they are returned, which improves the quality of
+the final ranking. It is optional. Without it, the agent keeps the raw retrieval
+order. Configure at most one of:
+
+- `VLLM_RERANKER_URL`, a local vLLM `/score` endpoint serving Qwen3-Reranker-8B.
+- `BASETEN_API_KEY` and `BASETEN_MODEL_URL`, a Baseten Qwen3-Reranker-8B deployment.
 
 ## Layout
 

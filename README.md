@@ -40,7 +40,7 @@ This toolkit provides:
 | `text_search` | Search for documents where a property contains a search phrase |
 | `vector_search` | Perform vector search using Azure OpenAI embeddings |
 | `hybrid_search` | Perform hybrid search combining vector similarity and full-text keyword search using Reciprocal Rank Fusion (RRF) |
-| `agentic_search` | Run a multi-turn retrieval agent (built from scratch for this toolkit) against a Cosmos DB corpus. Backed by the bundled [`cosmos-retriever/`](cosmos-retriever/) FastAPI service; see [docs/AGENTIC_SEARCH.md](docs/AGENTIC_SEARCH.md) for setup and per-corpus configuration. |
+| `agentic_search` | Perform multi-turn retrieval with a configurable agent. The agent rewrites the query, issues tool calls against the configured corpus and containers, and returns the most relevant documents. See [docs/AGENTIC_SEARCH.md](docs/AGENTIC_SEARCH.md) for setup and configuration. |
 
 ## Project Structure
 

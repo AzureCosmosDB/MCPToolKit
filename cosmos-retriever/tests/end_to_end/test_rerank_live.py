@@ -8,6 +8,13 @@ that exposes a vLLM-compatible ``/score`` endpoint returning
 The test is skipped unless a reachable server is found. Point it at a server
 with ``VLLM_RERANKER_URL`` (default ``http://127.0.0.1:8011``). It was validated
 against the real Qwen3-Reranker-8B weights served locally.
+
+How to run.
+1. Start a Qwen3 reranker that serves the vLLM score endpoint on port 8011.
+2. If the server runs elsewhere, set VLLM_RERANKER_URL to its base url.
+3. Run pytest on tests/end_to_end/test_rerank_live.py.
+
+See tests/README.md for the full setup.
 """
 from __future__ import annotations
 

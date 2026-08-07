@@ -14,6 +14,16 @@ Opt-in only: the whole module is skipped unless ``RUN_SKF_LIVE`` is truthy and
 ``.env.local`` points ``ACCOUNT_URI`` at ``skf-rag-test``. It relies on the real
 ``.env.local`` (the tests/conftest env-isolation deliberately excludes this
 folder). Requires ``az login`` with the Cosmos Data Reader role.
+
+How to run.
+1. Run az login for the subscription that owns the skf-rag-test account.
+2. Give your identity the Cosmos DB Data Reader role on that account.
+3. Fill cosmos-retriever/.env.local with ACCOUNT_URI, the embeddings endpoint and key, and the chat endpoint, model and key.
+4. Start the local Qwen3 reranker so the score endpoint answers on port 8011.
+5. Set the environment variable RUN_SKF_LIVE to 1.
+6. Run pytest on tests/end_to_end/test_skf_live.py.
+
+See tests/README.md for the full setup.
 """
 from __future__ import annotations
 

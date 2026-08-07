@@ -10,11 +10,10 @@ using Xunit;
 namespace AzureCosmosDB.MCP.Toolkit.Tests;
 
 /// <summary>
-/// Tests for <see cref="AgenticSearchExecutor"/>. Stands in for the
-/// cosmos-retriever FastAPI service with a tiny in-process
-/// <see cref="HttpListener"/> so we can verify the executor's response
-/// pass-through, timeout behaviour, and error-envelope generation without
-/// needing the real retriever service running.
+/// Tests for the AgenticSearchExecutor. Stands in for the cosmos-retriever
+/// FastAPI service with a tiny in-process HttpListener so we can verify the
+/// executor's response pass-through, timeout behaviour, and error-envelope
+/// generation without needing the real retriever service running.
 /// </summary>
 public sealed class AgenticSearchExecutorTests : IDisposable
 {
@@ -152,7 +151,7 @@ public sealed class AgenticSearchExecutorTests : IDisposable
     }
 
     /// <summary>
-    /// Minimal in-process HTTP server backed by <see cref="HttpListener"/>.
+    /// Minimal in-process HTTP server backed by HttpListener.
     /// The handler receives the request context plus the request body and
     /// returns the response body string.
     /// </summary>

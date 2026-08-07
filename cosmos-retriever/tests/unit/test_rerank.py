@@ -7,7 +7,8 @@ Covers, with fakes and no network access:
   3. Reranker._truncate_results — token annotation + budget truncation boundaries
   4. Reranker.__call__        — template: _rerank -> slow-warn -> truncate
   5. BasetenReranker          — classify() plumbing + yes/no label -> P("yes") score
-  6. VLLMQwen3Reranker        — /score plumbing, batching, retry/backoff
+  6. VLLMQwen3Reranker        — /score plumbing, batching, retry/backoff, and
+                                 degenerate/malformed model outputs
   7. ContextualReranker       — /rerank plumbing, payload/headers, error propagation
   8. Module surface           — VLLMReranker alias + a latent-config-bug guard
 
@@ -320,6 +321,14 @@ def test_baseten_missing_yes_scores_zero() -> None:
     assert out[0].score == 0.0
 
 
+def test_baseten_unexpected_labels_score_zero() -> None:
+    # Classifier emits labels the code never expects (never "yes") -> 0.0, no crash.
+    client = FakeBasetenClient([_group(("maybe", 0.9), ("garbage", 0.8))])
+    r = BasetenReranker(client=client)
+    out = r._rerank("q", ["d0"])
+    assert out[0].score == 0.0
+
+
 def test_baseten_empty_group_scores_zero() -> None:
     client = FakeBasetenClient([[]])
     r = BasetenReranker(client=client)
@@ -478,6 +487,65 @@ def test_vllm_scores_accumulate_in_order_and_coerce_float(monkeypatch) -> None:
     # scores were 0,1,2 -> sorted desc: c(2), b(1), a(0)
     assert [x.document for x in out] == ["c", "b", "a"]
     assert [x.original_index for x in out] == [2, 1, 0]
+
+
+def test_vllm_all_equal_scores_preserve_original_order(monkeypatch) -> None:
+    # Degenerate scoring: every document gets the same score. The sort is stable,
+    # so the reranker keeps the original order instead of shuffling arbitrarily.
+    def fake_post(url, json=None, timeout=None):  # noqa: A002
+        docs = json["text_2"]
+        return FakeHTTPResponse({"data": [{"score": 0.5} for _ in docs]})
+
+    monkeypatch.setattr(rerank.requests, "post", fake_post)
+    r = VLLMQwen3Reranker(base_url="http://h:1", batch_size=10)
+    out = r._rerank("q", ["a", "b", "c", "d"])
+    assert [x.original_index for x in out] == [0, 1, 2, 3]
+    assert [x.document for x in out] == ["a", "b", "c", "d"]
+
+
+def test_vllm_non_numeric_score_raises(monkeypatch) -> None:
+    # Model returns junk instead of a number -> float() raises. It is not a
+    # transient RequestException, so it surfaces immediately (no silent 0 score).
+    def fake_post(url, json=None, timeout=None):  # noqa: A002
+        return FakeHTTPResponse({"data": [{"score": "not-a-number"}]})
+
+    monkeypatch.setattr(rerank.requests, "post", fake_post)
+    r = VLLMQwen3Reranker(base_url="http://h:1")
+    with pytest.raises(ValueError):
+        r._rerank("q", ["d"])
+
+
+def test_vllm_missing_data_key_raises(monkeypatch) -> None:
+    # A malformed response body with no "data" field surfaces as a KeyError.
+    def fake_post(url, json=None, timeout=None):  # noqa: A002
+        return FakeHTTPResponse({"unexpected": []})
+
+    monkeypatch.setattr(rerank.requests, "post", fake_post)
+    r = VLLMQwen3Reranker(base_url="http://h:1")
+    with pytest.raises(KeyError):
+        r._rerank("q", ["d"])
+
+
+def test_vllm_fewer_scores_than_documents_drops_unscored(monkeypatch) -> None:
+    # Model returns fewer scores than documents -> the unscored tail is dropped
+    # (zip truncation) rather than crashing or inventing scores.
+    def fake_post(url, json=None, timeout=None):  # noqa: A002
+        return FakeHTTPResponse({"data": [{"score": 0.9}]})  # one score, three docs
+
+    monkeypatch.setattr(rerank.requests, "post", fake_post)
+    r = VLLMQwen3Reranker(base_url="http://h:1", batch_size=10)
+    out = r._rerank("q", ["a", "b", "c"])
+    assert [x.document for x in out] == ["a"]
+
+
+def test_vllm_more_scores_than_documents_ignores_extra(monkeypatch) -> None:
+    def fake_post(url, json=None, timeout=None):  # noqa: A002
+        return FakeHTTPResponse({"data": [{"score": s} for s in (0.1, 0.2, 0.3)]})
+
+    monkeypatch.setattr(rerank.requests, "post", fake_post)
+    r = VLLMQwen3Reranker(base_url="http://h:1", batch_size=10)
+    out = r._rerank("q", ["only-one"])
+    assert len(out) == 1 and out[0].document == "only-one"
 
 
 def test_vllm_retries_then_succeeds(monkeypatch) -> None:

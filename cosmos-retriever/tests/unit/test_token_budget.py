@@ -1,10 +1,10 @@
 """Comprehensive tests for the token-budget system.
 
 Covers, against the REAL agent loops (with a scripted fake LLM client + fake
-tools), every feature ported from upstream harness/agent.py:
+tools), every budgeting feature:
 
-  1. Real pruning        (prune_chunks_from_trajectory parity)
-  2. Cross-turn dedup    (DeduplicatingPruningSearchAgent parity)
+  1. Real pruning        (prune_chunks_from_trajectory)
+  2. Cross-turn dedup    (DeduplicatingPruningSearchAgent)
   3. Spillage/rejection  (rejection_budget cutoff)
   4. Tool-output clamping (max_tokens override when budget tight)
   5. Token budgeting     (threshold -> prune/conclude + tool restriction, marker)

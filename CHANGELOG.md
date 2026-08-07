@@ -8,15 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2026-06-18
 
 ### Added
-- **`agentic_search` tool**: Runs a multi-turn retrieval agent — built from
-  scratch for this toolkit — against a Cosmos DB corpus and
-  returns ranked, curated documents that best answer the query. The agent
-  issues hybrid (vector + full-text) RRF searches, optionally reranks with
-  Qwen3-Reranker-8B, reads full documents, and prunes its context across
-  multiple turns. Implemented as a subprocess call into the companion
-  [`cosmos-retriever`](https://github.com/your-org/cosmos-retriever)
-  Python package; see [`docs/AGENTIC_SEARCH.md`](docs/AGENTIC_SEARCH.md) for
-  the deployment story.
+- **`agentic_search` tool**: Runs a multi-turn retrieval agent against a Cosmos
+  DB corpus and returns ranked, curated documents that best answer the query.
+  Given a query, the agent will (1) issue hybrid (vector + full-text) RRF
+  searches, (2) optionally rerank the hits with Qwen3-Reranker-8B, (3) read full
+  documents, and (4) prune its context across multiple turns. Implemented as a
+  subprocess call into the companion [`cosmos-retriever/`](cosmos-retriever/)
+  Python package; see [`docs/AGENTIC_SEARCH.md`](docs/AGENTIC_SEARCH.md) for the
+  deployment story.
 - Optional `database` and `container` arguments on `agentic_search` so a
   single MCP server can target multiple Cosmos corpora at request time. When
   the corpus registry (`CORPUS_REGISTRY` / `CORPUS_REGISTRY_FILE`) is set

@@ -13,6 +13,15 @@ field-set adaptation is verified, plus override application and determinism.
 
 Opt-in: skipped unless ``RUN_SKF_LIVE`` is truthy and ``.env.local`` points at
 ``skf-rag-test``. Requires ``az login`` with the Cosmos Data Reader role.
+
+How to run.
+1. Run az login for the subscription that owns the skf-rag-test account.
+2. Give your identity the Cosmos DB Data Reader role on that account.
+3. Fill cosmos-retriever/.env.local with ACCOUNT_URI and the embeddings endpoint and key.
+4. Set the environment variable RUN_SKF_LIVE to 1.
+5. Run pytest on tests/end_to_end/test_skf_discovery_live.py.
+
+See tests/README.md for the full setup.
 """
 from __future__ import annotations
 

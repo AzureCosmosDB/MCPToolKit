@@ -13,6 +13,30 @@ gpt-oss/Harmony and o200k-family models and verify:
     monotonicity, sub-additivity, and special-token rejection).
 
 Ground-truth counts are pinned for tiktoken 0.13.0.
+
+Sample results (o200k_harmony token counts):
+
+    ""                       0
+    "hello"                  1
+    "Hello, world!"          4
+    9-word English pangram   9
+    "机器学习很有趣" (CJK)     5
+    "I love 😀 pizza 🍕"      6
+
+Cross-model drift on English prose, tokens relative to o200k_harmony (= 1.00),
+from the comparison experiment in ``test_tokenizer_comparison.py``:
+
+    o200k_base (GPT-4o)      1.00
+    gpt-oss (Harmony)        1.00
+    cl100k (GPT-4/3.5)       1.01
+    Qwen3                    1.01
+    Claude                   1.02
+    Gemma (Gemini)           1.02
+    Llama 3.1                1.06
+    Mistral                  1.17
+
+Full panel and regeneration live in ``tests/end_to_end/test_tokenizer_comparison.py``
+(run ``python tests/end_to_end/tokenizer_panel.py``); see also ``tests/README.md``.
 """
 from __future__ import annotations
 
