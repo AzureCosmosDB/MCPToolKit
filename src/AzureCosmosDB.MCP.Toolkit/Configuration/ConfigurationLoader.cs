@@ -1,3 +1,5 @@
+// EXPERIMENTAL: part of the opt-in declarative business-tools layer (vNext). This feature is
+// experimental and may change in a future release. It is dormant unless a configuration file is supplied.
 using System.Text.Json;
 
 namespace AzureCosmosDB.MCP.Toolkit.Configuration;

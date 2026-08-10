@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Declarative business tools (opt-in, additive):** define business-facing MCP tools in YAML/JSON
+- **Declarative business tools (opt-in, additive, experimental):** define business-facing MCP tools in YAML/JSON
   via `COSMOS_TOOLS_CONFIG` (or `CosmosMcp:ToolsConfigPath`). Supports point-read, query,
   text/vector/hybrid search, create/replace/patch/delete, optimistic concurrency, transactional
   batch, and bounded Cosmos-only `sequence` composition with assertions, generated ids, and system
@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Compatibility
 - Fully backward compatible. The declarative runtime is dormant unless a configuration file is
   supplied; no existing tool, schema, default, or environment variable was changed.
+- The declarative layer is **experimental** and may change in a future release; it is opt-in and
+  dormant by default.
 
 ## [1.1.2] - 2026-05-29
 

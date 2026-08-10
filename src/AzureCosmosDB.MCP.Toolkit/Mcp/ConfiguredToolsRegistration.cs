@@ -8,8 +8,13 @@ namespace AzureCosmosDB.MCP.Toolkit.Mcp;
 
 /// <summary>
 /// Opt-in registration for the declarative, business-facing tool layer (vNext).
-/// If no configuration file is present the toolkit behaves exactly as before — this method is a no-op.
+/// If no configuration file is present the toolkit behaves exactly as before, so this method is a no-op.
 /// </summary>
+/// <remarks>
+/// EXPERIMENTAL: this declarative layer is experimental and may change in a future release. It is
+/// additive and opt-in (dormant unless a configuration file is supplied). Review the security,
+/// authorization, tenant-isolation, and governance settings before using it in production.
+/// </remarks>
 public static class ConfiguredToolsRegistration
 {
     /// <summary>Environment variable / configuration key that points at the declarative config file.</summary>
@@ -51,6 +56,9 @@ public static class ConfiguredToolsRegistration
 
         var tools = ConfiguredToolSet.Build(result.Configuration!);
         logger?.LogInformation("Loaded {Count} configured business tool(s) from '{Path}'.", tools.Count, path);
+        logger?.LogWarning(
+            "[EXPERIMENTAL] The declarative business-tools layer is experimental and may change in a future " +
+            "release. Review its security, authorization, tenant-isolation, and governance settings before production use.");
 
         // Shared provider surface used by the configured tools.
         builder.Services.AddSingleton<ICosmosGateway, CosmosGateway>();

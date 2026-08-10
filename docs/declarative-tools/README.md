@@ -1,5 +1,9 @@
 # Declarative Business Tools (vNext)
 
+> ⚠️ **Experimental.** This declarative layer is experimental and may change in a future release.
+> It is additive and opt-in (dormant unless you supply a configuration file). Review the security,
+> authorization, tenant-isolation, and governance settings before using it in production.
+
 The Azure Cosmos DB MCP Toolkit can expose **business-facing, governed MCP tools** defined in a
 YAML (or JSON) file — no bespoke handler code required. This layer is **additive and opt-in**:
 if you do not provide a configuration file, the toolkit exposes only its GA built-in tools and

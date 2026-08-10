@@ -15,6 +15,7 @@ public sealed record ConfiguredToolExecutionResult(string Json, bool IsError, st
 /// output shaping → telemetry. Never throws to the caller; all failures are returned as
 /// structured, client-safe JSON.
 /// </summary>
+/// <remarks>EXPERIMENTAL: part of the opt-in declarative business-tools layer (vNext); may change in a future release.</remarks>
 public sealed class ConfiguredToolExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };

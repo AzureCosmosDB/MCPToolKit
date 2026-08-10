@@ -26,10 +26,11 @@ This toolkit provides a **production-ready, fully automated MCP server** that ha
 
 **See it in action:** 📚 [Real-world use cases](docs/USE-CASES.md) • 🗺️ [Roadmap](ROADMAP.md) • 🤝 [Contributing](CONTRIBUTING.md)
 
-> 🆕 **Declarative business tools (opt-in):** define secure, governed, business-facing MCP tools in
+> 🧪 **Declarative business tools (opt-in, experimental):** define secure, governed, business-facing MCP tools in
 > YAML — point reads, queries, search, writes, and transactional batches — without writing handler
 > code. This is additive and dormant unless you supply a config file, so existing deployments are
-> unaffected. See [docs/declarative-tools](docs/declarative-tools/README.md).
+> unaffected. **This feature is experimental and may change in a future release.**
+> See [docs/declarative-tools](docs/declarative-tools/README.md).
 
 ## Prerequisites
 

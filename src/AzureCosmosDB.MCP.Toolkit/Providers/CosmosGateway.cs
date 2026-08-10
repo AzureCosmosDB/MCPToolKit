@@ -11,6 +11,7 @@ namespace AzureCosmosDB.MCP.Toolkit.Providers;
 /// avoid POCO coupling, binds all caller-derived values as parameters, and never concatenates input
 /// into SQL. Vector/hybrid SQL is built only from configuration-controlled (validated) paths.
 /// </summary>
+/// <remarks>EXPERIMENTAL: provider surface for the opt-in declarative business-tools layer (vNext); may change in a future release.</remarks>
 public sealed class CosmosGateway : ICosmosGateway
 {
     private static readonly JsonSerializerOptions JsonOptions = new();
