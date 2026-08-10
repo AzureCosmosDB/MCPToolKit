@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Declarative business tools (opt-in, additive, experimental):** define business-facing MCP tools in YAML/JSON
+  via `COSMOS_TOOLS_CONFIG` (or `CosmosMcp:ToolsConfigPath`). Supports point-read, query,
+  text/vector/hybrid search, create/replace/patch/delete, optimistic concurrency, transactional
+  batch, and bounded Cosmos-only `sequence` composition with assertions, generated ids, and system
+  timestamps.
+- Per-tool authorization (scopes/roles/claims), tenant isolation with anti-spoofing, and governance
+  (read-only default, write/delete/cross-partition opt-in, RU/timeout/maxItems/topK budgets, patch
+  allow-lists).
+- Hierarchical (subpartitioned) partition key support (`partitionKeys: [...]`).
+- Shared `ICosmosGateway` provider surface, injection-resistant parameter binding, closed input
+  schema generation, and output projection/redaction.
+- `samples/banking/cosmos-tools.yaml`, `samples/ecommerce/cosmos-tools.yaml` (a non-banking example
+  proving the engine is domain-agnostic), and `docs/declarative-tools/*` (YAML reference, security &
+  governance, GA compatibility matrix, banking migration walkthrough).
+
+### Compatibility
+- Fully backward compatible. The declarative runtime is dormant unless a configuration file is
+  supplied; no existing tool, schema, default, or environment variable was changed.
+- The declarative layer is **experimental** and may change in a future release; it is opt-in and
+  dormant by default.
+
 ## [1.1.2] - 2026-05-29
 
 ### Added
