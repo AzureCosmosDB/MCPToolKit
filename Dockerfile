@@ -6,7 +6,7 @@ EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
 
 # Use the official .NET 9.0 SDK for building
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
