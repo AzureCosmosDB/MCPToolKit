@@ -13,6 +13,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using AzureCosmosDB.MCP.Toolkit.Services;
+using AzureCosmosDB.MCP.Toolkit.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,11 +23,16 @@ builder.Services.AddControllers();
 // Disable default claim mapping for cleaner token handling
 JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
 
-// Configure for container environment
+// Configure Kestrel listen:
+// - Default (no ASPNETCORE_URLS): ListenAnyIP(8080) for Container Apps / local docker parity.
+// - When ASPNETCORE_URLS is set (infra already sets http://+:8080; local can use
+//   http://127.0.0.1:<port>), do not hardcode Listen so the env URL is honored.
 builder.WebHost.ConfigureKestrel(options =>
 {
-    // Container Apps expects port 8080
-    options.ListenAnyIP(8080);
+    if (!KestrelListen.ShouldUseAspNetCoreUrls(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+    {
+        options.ListenAnyIP(8080);
+    }
 });
 
 // Get Azure AD configuration from appsettings
