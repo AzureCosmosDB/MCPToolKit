@@ -51,6 +51,7 @@ This toolkit provides:
 - **Enterprise Security**: Azure Entra ID, Managed Identity, RBAC
 - **Production Ready**: Container Apps hosting with auto-scaling
 - **Local Development**: Docker Compose and .NET dev options
+- **Private Cosmos (local)**: Set `COSMOS_SOCKS5_PROXY=socks5://127.0.0.1:<port>` (Bastion SOCKS) or `HTTPS_PROXY` / `HTTP_PROXY` (HTTP CONNECT) for Gateway HTTPS through a proxy — see [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md#private-cosmos-via-proxy-gateway)
 
 ### MCP Tools Available
 
@@ -551,6 +552,7 @@ For details, see [SECURITY.md](SECURITY.md) and [Azure Cosmos DB Monitoring](htt
 - [Web Testing Guide](docs/WEB-TESTING-GUIDE.md) - Using the browser-based test UI to interact with the MCP server
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute and get involved
 - [Quick Start](docs/QUICK-START.md) - 5-minute setup guide for new users
+- [Local Development](LOCAL_DEVELOPMENT.md) - Emulator, credentials, and private Cosmos via Gateway proxy (SOCKS5 / HTTP CONNECT)
 - [Support](SUPPORT.md) - Get help, report issues, and frequently asked questions
 - [Security Policy](SECURITY.md) - Security guidelines and responsible disclosure
 
