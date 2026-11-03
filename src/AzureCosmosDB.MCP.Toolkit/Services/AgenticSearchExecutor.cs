@@ -11,7 +11,7 @@ namespace AzureCosmosDB.MCP.Toolkit.Services;
 /// <remarks>
 /// <para>
 /// The Python helper runs a multi-turn retrieval agent against an Azure Cosmos
-/// DB corpus and returns a JSON document of curated, ranked results. It is
+/// DB corpus and returns a JSON document with an answer and its supporting documents. It is
 /// started separately and kept warm so the
 /// heavy clients (Cosmos SDK, embeddings, model encoder) are not re-initialised
 /// on every call.
@@ -61,16 +61,13 @@ public static class AgenticSearchExecutor
 
     /// <summary>
     /// Run a single <c>cosmos-retriever</c> search by calling the FastAPI
-    /// <c>POST /search</c> endpoint.
+    /// <c>POST /agentic_search</c> endpoint.
     /// </summary>
-    /// <param name="query">Natural-language information need.</param>
+    /// <param name="query">Natural-language question.</param>
     /// <param name="maxDocuments">Cap on the number of curated docs returned (1–50).</param>
     /// <param name="logger">Logger for request lifecycle events.</param>
     /// <param name="database">Optional Cosmos database override.</param>
     /// <param name="container">Optional Cosmos container override.</param>
-    /// <param name="schemaOverride">Optional schema override as a JSON object (keys:
-    /// document_id_path, chunk_id_path, chunk_order_path, title_path, source_path,
-    /// item_id_path, use_dunder_codec), or "none" to omit the override.</param>
     /// <param name="cancellationToken">A token the caller can trip to abort the request early.</param>
     /// <returns>
     /// The service's response body with surrounding whitespace removed.
@@ -79,19 +76,12 @@ public static class AgenticSearchExecutor
     /// that look like JSON are passed through, otherwise they are wrapped in an
     /// error envelope. Response bodies are not validated as JSON.
     /// </returns>
-    /// <remarks>
-    /// The optional tuning knobs are forwarded to the retriever service as a
-    /// per-request <c>overrides</c> object (mapping to the Python
-    /// <c>RuntimeConfig</c>). Only non-null values are sent; anything omitted
-    /// falls back to the retriever's own configured defaults.
-    /// </remarks>
     public static async Task<string> RunAsync(
         string query,
         int maxDocuments,
         ILogger logger,
         string? database = null,
         string? container = null,
-        string? schemaOverride = null,
         CancellationToken cancellationToken = default)
     {
         var baseUrl = ResolveString(BaseUrlEnvVar, DefaultBaseUrl).TrimEnd('/');
@@ -101,7 +91,7 @@ public static class AgenticSearchExecutor
         {
             return ErrorEnvelope($"{BaseUrlEnvVar} must be an absolute HTTP or HTTPS URL.");
         }
-        var requestUri = $"{baseUrl}/search";
+        var requestUri = $"{baseUrl}/agentic_search";
 
         var payload = new Dictionary<string, object?>
         {
@@ -111,28 +101,9 @@ public static class AgenticSearchExecutor
         if (!string.IsNullOrWhiteSpace(database)) payload["database"] = database;
         if (!string.IsNullOrWhiteSpace(container)) payload["container"] = container;
 
-        // Per-request overrides -> the retriever's RuntimeConfig. Only the schema
-        // override is exposed per call; other tuning stays server-side config.
-        var overrides = new Dictionary<string, object?>();
-        if (!string.IsNullOrWhiteSpace(schemaOverride) && !string.Equals(schemaOverride, "none", StringComparison.OrdinalIgnoreCase))
-        {
-            // Forward the schema override as a nested JSON object so the retriever
-            // receives a structured override (its RuntimeConfig coerces it).
-            try
-            {
-                using var doc = JsonDocument.Parse(schemaOverride);
-                overrides["schema_override"] = doc.RootElement.Clone();
-            }
-            catch (JsonException)
-            {
-                overrides["schema_override"] = schemaOverride;
-            }
-        }
-        if (overrides.Count > 0) payload["overrides"] = overrides;
-
         logger.LogInformation(
-            "agentic_search: POST {RequestUri} (database={Database} container={Container} timeout={Timeout}s overrides={OverrideCount})",
-            requestUri, database ?? "<env>", container ?? "<env>", timeoutSeconds, overrides.Count);
+            "agentic_search: POST {RequestUri} (database={Database} container={Container} timeout={Timeout}s)",
+            requestUri, database ?? "<env>", container ?? "<env>", timeoutSeconds);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));

@@ -1,15 +1,13 @@
 # `agentic_search` HTTP integration
 
-Use `agentic_search` to find relevant documents in a Cosmos DB corpus. A retrieval
-agent uses an LLM to refine the query through multiple rounds of searching and
-document reading.
+Use `agentic_search` to find answers to queries or questions from relevant
+documents in a Cosmos DB corpus. A retrieval agent (LLM) will receive the
+question, issue multiple sub-queries and return an answer and the documents it
+used.
 
-The .NET toolkit validates the tool arguments, sends an HTTP
-`POST /search` request, and returns the service's response body.
-Connection failures and request timeouts produce JSON errors.
-
-*A separately running, compatible retrieval service is required.* Configure the
-agent's retrieval behavior, Cosmos access, and models on that service.
+*A separately running, `cosmos-agentic-retrieval` service is required.*
+Configure the agent's retrieval behavior, Cosmos access, and models on that
+service. Note that this feature is currently **experimental**.
 
 ## Architecture
 
@@ -18,11 +16,11 @@ agent's retrieval behavior, Cosmos access, and models on that service.
        |
        | MCP tool call: agentic_search
        v
-  MCPToolKit (.NET): AgenticSearch -> AgenticSearchExecutor
+  MCPToolKit (.NET)
        |
-       | HTTP POST /search       <-- Response body
+       | HTTP POST /agentic_search  <-- Response body
        v
-     External retrieval service
+     External retrieval service (`cosmos-agentic-retrieval`)
 ```
 
 ## Configuration

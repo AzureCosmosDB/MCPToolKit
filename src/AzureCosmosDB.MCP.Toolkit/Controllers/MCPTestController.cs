@@ -74,7 +74,7 @@ public class MCPTestController : ControllerBase
             new { name = "vector_search", description = "Performs vector search on Cosmos DB using Azure OpenAI embeddings" },
             new { name = "get_approximate_schema", description = "Approximates a container schema by sampling up to 10 documents" },
             new { name = "agentic_search", description = "Runs an autonomous multi-turn retrieval agent against a Cosmos DB corpus " +
-                "and returns ranked, curated documents that best answer the query. The agent runs in a separately configured retrieval service." }
+                "and returns an answer with its supporting documents. The agent runs in a separately configured retrieval service." }
         };
 
         return Ok(new { tools, count = tools.Length, timestamp = DateTime.UtcNow });
@@ -138,26 +138,8 @@ public class MCPTestController : ControllerBase
             : 20;
         string? database = parameters.ContainsKey("database") ? GetRequiredParameter<string>(parameters, "database") : null;
         string? container = parameters.ContainsKey("container") ? GetRequiredParameter<string>(parameters, "container") : null;
-        string? schemaOverride = GetOptionalSchemaOverride(parameters);
         return await _cosmosDbTools.AgenticSearch(
-            query, maxDocuments, database, container, schemaOverride);
-    }
-
-    // schemaOverride may arrive as a JSON object or a string; pass it through as JSON text for the retriever to parse.
-    private static string? GetOptionalSchemaOverride(Dictionary<string, object> parameters)
-    {
-        if (!parameters.TryGetValue("schemaOverride", out var value) || value is null) return null;
-        if (value is JsonElement el)
-        {
-            return el.ValueKind switch
-            {
-                JsonValueKind.Null => null,
-                JsonValueKind.String => el.GetString(),
-                _ => el.GetRawText(),
-            };
-        }
-        var s = value.ToString();
-        return string.IsNullOrWhiteSpace(s) ? null : s;
+            query, maxDocuments, database, container);
     }
 
     private T GetRequiredParameter<T>(Dictionary<string, object> parameters, string paramName)

@@ -64,8 +64,7 @@ public sealed class McpToolRequestValidator
                 ["query"] = ToolArgumentSchema.String(required: true, maxLength: 4096),
                 ["maxDocuments"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 50),
                 ["database"] = ToolArgumentSchema.String(required: false, maxLength: 256),
-                ["container"] = ToolArgumentSchema.String(required: false, maxLength: 256),
-                ["schemaOverride"] = ToolArgumentSchema.Object(required: false, maxLength: 2048)
+                ["container"] = ToolArgumentSchema.String(required: false, maxLength: 256)
             })
         };
 
@@ -130,7 +129,6 @@ public sealed class McpToolRequestValidator
                 ArgKind.Integer => ValidateInteger(valueElement, argument.Key, (int)argument.Value.MinValue, (int)argument.Value.MaxValue),
                 ArgKind.Number => ValidateNumber(valueElement, argument.Key, argument.Value.MinValue, argument.Value.MaxValue),
                 ArgKind.Boolean => ValidateBoolean(valueElement, argument.Key),
-                ArgKind.Object => ValidateObject(valueElement, argument.Key, argument.Value.MaxLength),
                 _ => throw new ToolInputValidationException($"Unsupported schema for argument '{argument.Key}'.")
             };
         }
@@ -204,24 +202,6 @@ public sealed class McpToolRequestValidator
         return valueElement.GetBoolean();
     }
 
-    // Accepts a JSON object and returns its raw JSON text (length-capped). Used
-    // for structured arguments like schemaOverride that are forwarded verbatim.
-    private static string ValidateObject(JsonElement valueElement, string fieldName, int maxLength)
-    {
-        if (valueElement.ValueKind != JsonValueKind.Object)
-        {
-            throw new ToolInputValidationException($"'{fieldName}' must be a JSON object.");
-        }
-
-        var raw = valueElement.GetRawText();
-        if (raw.Length > maxLength)
-        {
-            throw new ToolInputValidationException($"'{fieldName}' exceeds the maximum length of {maxLength} characters.");
-        }
-
-        return raw;
-    }
-
     private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)
     {
         if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out value))
@@ -252,7 +232,7 @@ public sealed class McpToolRequestValidator
 
     private sealed record ToolSchema(IReadOnlyDictionary<string, ToolArgumentSchema> Arguments);
 
-    private enum ArgKind { String, Integer, Number, Boolean, Object }
+    private enum ArgKind { String, Integer, Number, Boolean }
 
     private sealed record ToolArgumentSchema(ArgKind Kind, bool Required, int MaxLength = 0, double MinValue = 0, double MaxValue = 0)
     {
@@ -267,9 +247,6 @@ public sealed class McpToolRequestValidator
 
         public static ToolArgumentSchema Boolean(bool required)
             => new(ArgKind.Boolean, required);
-
-        public static ToolArgumentSchema Object(bool required, int maxLength)
-            => new(ArgKind.Object, required, MaxLength: maxLength);
     }
 }
 

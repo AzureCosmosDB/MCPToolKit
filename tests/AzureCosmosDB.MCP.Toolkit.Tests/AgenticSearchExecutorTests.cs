@@ -180,7 +180,7 @@ public sealed class AgenticSearchExecutorTests : IDisposable
         var tool = McpServerTool.Create(typeof(CosmosDbTools).GetMethod("AgenticSearch")!, (object?)null);
         tool.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject()
             .Select(property => property.Name).Should().BeEquivalentTo(
-                "query", "maxDocuments", "database", "container", "schemaOverride");
+                "query", "maxDocuments", "database", "container");
         var request = new RequestContext<CallToolRequestParams>(Mock.Of<McpServer>(),
             new JsonRpcRequest { Id = new RequestId(1), Method = "tools/call" },
             new CallToolRequestParams
