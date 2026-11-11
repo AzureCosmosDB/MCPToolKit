@@ -225,10 +225,11 @@ builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.CosmosDbToolsServi
 builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.AuthenticationService>();
 builder.Services.AddSingleton<AzureCosmosDB.MCP.Toolkit.Services.McpToolRequestValidator>();
 
-// Register MCP server with SDK transport (SSE + Streamable HTTP) for AI Foundry and other MCP clients.
+// Register MCP server with SDK transport (Streamable HTTP) for AI Foundry and other MCP clients.
 // Tools are defined below using [McpServerTool] attributes on CosmosDbMcpTools class.
 builder.Services.AddMcpServer()
-    .WithHttpTransport()
+    // Stateless so any replica can serve any request; the tools need no per-session state.
+    .WithHttpTransport(options => options.Stateless = true)
     .WithToolsFromAssembly();
 
 // Configure forwarded headers for proxy scenarios
@@ -324,7 +325,7 @@ if (isDevelopment || devBypassAuth)
 // Map controllers last
 app.MapControllers();
 
-// Map MCP SDK endpoint at /mcp — provides SSE transport (GET /mcp) and Streamable HTTP (POST /mcp).
+// Map MCP SDK endpoint at /mcp — provides Streamable HTTP (POST /mcp).
 // This is what AI Foundry, Claude Desktop, and other standard MCP clients connect to.
 // The custom /mcp/http controller endpoint is retained for the built-in web UI tester.
 if (!devBypassAuth)
