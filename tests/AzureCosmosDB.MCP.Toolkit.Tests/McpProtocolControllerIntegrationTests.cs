@@ -128,6 +128,22 @@ public class McpProtocolControllerIntegrationTests : IClassFixture<McpTestApplic
         toolAttribute.Name.Should().Be("query_documents");
         toolAttribute.ReadOnly.Should().BeTrue();
     }
+
+    [Fact]
+    public void FindDocumentByID_Should_Expose_Optional_PartitionKey_And_Cancellation()
+    {
+        var method = typeof(CosmosDbTools).GetMethod(nameof(CosmosDbTools.FindDocumentByID))!;
+        var toolAttribute = method.GetCustomAttributes(typeof(McpServerToolAttribute), inherit: false)
+            .Cast<McpServerToolAttribute>().Single();
+        var partitionKey = method.GetParameters().Single(parameter => parameter.Name == "partitionKey");
+        var cancellation = method.GetParameters().Single(parameter => parameter.ParameterType == typeof(CancellationToken));
+
+        toolAttribute.ReadOnly.Should().BeTrue();
+        partitionKey.ParameterType.Should().Be(typeof(string));
+        partitionKey.HasDefaultValue.Should().BeTrue();
+        partitionKey.DefaultValue.Should().BeNull();
+        cancellation.HasDefaultValue.Should().BeTrue();
+    }
 }
 
 public sealed class McpTestApplicationFactory : WebApplicationFactory<Program>

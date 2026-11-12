@@ -767,11 +767,13 @@ public static class CosmosDbTools
         }
     }
 
-    [McpServerTool, Description("Find a document by its id in the specified database/container.")]
+    [McpServerTool(ReadOnly = true), Description("Finds a document by its id and optional partition key in the specified database/container.")]
     public static async Task<string> FindDocumentByID(
         [Description("Database id containing the container")] string databaseId,
         [Description("Container id to query")] string containerId,
-        [Description("The id of the document to find")] string id)
+        [Description("The id of the document to find")] string id,
+        [Description("Optional partition key value to limit the query to a logical partition")] string? partitionKey = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -799,18 +801,32 @@ public static class CosmosDbTools
             var queryText = "SELECT * FROM c WHERE c.id = @id";
             var query = new QueryDefinition(queryText).WithParameter("@id", id);
 
-            var iterator = container.GetItemQueryIterator<dynamic>(query, requestOptions: new QueryRequestOptions { MaxItemCount = 1 });
+            var requestOptions = new QueryRequestOptions { MaxItemCount = 1 };
+            if (!string.IsNullOrWhiteSpace(partitionKey))
+            {
+                requestOptions.PartitionKey = new PartitionKey(partitionKey);
+            }
+            using var iterator = container.GetItemQueryStreamIterator(query, requestOptions: requestOptions);
 
             while (iterator.HasMoreResults)
             {
-                var page = await iterator.ReadNextAsync();
-                foreach (var doc in page)
+                using var response = await iterator.ReadNextAsync(cancellationToken);
+                response.EnsureSuccessStatusCode();
+                using var document = await JsonDocument.ParseAsync(response.Content, cancellationToken: cancellationToken);
+                if (document.RootElement.TryGetProperty("Documents", out var documents))
                 {
-                    return doc?.ToString() ?? "{}";
+                    foreach (var doc in documents.EnumerateArray())
+                    {
+                        return doc.GetRawText();
+                    }
                 }
             }
 
             return JsonSerializer.Serialize(new { message = "No document found with the specified id." });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (CosmosException cex)
         {
