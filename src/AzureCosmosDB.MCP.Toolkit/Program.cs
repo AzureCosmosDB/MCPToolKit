@@ -650,13 +650,22 @@ public static class CosmosDbTools
             string? truncationReason = null;
             if (hasMoreResults)
             {
-                truncationReason = results.Count >= maxItems
-                    ? "maxItems"
-                    : pagesRead >= maxPages
-                        ? "maxPages"
-                        : requestCharge >= ruBudget
-                            ? "ruBudget"
-                            : "continuation";
+                if (results.Count >= maxItems)
+                {
+                    truncationReason = "maxItems";
+                }
+                else if (pagesRead >= maxPages)
+                {
+                    truncationReason = "maxPages";
+                }
+                else if (requestCharge >= ruBudget)
+                {
+                    truncationReason = "ruBudget";
+                }
+                else
+                {
+                    truncationReason = "continuation";
+                }
             }
 
             return JsonSerializer.Serialize(new
