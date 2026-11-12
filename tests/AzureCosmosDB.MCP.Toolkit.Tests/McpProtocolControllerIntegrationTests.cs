@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Hosting;
+using ModelContextProtocol.Server;
 using Xunit;
 
 namespace AzureCosmosDB.MCP.Toolkit.Tests;
@@ -104,6 +105,28 @@ public class McpProtocolControllerIntegrationTests : IClassFixture<McpTestApplic
         var tools = document.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray().ToList();
         tools.Should().NotBeEmpty();
         tools.Should().OnlyContain(tool => tool.GetProperty("inputSchema").GetProperty("additionalProperties").GetBoolean() == false);
+    }
+
+    [Fact]
+    public async Task QueryDocuments_Should_Reject_Multiple_Statements()
+    {
+        var result = await CosmosDbTools.QueryDocuments("db1", "container1", "SELECT * FROM c; DELETE FROM c");
+
+        using var document = JsonDocument.Parse(result);
+        document.RootElement.GetProperty("error").GetString().Should().Be("Only a single SELECT query is allowed.");
+    }
+
+    [Fact]
+    public void QueryDocuments_Should_Be_Registered_As_ReadOnlyMcpTool()
+    {
+        var toolAttribute = typeof(CosmosDbTools)
+            .GetMethod(nameof(CosmosDbTools.QueryDocuments))!
+            .GetCustomAttributes(typeof(McpServerToolAttribute), inherit: false)
+            .Cast<McpServerToolAttribute>()
+            .Single();
+
+        toolAttribute.Name.Should().Be("query_documents");
+        toolAttribute.ReadOnly.Should().BeTrue();
     }
 }
 

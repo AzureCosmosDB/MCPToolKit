@@ -552,6 +552,150 @@ public static class CosmosDbTools
         }
     }
 
+    [McpServerTool(Name = "query_documents", ReadOnly = true), Description("Executes a bounded SELECT-only Cosmos DB for NoSQL query.")]
+    public static async Task<string> QueryDocuments(
+        [Description("Database id containing the container")] string databaseId,
+        [Description("Container id to query")] string containerId,
+        [Description("A single SELECT-only Cosmos DB for NoSQL query")] string queryText,
+        [Description("Maximum number of documents to return (1-1000, default 100)")] int maxItems = 100,
+        [Description("Maximum number of items requested per page (1-100, default 25)")] int pageSize = 25,
+        [Description("Maximum number of response pages to read (1-100, default 20)")] int maxPages = 20,
+        [Description("Maximum cumulative request charge in RUs (greater than 0, default 1000)")] double ruBudget = 1000,
+        [Description("Query timeout in seconds (1-300, default 30)")] int timeoutSeconds = 30,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(databaseId)
+            || string.IsNullOrWhiteSpace(containerId)
+            || string.IsNullOrWhiteSpace(queryText))
+        {
+            return JsonSerializer.Serialize(new { error = "Parameters 'databaseId', 'containerId', and 'queryText' are required." });
+        }
+        if (!IsSelectOnlyQuery(queryText))
+        {
+            return JsonSerializer.Serialize(new { error = "Only a single SELECT query is allowed." });
+        }
+        if (maxItems is < 1 or > 1000)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'maxItems' must be between 1 and 1000." });
+        }
+        if (pageSize is < 1 or > 100)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'pageSize' must be between 1 and 100." });
+        }
+        if (maxPages is < 1 or > 100)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'maxPages' must be between 1 and 100." });
+        }
+        if (ruBudget <= 0 || double.IsNaN(ruBudget) || double.IsInfinity(ruBudget))
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'ruBudget' must be a finite value greater than 0." });
+        }
+        if (timeoutSeconds is < 1 or > 300)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'timeoutSeconds' must be between 1 and 300." });
+        }
+
+        var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return JsonSerializer.Serialize(new { error = "Missing required environment variable COSMOS_ENDPOINT." });
+        }
+
+        try
+        {
+            using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutSource.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+            var credential = new DefaultAzureCredential();
+            using var cosmosClient = new CosmosClient(endpoint, credential, new CosmosClientOptions
+            {
+                ApplicationName = "AzureCosmosDBMCP-query-documents"
+            });
+
+            var container = cosmosClient.GetContainer(databaseId, containerId);
+            var query = new QueryDefinition(queryText.Trim());
+            var requestOptions = new QueryRequestOptions { MaxItemCount = pageSize };
+            using FeedIterator iterator = container.GetItemQueryStreamIterator(query, requestOptions: requestOptions);
+
+            var results = new List<JsonElement>();
+            var requestCharge = 0d;
+            var pagesRead = 0;
+            while (iterator.HasMoreResults
+                && pagesRead < maxPages
+                && results.Count < maxItems
+                && requestCharge < ruBudget)
+            {
+                using var response = await iterator.ReadNextAsync(timeoutSource.Token);
+                response.EnsureSuccessStatusCode();
+                pagesRead++;
+                requestCharge += response.Headers.RequestCharge;
+
+                using var document = await JsonDocument.ParseAsync(
+                    response.Content,
+                    cancellationToken: timeoutSource.Token);
+                if (document.RootElement.TryGetProperty("Documents", out var documents))
+                {
+                    foreach (var item in documents.EnumerateArray())
+                    {
+                        results.Add(item.Clone());
+                        if (results.Count >= maxItems)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            var hasMoreResults = iterator.HasMoreResults;
+            string? truncationReason = null;
+            if (hasMoreResults)
+            {
+                truncationReason = results.Count >= maxItems
+                    ? "maxItems"
+                    : pagesRead >= maxPages
+                        ? "maxPages"
+                        : requestCharge >= ruBudget
+                            ? "ruBudget"
+                            : "continuation";
+            }
+
+            return JsonSerializer.Serialize(new
+            {
+                results,
+                requestCharge,
+                pagesRead,
+                hasMoreResults,
+                truncated = hasMoreResults,
+                truncationReason
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            return JsonSerializer.Serialize(new { error = "The Cosmos DB query exceeded its timeout." });
+        }
+        catch (CosmosException cex)
+        {
+            return JsonSerializer.Serialize(new { error = cex.Message, statusCode = (int)cex.StatusCode });
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { error = ex.Message });
+        }
+    }
+
+    private static bool IsSelectOnlyQuery(string queryText)
+    {
+        var query = queryText.Trim();
+        return query.Length > "SELECT".Length
+            && query.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+            && char.IsWhiteSpace(query["SELECT".Length])
+            && !query.Contains(';');
+    }
+
     [McpServerTool, Description("Select TOP N documents where a given property contains the provided search string. N must be between 1 and 20.")]
     public static async Task<string> TextSearch(
         [Description("Database id containing the container")] string databaseId,
