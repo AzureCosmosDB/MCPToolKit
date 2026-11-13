@@ -700,4 +700,19 @@ public class CosmosDbToolsService
             return new { error = ex.Message };
         }
     }
+
+    /// <summary>
+    /// Calls the agentic retrieval service and returns its JSON response as a string.
+    /// See <see cref="AgenticSearchExecutor"/> for the service URL and timeout settings.
+    /// </summary>
+    public async Task<object> AgenticSearch(
+        string query,
+        int maxDocuments = 20,
+        string? database = null,
+        string? container = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await AgenticSearchExecutor.RunAsync(
+            query, maxDocuments, _logger, database, container, cancellationToken);
+    }
 }

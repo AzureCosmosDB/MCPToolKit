@@ -10,11 +10,13 @@ public class MCPTestController : ControllerBase
 {
     private readonly CosmosDbToolsService _cosmosDbTools;
     private readonly ILogger<MCPTestController> _logger;
+    private readonly bool _agenticSearchEnabled;
 
-    public MCPTestController(CosmosDbToolsService cosmosDbTools, ILogger<MCPTestController> logger)
+    public MCPTestController(CosmosDbToolsService cosmosDbTools, ILogger<MCPTestController> logger, IConfiguration configuration)
     {
         _cosmosDbTools = cosmosDbTools;
         _logger = logger;
+        _agenticSearchEnabled = AgenticSearchTools.IsEnabled(configuration);
     }
 
     [HttpPost("tools/{toolName}")]
@@ -34,6 +36,7 @@ public class MCPTestController : ControllerBase
                 "text_search" => await CallTextSearch(request.Parameters),
                 "vector_search" => await CallVectorSearch(request.Parameters),
                 "get_approximate_schema" => await CallGetApproximateSchema(request.Parameters),
+                "agentic_search" when _agenticSearchEnabled => await CallAgenticSearch(request.Parameters),
                 _ => throw new ArgumentException($"Unknown tool: {toolName}")
             };
 
@@ -73,6 +76,10 @@ public class MCPTestController : ControllerBase
             new { name = "vector_search", description = "Performs vector search on Cosmos DB using Azure OpenAI embeddings" },
             new { name = "get_approximate_schema", description = "Approximates a container schema by sampling up to 10 documents" }
         };
+        if (_agenticSearchEnabled)
+        {
+            tools = [.. tools, new { name = "agentic_search", description = "Answers a natural-language question with a search agent that runs several searches over Cosmos DB" }];
+        }
 
         return Ok(new { tools, count = tools.Length, timestamp = DateTime.UtcNow });
     }
@@ -125,6 +132,18 @@ public class MCPTestController : ControllerBase
         var databaseId = GetRequiredParameter<string>(parameters, "databaseId");
         var containerId = GetRequiredParameter<string>(parameters, "containerId");
         return await _cosmosDbTools.GetApproximateSchema(databaseId, containerId);
+    }
+
+    private async Task<object> CallAgenticSearch(Dictionary<string, object> parameters)
+    {
+        var query = GetRequiredParameter<string>(parameters, "query");
+        var maxDocuments = parameters.ContainsKey("maxDocuments")
+            ? GetRequiredParameter<int>(parameters, "maxDocuments")
+            : 20;
+        string? database = parameters.ContainsKey("database") ? GetRequiredParameter<string>(parameters, "database") : null;
+        string? container = parameters.ContainsKey("container") ? GetRequiredParameter<string>(parameters, "container") : null;
+        return await _cosmosDbTools.AgenticSearch(
+            query, maxDocuments, database, container);
     }
 
     private T GetRequiredParameter<T>(Dictionary<string, object> parameters, string paramName)

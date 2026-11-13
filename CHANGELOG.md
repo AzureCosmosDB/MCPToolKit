@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-13
+
+### Added
+- **`agentic_search` tool** (private preview, off by default): answers a question
+  asked in natural language with a search agent that runs several searches using
+  Cosmos DB-specific tools, and returns the answer with its supporting documents.
+  Needs the separate agentic retrieval service. See
+  [`docs/AGENTIC-SEARCH.md`](docs/AGENTIC-SEARCH.md).
+
+### Changed
+- `AppState` now also exposes `ILoggerFactory` so static `[McpServerTool]`
+  methods can obtain a properly-named logger.
+
 ## [1.1.2] - 2026-05-29
 
 ### Added
