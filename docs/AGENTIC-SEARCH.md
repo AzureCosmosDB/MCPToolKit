@@ -10,6 +10,10 @@ separate agentic retrieval service, which is available to private preview
 participants. To request access, fill in the
 [private preview form](https://forms.cloud.microsoft/r/eMm2ARSxnH).
 
+The agentic retrieval service runs as a sidecar next to the toolkit and is only
+meant to be reached on localhost. It has no authentication of its own, and instead
+shares authetication with the mcp tool kit.
+
 ## Turn it on
 
 Set this environment variable on the toolkit:

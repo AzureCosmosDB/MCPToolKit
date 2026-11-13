@@ -5,40 +5,13 @@ using System.Text.Json;
 namespace AzureCosmosDB.MCP.Toolkit.Services;
 
 /// <summary>
-/// Calls the long-lived <c>cosmos-retriever</c> FastAPI service over HTTP and
-/// returns its response body with surrounding whitespace removed.
+/// Sends an agentic_search request to the agentic retrieval service (POST /agentic_search)
+/// and returns its JSON response. Failures to reach the service, timeouts and empty
+/// responses return an { "error": ... } JSON object instead.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The Python helper runs a multi-turn retrieval agent against an Azure Cosmos
-/// DB corpus and returns a JSON document with an answer and its supporting documents. It is
-/// started separately and kept warm so the
-/// heavy clients (Cosmos SDK, embeddings, model encoder) are not re-initialised
-/// on every call.
-/// </para>
-///
-/// <para>Host environment variables (read on every call):</para>
-/// <list type="table">
-///   <listheader><term>Variable</term><description>Default / purpose</description></listheader>
-///   <item>
-///     <term><see cref="BaseUrlEnvVar"/> (COSMOS_RETRIEVER_URL)</term>
-///     <description>Base URL of the cosmos-retriever FastAPI service.
-///       Defaults to <see cref="DefaultBaseUrl"/>.</description>
-///   </item>
-///   <item>
-///     <term><see cref="TimeoutEnvVar"/> (COSMOS_RETRIEVER_TIMEOUT_S)</term>
-///     <description>Per-request wall-clock cap in seconds; the request is
-///       abandoned if it exceeds the timeout. Defaults to
-///       <see cref="DefaultTimeoutSeconds"/>.</description>
-///   </item>
-/// </list>
-///
-/// <para>
-/// The retriever service owns its own configuration (model endpoint,
-/// <c>ACCOUNT_URI</c>, <c>COSMOS_DATABASE</c>, <c>COSMOS_CORPUS_CONTAINER</c>,
-/// <c>CORPUS_REGISTRY_FILE</c>, <c>AZURE_OPENAI_*</c>, etc.) read from its own
-/// environment / <c>.env</c> file.
-/// </para>
+/// Reads COSMOS_RETRIEVER_URL (default http://127.0.0.1:9000) and
+/// COSMOS_RETRIEVER_TIMEOUT_S (default 600) on every call.
 /// </remarks>
 public static class AgenticSearchExecutor
 {
@@ -50,7 +23,7 @@ public static class AgenticSearchExecutor
 
     public const int DefaultTimeoutSeconds = 600;
 
-    private const int BodyTruncateBytes = 4096;
+    private const int BodyTruncateChars = 4096;
 
     // Reuse one HttpClient (avoids socket exhaustion). No global timeout —
     // each request sets its own timeout instead.
@@ -60,14 +33,13 @@ public static class AgenticSearchExecutor
     };
 
     /// <summary>
-    /// Run a single <c>cosmos-retriever</c> search by calling the FastAPI
-    /// <c>POST /agentic_search</c> endpoint.
+    /// Send one question to the agentic retrieval service.
     /// </summary>
     /// <param name="query">Natural-language question.</param>
-    /// <param name="maxDocuments">Cap on the number of curated docs returned (1–50).</param>
+    /// <param name="maxDocuments">Maximum number of supporting documents to return (1-50).</param>
     /// <param name="logger">Logger for request lifecycle events.</param>
-    /// <param name="database">Optional Cosmos database override.</param>
-    /// <param name="container">Optional Cosmos container override.</param>
+    /// <param name="database">Database to search, or null to let the agent choose.</param>
+    /// <param name="container">Container to search, or null to let the agent choose.</param>
     /// <param name="cancellationToken">A token the caller can trip to abort the request early.</param>
     /// <returns>
     /// The service's response body with surrounding whitespace removed.
@@ -103,7 +75,7 @@ public static class AgenticSearchExecutor
 
         logger.LogInformation(
             "agentic_search: POST {RequestUri} (database={Database} container={Container} timeout={Timeout}s)",
-            requestUri, database ?? "<env>", container ?? "<env>", timeoutSeconds);
+            requestUri, database ?? "<any>", container ?? "<any>", timeoutSeconds);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
@@ -121,15 +93,15 @@ public static class AgenticSearchExecutor
             logger.LogWarning("agentic_search: request exceeded {Timeout}s.", timeoutSeconds);
             return ErrorEnvelope(
                 $"agentic_search timed out after {timeoutSeconds}s.",
-                hint: $"Increase {TimeoutEnvVar} or check that the cosmos-retriever service at {baseUrl} is responsive.");
+                hint: $"Increase {TimeoutEnvVar} or check that the agentic retrieval service at {baseUrl} is responsive.");
         }
         catch (HttpRequestException ex)
         {
             logger.LogError(ex,
-                "agentic_search: failed to reach the cosmos-retriever service at {BaseUrl}.", baseUrl);
+                "agentic_search: failed to reach the agentic retrieval service at {BaseUrl}.", baseUrl);
             return ErrorEnvelope(
-                $"Failed to reach the cosmos-retriever service: {ex.Message}",
-                hint: $"Check that the cosmos-retriever service is running and set {BaseUrlEnvVar} to its base URL (default {DefaultBaseUrl}).");
+                $"Failed to reach the agentic retrieval service: {ex.Message}",
+                hint: $"Check that the agentic retrieval service is running and set {BaseUrlEnvVar} to its base URL (default {DefaultBaseUrl}).");
         }
 
         using (response)
@@ -142,15 +114,14 @@ public static class AgenticSearchExecutor
                     "agentic_search: service returned {StatusCode}. body tail: {Body}",
                     (int)response.StatusCode, TruncateTail(body, 512));
 
-                // The FastAPI service emits its own JSON error envelope on most
-                // failures; pass it through verbatim if so, otherwise wrap it.
+                // The service returns JSON errors; pass them through, wrap anything else.
                 if (LooksLikeJson(body))
                 {
                     return body;
                 }
                 return ErrorEnvelope(
                     $"agentic_search service returned HTTP {(int)response.StatusCode}.",
-                    bodyTail: TruncateTail(body, BodyTruncateBytes));
+                    bodyTail: TruncateTail(body, BodyTruncateChars));
             }
 
             if (string.IsNullOrWhiteSpace(body))
