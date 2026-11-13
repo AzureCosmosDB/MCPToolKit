@@ -1,37 +1,30 @@
-# `agentic_search` HTTP integration
+# `agentic_search`
 
-Use `agentic_search` to find answers to queries or questions from relevant
-documents in a Cosmos DB corpus. A retrieval agent (LLM) will receive the
-question, issue multiple sub-queries and return an answer and the documents it
-used.
+The `agentic_search` tool can be used to answer questions asked in natural
+language about existing Cosmos DB data. Given a question, a search agent runs
+several searches using Cosmos DB-specific tools, then returns an answer with the
+documents it is based on.
 
-*A separately running, `cosmos-agentic-retrieval` service is required.*
-Configure the agent's retrieval behavior, Cosmos access, and models on that
-service. Note that this feature is currently **experimental**.
+This tool is in **private preview** and is **off by default**. It needs the
+separate agentic retrieval service, which is available to private preview
+participants. To request access, fill in the
+[private preview form](https://forms.cloud.microsoft/r/eMm2ARSxnH).
 
-## Architecture
+## Turn it on
 
-```text
-  MCP client
-       |
-       | MCP tool call: agentic_search
-       v
-  MCPToolKit (.NET)
-       |
-       | HTTP POST /agentic_search  <-- Response body
-       v
-     External retrieval service (`cosmos-agentic-retrieval`)
-```
-
-## Configuration
-
-The tool reads two optional environment variables. The values below are the defaults.
+Set this environment variable on the toolkit:
 
 ```bash
-# Base URL of the external retrieval service
-COSMOS_RETRIEVER_URL=http://127.0.0.1:9000
-
-# HTTP request timeout in seconds
-COSMOS_RETRIEVER_TIMEOUT_S=600
+# Required: list the agentic_search tool
+ENABLE_AGENTIC_SEARCH=true
 ```
+
+## Arguments
+
+| Argument | Required | Description |
+|---|---|---|
+| `query` | yes | The question to answer. |
+| `maxDocuments` | no | Most documents to return, 1–50 (default 20). |
+| `database` | no | Search only this database. If omitted, the agent finds databases itself. |
+| `container` | no | Search only this container. Needs `database`. |
 

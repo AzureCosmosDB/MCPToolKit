@@ -10,11 +10,13 @@ public class MCPTestController : ControllerBase
 {
     private readonly CosmosDbToolsService _cosmosDbTools;
     private readonly ILogger<MCPTestController> _logger;
+    private readonly bool _agenticSearchEnabled;
 
-    public MCPTestController(CosmosDbToolsService cosmosDbTools, ILogger<MCPTestController> logger)
+    public MCPTestController(CosmosDbToolsService cosmosDbTools, ILogger<MCPTestController> logger, IConfiguration configuration)
     {
         _cosmosDbTools = cosmosDbTools;
         _logger = logger;
+        _agenticSearchEnabled = AgenticSearchTools.IsEnabled(configuration);
     }
 
     [HttpPost("tools/{toolName}")]
@@ -34,7 +36,7 @@ public class MCPTestController : ControllerBase
                 "text_search" => await CallTextSearch(request.Parameters),
                 "vector_search" => await CallVectorSearch(request.Parameters),
                 "get_approximate_schema" => await CallGetApproximateSchema(request.Parameters),
-                "agentic_search" => await CallAgenticSearch(request.Parameters),
+                "agentic_search" when _agenticSearchEnabled => await CallAgenticSearch(request.Parameters),
                 _ => throw new ArgumentException($"Unknown tool: {toolName}")
             };
 
@@ -72,10 +74,12 @@ public class MCPTestController : ControllerBase
             new { name = "find_document_by_id", description = "Finds a document by its ID in the specified database/container" },
             new { name = "text_search", description = "Select TOP N documents where a given property contains the provided search string. N must be between 1-20" },
             new { name = "vector_search", description = "Performs vector search on Cosmos DB using Azure OpenAI embeddings" },
-            new { name = "get_approximate_schema", description = "Approximates a container schema by sampling up to 10 documents" },
-            new { name = "agentic_search", description = "Runs an autonomous multi-turn retrieval agent against a Cosmos DB corpus " +
-                "and returns an answer with its supporting documents. The agent runs in a separately configured retrieval service." }
+            new { name = "get_approximate_schema", description = "Approximates a container schema by sampling up to 10 documents" }
         };
+        if (_agenticSearchEnabled)
+        {
+            tools = [.. tools, new { name = "agentic_search", description = "Answers a natural-language question with a search agent that runs several searches over Cosmos DB" }];
+        }
 
         return Ok(new { tools, count = tools.Length, timestamp = DateTime.UtcNow });
     }

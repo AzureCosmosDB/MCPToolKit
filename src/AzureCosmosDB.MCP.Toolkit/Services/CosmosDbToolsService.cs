@@ -702,9 +702,8 @@ public class CosmosDbToolsService
     }
 
     /// <summary>
-    /// Calls the cosmos-retriever FastAPI service and returns its raw response
-    /// body (a single JSON document). See <see cref="AgenticSearchExecutor"/>
-    /// for the environment-variable contract and timeout knobs.
+    /// Calls the agentic retrieval service and returns its JSON response as a string.
+    /// See <see cref="AgenticSearchExecutor"/> for the service URL and timeout settings.
     /// </summary>
     public async Task<object> AgenticSearch(
         string query,
@@ -713,10 +712,7 @@ public class CosmosDbToolsService
         string? container = null,
         CancellationToken cancellationToken = default)
     {
-        var raw = await AgenticSearchExecutor.RunAsync(
+        return await AgenticSearchExecutor.RunAsync(
             query, maxDocuments, _logger, database, container, cancellationToken);
-        // Pass the JSON string through verbatim so the MCP envelope serialises it
-        // as a single string (matching the other tools, which also return JSON strings).
-        return raw;
     }
 }

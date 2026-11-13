@@ -75,8 +75,7 @@ public sealed class McpToolRequestValidator
             throw new ToolInputValidationException("'params' must be a JSON object.");
         }
 
-        // `_meta` is a standard MCP field clients may attach to params (e.g. progress
-        // tokens); accept and ignore it rather than rejecting the request.
+        // Clients may attach the standard MCP `_meta` field, e.g. progress tokens.
         RejectUnknownProperties(paramsElement, ["name", "arguments", "_meta"], "params");
 
         if (!paramsElement.TryGetProperty("name", out var toolNameElement) || toolNameElement.ValueKind != JsonValueKind.String)
@@ -125,10 +124,8 @@ public sealed class McpToolRequestValidator
 
             validated[argument.Key] = argument.Value.Kind switch
             {
-                ArgKind.String => ValidateString(valueElement.GetString(), argument.Key, argument.Value.MaxLength),
-                ArgKind.Integer => ValidateInteger(valueElement, argument.Key, (int)argument.Value.MinValue, (int)argument.Value.MaxValue),
-                ArgKind.Number => ValidateNumber(valueElement, argument.Key, argument.Value.MinValue, argument.Value.MaxValue),
-                ArgKind.Boolean => ValidateBoolean(valueElement, argument.Key),
+                JsonValueKind.String => ValidateString(valueElement.GetString(), argument.Key, argument.Value.MaxLength),
+                JsonValueKind.Number => ValidateInteger(valueElement, argument.Key, argument.Value.MinValue, argument.Value.MaxValue),
                 _ => throw new ToolInputValidationException($"Unsupported schema for argument '{argument.Key}'.")
             };
         }
@@ -177,31 +174,6 @@ public sealed class McpToolRequestValidator
         return value;
     }
 
-    private static double ValidateNumber(JsonElement valueElement, string fieldName, double minValue, double maxValue)
-    {
-        if (valueElement.ValueKind != JsonValueKind.Number || !valueElement.TryGetDouble(out var value))
-        {
-            throw new ToolInputValidationException($"'{fieldName}' must be a number.");
-        }
-
-        if (value < minValue || value > maxValue)
-        {
-            throw new ToolInputValidationException($"'{fieldName}' must be between {minValue} and {maxValue}.");
-        }
-
-        return value;
-    }
-
-    private static bool ValidateBoolean(JsonElement valueElement, string fieldName)
-    {
-        if (valueElement.ValueKind != JsonValueKind.True && valueElement.ValueKind != JsonValueKind.False)
-        {
-            throw new ToolInputValidationException($"'{fieldName}' must be a boolean.");
-        }
-
-        return valueElement.GetBoolean();
-    }
-
     private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)
     {
         if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out value))
@@ -232,21 +204,13 @@ public sealed class McpToolRequestValidator
 
     private sealed record ToolSchema(IReadOnlyDictionary<string, ToolArgumentSchema> Arguments);
 
-    private enum ArgKind { String, Integer, Number, Boolean }
-
-    private sealed record ToolArgumentSchema(ArgKind Kind, bool Required, int MaxLength = 0, double MinValue = 0, double MaxValue = 0)
+    private sealed record ToolArgumentSchema(JsonValueKind Kind, bool Required, int MaxLength = 0, int MinValue = 0, int MaxValue = 0)
     {
         public static ToolArgumentSchema String(bool required, int maxLength)
-            => new(ArgKind.String, required, MaxLength: maxLength);
+            => new(JsonValueKind.String, required, MaxLength: maxLength);
 
         public static ToolArgumentSchema Integer(bool required, int minValue, int maxValue)
-            => new(ArgKind.Integer, required, MinValue: minValue, MaxValue: maxValue);
-
-        public static ToolArgumentSchema Number(bool required, double minValue, double maxValue)
-            => new(ArgKind.Number, required, MinValue: minValue, MaxValue: maxValue);
-
-        public static ToolArgumentSchema Boolean(bool required)
-            => new(ArgKind.Boolean, required);
+            => new(JsonValueKind.Number, required, MinValue: minValue, MaxValue: maxValue);
     }
 }
 

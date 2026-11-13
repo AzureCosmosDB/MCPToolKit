@@ -14,17 +14,20 @@ public class MCPProtocolController : ControllerBase
     private readonly AuthenticationService _authService;
     private readonly McpToolRequestValidator _requestValidator;
     private readonly ILogger<MCPProtocolController> _logger;
+    private readonly bool _agenticSearchEnabled;
 
     public MCPProtocolController(
         CosmosDbToolsService cosmosDbTools, 
         AuthenticationService authService,
         McpToolRequestValidator requestValidator,
-        ILogger<MCPProtocolController> logger)
+        ILogger<MCPProtocolController> logger,
+        IConfiguration configuration)
     {
         _cosmosDbTools = cosmosDbTools;
         _authService = authService;
         _requestValidator = requestValidator;
         _logger = logger;
+        _agenticSearchEnabled = AgenticSearchTools.IsEnabled(configuration);
     }
 
     [HttpOptions]
@@ -161,7 +164,7 @@ public class MCPProtocolController : ControllerBase
                         id = id,
                         result = new
                         {
-                            tools = new object[]
+                            tools = WithAgenticSearch(new object[]
                             {
                                 new { 
                                     name = "list_databases", 
@@ -276,29 +279,8 @@ public class MCPProtocolController : ControllerBase
                                         required = new string[] { "databaseId", "containerId", "searchText", "textProperty", "vectorProperty", "selectProperties" },
                                         additionalProperties = false
                                     }
-                                },
-                                new {
-                                    name = "agentic_search",
-                                    description = "Answer a question using a multi-turn retrieval agent for Cosmos DB: rewrites the query and uses multiple rounds " +
-                                        "of searching, then returns an answer with its supporting documents. Prefer it over vector_search/text_search for " +
-                                        "complex, ambiguous, or multi-hop questions where one-shot search might miss context. Pass a natural-language " +
-                                        "`query`; optionally set `database`/`container` to target a corpus and `maxDocuments` to cap results. " +
-                                        "The agent runs in a separate service where retrieval behavior, Cosmos access, and models are configured.",
-                                    inputSchema = new {
-                                        type = "object",
-                                        properties = new {
-                                            query = new { type = "string", description = "Natural-language question to answer", maxLength = 4096 },
-                                            maxDocuments = new { type = "integer", description = "Maximum number of curated documents to return (1-50, default 20)", minimum = 1, maximum = 50, @default = 20 },
-                                            database = new { type = "string", description = "Optional Cosmos database name override. " +
-                                                "If omitted, the retrieval service determines the database.", maxLength = 256 },
-                                            container = new { type = "string", description = "Optional Cosmos container to narrow the search to. " +
-                                                "If omitted, the retrieval service determines the search scope.", maxLength = 256 }
-                                        },
-                                        required = new string[] { "query" },
-                                        additionalProperties = false
-                                    }
                                 }
-                            }
+                            })
                         }
                     };
                     _logger.LogInformation("Returning tools/list response with {ToolCount} tools", ((object[])toolsResponse.result.tools).Length);
@@ -490,7 +472,7 @@ public class MCPProtocolController : ControllerBase
                 GetStringArg(args, "selectProperties"),
                 GetOptionalIntArg(args, "topN", 10),
                 cancellationToken),
-            "agentic_search" => await _cosmosDbTools.AgenticSearch(
+            "agentic_search" when _agenticSearchEnabled => await _cosmosDbTools.AgenticSearch(
                 GetStringArg(args, "query"),
                 GetOptionalIntArg(args, "maxDocuments", 20),
                 GetOptionalStringArg(args, "database"),
@@ -504,6 +486,31 @@ public class MCPProtocolController : ControllerBase
     {
         return args.TryGetValue(key, out var value) ? value?.ToString() ?? "" : "";
     }
+
+    private object[] WithAgenticSearch(object[] tools) =>
+        _agenticSearchEnabled ? [.. tools, AgenticSearchListing] : tools;
+
+    private static readonly object AgenticSearchListing = new
+    {
+        name = "agentic_search",
+        description = "Answers a natural-language question with a search agent that runs several searches over Cosmos DB, " +
+            "and returns the answer with its supporting documents. Prefer it over text_search or vector_search for " +
+            "complex or multi-hop questions where one search may not be enough. Optionally set `database`, and " +
+            "`container` with it, to limit the search.",
+        inputSchema = new
+        {
+            type = "object",
+            properties = new
+            {
+                query = new { type = "string", description = "Natural-language question to answer", maxLength = 4096 },
+                maxDocuments = new { type = "integer", description = "Maximum number of supporting documents to return (1-50, default 20)", minimum = 1, maximum = 50, @default = 20 },
+                database = new { type = "string", description = "Database to search. If omitted, the agent finds databases itself.", maxLength = 256 },
+                container = new { type = "string", description = "Container to search. Requires `database`.", maxLength = 256 }
+            },
+            required = new string[] { "query" },
+            additionalProperties = false
+        }
+    };
 
     private static string? GetOptionalStringArg(Dictionary<string, object> args, string key)
     {

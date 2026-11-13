@@ -1,9 +1,11 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using AzureCosmosDB.MCP.Toolkit.Services;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -177,7 +179,7 @@ public sealed class AgenticSearchExecutorTests : IDisposable
         SetEnv(AgenticSearchExecutor.BaseUrlEnvVar, server.BaseUrl);
         SetEnv(AgenticSearchExecutor.TimeoutEnvVar, "30");
 
-        var tool = McpServerTool.Create(typeof(CosmosDbTools).GetMethod("AgenticSearch")!, (object?)null);
+        var tool = McpServerTool.Create(typeof(AgenticSearchTools).GetMethod("AgenticSearch")!, (object?)null);
         tool.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject()
             .Select(property => property.Name).Should().BeEquivalentTo(
                 "query", "maxDocuments", "database", "container");
@@ -212,6 +214,42 @@ public sealed class AgenticSearchExecutorTests : IDisposable
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
         return port;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AgenticSearch_is_listed_only_when_enabled(bool enabled)
+    {
+        using var application = new McpTestApplicationFactory().WithWebHostBuilder(builder =>
+            builder.UseSetting("AgenticSearch:Enabled", enabled ? "true" : "false"));
+        using var client = application.CreateClient();
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        client.DefaultRequestHeaders.Accept.ParseAdd("text/event-stream");
+
+        var initialize = await client.PostAsJsonAsync("/mcp", new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            method = "initialize",
+            @params = new
+            {
+                protocolVersion = "2025-06-18",
+                capabilities = new { },
+                clientInfo = new { name = "test", version = "1.0" }
+            }
+        });
+        if (initialize.Headers.TryGetValues("Mcp-Session-Id", out var sessionIds))
+        {
+            client.DefaultRequestHeaders.Add("Mcp-Session-Id", sessionIds.Single());
+        }
+        var sdkList = await client.PostAsJsonAsync("/mcp", new { jsonrpc = "2.0", id = 2, method = "tools/list" });
+        var webList = await client.PostAsJsonAsync("/mcp/http", new { jsonrpc = "2.0", id = 3, method = "tools/list" });
+
+        sdkList.StatusCode.Should().Be(HttpStatusCode.OK);
+        webList.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await sdkList.Content.ReadAsStringAsync()).Contains("\"agentic_search\"").Should().Be(enabled);
+        (await webList.Content.ReadAsStringAsync()).Contains("\"agentic_search\"").Should().Be(enabled);
     }
 
     /// <summary>
