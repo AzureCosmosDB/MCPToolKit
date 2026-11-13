@@ -15,10 +15,10 @@ using Xunit;
 namespace AzureCosmosDB.MCP.Toolkit.Tests;
 
 /// <summary>
-/// Tests for the AgenticSearchExecutor. Stands in for the cosmos-retriever
-/// FastAPI service with a tiny in-process HttpListener so we can verify the
+/// Tests for the AgenticSearchExecutor. Stands in for the agentic retrieval
+/// service with a tiny in-process HttpListener so we can verify the
 /// executor's response pass-through, timeout behaviour, and error-envelope
-/// generation without needing the real retriever service running.
+/// generation without needing the real service running.
 /// </summary>
 [Collection("Agentic search")]
 public sealed class AgenticSearchExecutorTests : IDisposable
@@ -47,7 +47,7 @@ public sealed class AgenticSearchExecutorTests : IDisposable
     public async Task RunAsync_passes_through_service_response_body()
     {
         const string body =
-            "{\"query\":\"hi\",\"documents\":[{\"id\":\"doc_a\",\"rank\":0}],\"num_turns\":1,\"elapsed_s\":0.01}";
+            "{\"answer\":\"hi\",\"documents\":[{\"database\":\"db1\",\"container\":\"c1\",\"id\":\"doc_a\",\"document\":{}}],\"turns\":1}";
 
         using var server = StubServer.Start((ctx, _) =>
         {
@@ -62,8 +62,8 @@ public sealed class AgenticSearchExecutorTests : IDisposable
         var raw = await AgenticSearchExecutor.RunAsync("hi", maxDocuments: 5, logger: _logger);
 
         using var doc = JsonDocument.Parse(raw);
-        doc.RootElement.GetProperty("query").GetString().Should().Be("hi");
-        doc.RootElement.GetProperty("num_turns").GetInt32().Should().Be(1);
+        doc.RootElement.GetProperty("answer").GetString().Should().Be("hi");
+        doc.RootElement.GetProperty("turns").GetInt32().Should().Be(1);
         doc.RootElement.GetProperty("documents")[0].GetProperty("id").GetString().Should().Be("doc_a");
     }
 
@@ -75,7 +75,7 @@ public sealed class AgenticSearchExecutorTests : IDisposable
         {
             capturedBody = reqBody;
             ctx.Response.StatusCode = 200;
-            return "{\"query\":\"q\",\"documents\":[],\"num_turns\":0,\"elapsed_s\":0.0}";
+            return "{\"answer\":\"\",\"documents\":[],\"turns\":0}";
         });
 
         SetEnv(AgenticSearchExecutor.BaseUrlEnvVar, server.BaseUrl);
@@ -97,9 +97,9 @@ public sealed class AgenticSearchExecutorTests : IDisposable
     {
         using var server = StubServer.Start((ctx, _) =>
         {
-            ctx.Response.StatusCode = 500;
+            ctx.Response.StatusCode = 429;
             ctx.Response.ContentType = "application/json";
-            return "{\"error\":\"vllm unreachable\",\"type\":\"RuntimeError\"}";
+            return "{\"error\":\"Model request failed.\",\"error_kind\":\"rate_limited\",\"retry_after_seconds\":5}";
         });
 
         SetEnv(AgenticSearchExecutor.BaseUrlEnvVar, server.BaseUrl);
@@ -108,7 +108,46 @@ public sealed class AgenticSearchExecutorTests : IDisposable
         var raw = await AgenticSearchExecutor.RunAsync("hi", maxDocuments: 5, logger: _logger);
 
         using var doc = JsonDocument.Parse(raw);
-        doc.RootElement.GetProperty("error").GetString().Should().Be("vllm unreachable");
+        doc.RootElement.GetProperty("error").GetString().Should().Be("Model request failed.");
+        doc.RootElement.GetProperty("error_kind").GetString().Should().Be("rate_limited");
+        doc.RootElement.GetProperty("retry_after_seconds").GetInt32().Should().Be(5);
+    }
+
+    [Fact]
+    public async Task RunAsync_wraps_non_json_error_response()
+    {
+        using var server = StubServer.Start((ctx, _) =>
+        {
+            ctx.Response.StatusCode = 502;
+            return "Bad Gateway";
+        });
+
+        SetEnv(AgenticSearchExecutor.BaseUrlEnvVar, server.BaseUrl);
+        SetEnv(AgenticSearchExecutor.TimeoutEnvVar, "30");
+
+        var raw = await AgenticSearchExecutor.RunAsync("hi", maxDocuments: 5, logger: _logger);
+
+        using var doc = JsonDocument.Parse(raw);
+        doc.RootElement.GetProperty("error").GetString().Should().Contain("HTTP 502");
+        doc.RootElement.GetProperty("body").GetString().Should().Be("Bad Gateway");
+    }
+
+    [Fact]
+    public async Task RunAsync_returns_error_envelope_for_empty_response()
+    {
+        using var server = StubServer.Start((ctx, _) =>
+        {
+            ctx.Response.StatusCode = 200;
+            return "";
+        });
+
+        SetEnv(AgenticSearchExecutor.BaseUrlEnvVar, server.BaseUrl);
+        SetEnv(AgenticSearchExecutor.TimeoutEnvVar, "30");
+
+        var raw = await AgenticSearchExecutor.RunAsync("hi", maxDocuments: 5, logger: _logger);
+
+        using var doc = JsonDocument.Parse(raw);
+        doc.RootElement.GetProperty("error").GetString().Should().Contain("produced no output");
     }
 
     [Fact]
@@ -207,15 +246,6 @@ public sealed class AgenticSearchExecutorTests : IDisposable
         }
     }
 
-    private static int GetFreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -250,6 +280,15 @@ public sealed class AgenticSearchExecutorTests : IDisposable
         webList.StatusCode.Should().Be(HttpStatusCode.OK);
         (await sdkList.Content.ReadAsStringAsync()).Contains("\"agentic_search\"").Should().Be(enabled);
         (await webList.Content.ReadAsStringAsync()).Contains("\"agentic_search\"").Should().Be(enabled);
+    }
+
+    private static int GetFreePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
     }
 
     /// <summary>
