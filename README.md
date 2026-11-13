@@ -429,6 +429,27 @@ Get-Content deployment-info.json | ConvertFrom-Json | Select-Object -ExpandPrope
 
 Or from Azure Portal: **Container Apps** → Your app → **Overview** → **Application Url**
 
+#### Sign in with Entra (no token needed)
+
+Deployments made with `scripts/Deploy-Cosmos-MCP-Toolkit.ps1` let VS Code sign you in with Microsoft Entra ID. Add only the server URL to `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "cosmosdb": {
+      "type": "http",
+      "url": "https://YOUR-CONTAINER-APP.azurecontainerapps.io/mcp"
+    }
+  }
+}
+```
+
+On first use VS Code opens a browser to sign in, then renews the token on its own. You still need the `Mcp.Tool.Executor` role.
+
+To enable this, the deploy script sets `AzureAd__McpResourceUrl` on the container, adds the `/mcp` URL as an Application ID URI on the Entra app, and pre-authorizes the MCP clients in `-PreAuthorizedClientAppIds` (Visual Studio Code and Azure CLI by default). To sign in from another MCP client, add its app ID to that list and rerun the script.
+
+To use a token instead, follow Steps 2 and 3.
+
 #### Step 2: Get Your JWT Bearer Token
 
 You need a valid Azure AD token for authentication. Use Azure CLI:
