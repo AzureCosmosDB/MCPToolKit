@@ -227,10 +227,14 @@ builder.Services.AddSingleton<AzureCosmosDB.MCP.Toolkit.Services.McpToolRequestV
 
 // Register MCP server with SDK transport (Streamable HTTP) for AI Foundry and other MCP clients.
 // Tools are defined below using [McpServerTool] attributes on CosmosDbMcpTools class.
-builder.Services.AddMcpServer()
+var mcpServer = builder.Services.AddMcpServer()
     // Stateless so any replica can serve any request; the tools need no per-session state.
     .WithHttpTransport(options => options.Stateless = true)
     .WithToolsFromAssembly();
+if (AgenticSearchTools.IsEnabled(builder.Configuration))
+{
+    mcpServer.WithTools([typeof(AgenticSearchTools)]);
+}
 
 // Configure forwarded headers for proxy scenarios
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -244,6 +248,7 @@ var app = builder.Build();
 
 // Store configuration in static state for access by static tool methods
 AppState.Configuration = builder.Configuration;
+AppState.LoggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 
 // Add security headers middleware to allow MSAL authentication
 app.Use(async (context, next) =>
@@ -346,6 +351,7 @@ app.Run();
 internal static class AppState
 {
     public static IConfiguration? Configuration { get; set; }
+    public static ILoggerFactory? LoggerFactory { get; set; }
 }
 
 public partial class Program
@@ -553,6 +559,159 @@ public static class CosmosDbTools
         }
     }
 
+    [McpServerTool(Name = "query_documents", ReadOnly = true), Description("Executes a bounded SELECT-only Cosmos DB for NoSQL query.")]
+    public static async Task<string> QueryDocuments(
+        [Description("Database id containing the container")] string databaseId,
+        [Description("Container id to query")] string containerId,
+        [Description("A single SELECT-only Cosmos DB for NoSQL query")] string queryText,
+        [Description("Maximum number of documents to return (1-1000, default 100)")] int maxItems = 100,
+        [Description("Maximum number of items requested per page (1-100, default 25)")] int pageSize = 25,
+        [Description("Maximum number of response pages to read (1-100, default 20)")] int maxPages = 20,
+        [Description("Maximum cumulative request charge in RUs (greater than 0, default 1000)")] double ruBudget = 1000,
+        [Description("Query timeout in seconds (1-300, default 30)")] int timeoutSeconds = 30,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(databaseId)
+            || string.IsNullOrWhiteSpace(containerId)
+            || string.IsNullOrWhiteSpace(queryText))
+        {
+            return JsonSerializer.Serialize(new { error = "Parameters 'databaseId', 'containerId', and 'queryText' are required." });
+        }
+        if (!IsSelectOnlyQuery(queryText))
+        {
+            return JsonSerializer.Serialize(new { error = "Only a single SELECT query is allowed." });
+        }
+        if (maxItems is < 1 or > 1000)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'maxItems' must be between 1 and 1000." });
+        }
+        if (pageSize is < 1 or > 100)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'pageSize' must be between 1 and 100." });
+        }
+        if (maxPages is < 1 or > 100)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'maxPages' must be between 1 and 100." });
+        }
+        if (ruBudget <= 0 || double.IsNaN(ruBudget) || double.IsInfinity(ruBudget))
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'ruBudget' must be a finite value greater than 0." });
+        }
+        if (timeoutSeconds is < 1 or > 300)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'timeoutSeconds' must be between 1 and 300." });
+        }
+
+        var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return JsonSerializer.Serialize(new { error = "Missing required environment variable COSMOS_ENDPOINT." });
+        }
+
+        try
+        {
+            using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutSource.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+            var credential = new DefaultAzureCredential();
+            using var cosmosClient = new CosmosClient(endpoint, credential, new CosmosClientOptions
+            {
+                ApplicationName = "AzureCosmosDBMCP-query-documents"
+            });
+
+            var container = cosmosClient.GetContainer(databaseId, containerId);
+            var query = new QueryDefinition(queryText.Trim());
+            var requestOptions = new QueryRequestOptions { MaxItemCount = pageSize };
+            using FeedIterator iterator = container.GetItemQueryStreamIterator(query, requestOptions: requestOptions);
+
+            var results = new List<JsonElement>();
+            var requestCharge = 0d;
+            var pagesRead = 0;
+            while (iterator.HasMoreResults
+                && pagesRead < maxPages
+                && results.Count < maxItems
+                && requestCharge < ruBudget)
+            {
+                using var response = await iterator.ReadNextAsync(timeoutSource.Token);
+                response.EnsureSuccessStatusCode();
+                pagesRead++;
+                requestCharge += response.Headers.RequestCharge;
+
+                using var document = await JsonDocument.ParseAsync(
+                    response.Content,
+                    cancellationToken: timeoutSource.Token);
+                if (document.RootElement.TryGetProperty("Documents", out var documents))
+                {
+                    foreach (var item in documents.EnumerateArray())
+                    {
+                        results.Add(item.Clone());
+                        if (results.Count >= maxItems)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            var hasMoreResults = iterator.HasMoreResults;
+            string? truncationReason = null;
+            if (hasMoreResults)
+            {
+                if (results.Count >= maxItems)
+                {
+                    truncationReason = "maxItems";
+                }
+                else if (pagesRead >= maxPages)
+                {
+                    truncationReason = "maxPages";
+                }
+                else if (requestCharge >= ruBudget)
+                {
+                    truncationReason = "ruBudget";
+                }
+                else
+                {
+                    truncationReason = "continuation";
+                }
+            }
+
+            return JsonSerializer.Serialize(new
+            {
+                results,
+                requestCharge,
+                pagesRead,
+                hasMoreResults,
+                truncated = hasMoreResults,
+                truncationReason
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            return JsonSerializer.Serialize(new { error = "The Cosmos DB query exceeded its timeout." });
+        }
+        catch (CosmosException cex)
+        {
+            return JsonSerializer.Serialize(new { error = cex.Message, statusCode = (int)cex.StatusCode });
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { error = ex.Message });
+        }
+    }
+
+    private static bool IsSelectOnlyQuery(string queryText)
+    {
+        var query = queryText.Trim();
+        return query.Length > "SELECT".Length
+            && query.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+            && char.IsWhiteSpace(query["SELECT".Length])
+            && !query.Contains(';');
+    }
+
     [McpServerTool, Description("Select TOP N documents where a given property contains the provided search string. N must be between 1 and 20.")]
     public static async Task<string> TextSearch(
         [Description("Database id containing the container")] string databaseId,
@@ -624,11 +783,13 @@ public static class CosmosDbTools
         }
     }
 
-    [McpServerTool, Description("Find a document by its id in the specified database/container.")]
+    [McpServerTool(ReadOnly = true), Description("Finds a document by its id and optional partition key in the specified database/container.")]
     public static async Task<string> FindDocumentByID(
         [Description("Database id containing the container")] string databaseId,
         [Description("Container id to query")] string containerId,
-        [Description("The id of the document to find")] string id)
+        [Description("The id of the document to find")] string id,
+        [Description("Optional partition key value to limit the query to a logical partition")] string? partitionKey = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -656,18 +817,32 @@ public static class CosmosDbTools
             var queryText = "SELECT * FROM c WHERE c.id = @id";
             var query = new QueryDefinition(queryText).WithParameter("@id", id);
 
-            var iterator = container.GetItemQueryIterator<dynamic>(query, requestOptions: new QueryRequestOptions { MaxItemCount = 1 });
+            var requestOptions = new QueryRequestOptions { MaxItemCount = 1 };
+            if (!string.IsNullOrWhiteSpace(partitionKey))
+            {
+                requestOptions.PartitionKey = new PartitionKey(partitionKey);
+            }
+            using var iterator = container.GetItemQueryStreamIterator(query, requestOptions: requestOptions);
 
             while (iterator.HasMoreResults)
             {
-                var page = await iterator.ReadNextAsync();
-                foreach (var doc in page)
+                using var response = await iterator.ReadNextAsync(cancellationToken);
+                response.EnsureSuccessStatusCode();
+                using var document = await JsonDocument.ParseAsync(response.Content, cancellationToken: cancellationToken);
+                if (document.RootElement.TryGetProperty("Documents", out var documents))
                 {
-                    return doc?.ToString() ?? "{}";
+                    foreach (var doc in documents.EnumerateArray())
+                    {
+                        return doc.GetRawText();
+                    }
                 }
             }
 
             return JsonSerializer.Serialize(new { message = "No document found with the specified id." });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (CosmosException cex)
         {
@@ -1097,5 +1272,42 @@ public static class CosmosDbTools
         {
             return JsonSerializer.Serialize(new { error = ex.Message });
         }
+    }
+}
+
+// Not marked [McpServerToolType], so WithToolsFromAssembly skips it; registered only when enabled.
+public static class AgenticSearchTools
+{
+    public const string EnabledEnvVar = "ENABLE_AGENTIC_SEARCH";
+
+    public static bool IsEnabled(IConfiguration configuration) =>
+        Environment.GetEnvironmentVariable(EnabledEnvVar) == "true" ||
+        configuration.GetValue<bool>("AgenticSearch:Enabled");
+
+    [McpServerTool, Description(
+        "Answers a natural-language question with a search agent that runs several searches over Cosmos DB, " +
+        "and returns the answer with its supporting documents. Prefer it over text_search or vector_search for " +
+        "complex or multi-hop questions where one search may not be enough. Optionally set `database`, and " +
+        "`container` with it, to limit the search.")]
+    public static async Task<string> AgenticSearch(
+        [Description("Natural-language question to answer.")] string query,
+        [Description("Maximum number of supporting documents to return (1-50, default 20).")] int maxDocuments = 20,
+        [Description("Database to search. If omitted, the agent finds databases itself.")] string? database = null,
+        [Description("Container to search. Requires `database`.")] string? container = null,
+        CancellationToken cancellationToken = default)
+    {
+        var logger = (AppState.LoggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
+            .CreateLogger("AzureCosmosDB.MCP.Toolkit.AgenticSearchTools.AgenticSearch");
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'query' is required and must be non-empty." });
+        }
+        if (maxDocuments < 1 || maxDocuments > 50)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'maxDocuments' must be between 1 and 50." });
+        }
+        return await AgenticSearchExecutor.RunAsync(
+            query, maxDocuments, logger, database, container, cancellationToken);
     }
 }
