@@ -13,6 +13,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using AzureCosmosDB.MCP.Toolkit.Services;
+using ModelContextProtocol.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,8 @@ var azureAd = builder.Configuration.GetSection("AzureAd");
 var tenantId = azureAd["TenantId"];
 var clientId = azureAd["ClientId"];
 var audienceConfig = azureAd["Audience"];
+// Public URL of the /mcp endpoint; when set, MCP clients such as VS Code can sign in with Entra on their own.
+var mcpResourceUrl = azureAd["McpResourceUrl"];
 
 // Check if authentication should be bypassed for development
 var devBypassAuth = Environment.GetEnvironmentVariable("DEV_BYPASS_AUTH") == "true" || 
@@ -59,8 +62,16 @@ if (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(c
     }
     
     // Add JWT Bearer authentication only if configuration is available
-    builder.Services
-        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    var authentication = builder.Services
+        .AddAuthentication(options =>
+        {
+            options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+            if (!string.IsNullOrEmpty(mcpResourceUrl))
+            {
+                // 401s then point MCP clients to the sign-in metadata; tokens are still checked by JWT Bearer.
+                options.DefaultChallengeScheme = McpAuthenticationDefaults.AuthenticationScheme;
+            }
+        })
         .AddJwtBearer(options =>
         {
             options.Authority = $"https://login.microsoftonline.com/{tenantId}/v2.0";
@@ -170,6 +181,19 @@ if (!devBypassAuth && !string.IsNullOrEmpty(tenantId) && !string.IsNullOrEmpty(c
                 }
             };
         });
+
+    if (!string.IsNullOrEmpty(mcpResourceUrl))
+    {
+        authentication.AddMcp(options =>
+        {
+            options.ResourceMetadata = new()
+            {
+                Resource = mcpResourceUrl,
+                AuthorizationServers = { $"https://login.microsoftonline.com/{tenantId}/v2.0" },
+                ScopesSupported = [$"api://{clientId}/access_as_user"],
+            };
+        });
+    }
 
     // Add authorization with policy for MCP Tool Executor role
     builder.Services.AddAuthorization(options =>

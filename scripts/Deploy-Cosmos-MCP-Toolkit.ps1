@@ -27,6 +27,9 @@
 .PARAMETER EntraAppName
     Name of the Entra App registration (default: "Azure Cosmos DB MCP Toolkit API")
     Use this to create a unique app if the default name is already taken
+.PARAMETER PreAuthorizedClientAppIds
+    App IDs of MCP clients that can sign users in to the toolkit without a consent prompt
+    (default: Visual Studio Code and Azure CLI). Add the app ID of any other MCP client your users connect with.
 .EXAMPLE
     ./Deploy-Cosmos-MCP-Server.ps1 -ResourceGroup "my-cosmos-mcp-rg"
 .EXAMPLE
@@ -60,7 +63,13 @@ param(
     [string]$ContainerAppName = "",
     
     [Parameter(Mandatory=$false)]
-    [string]$EntraAppName = ""
+    [string]$EntraAppName = "",
+
+    [Parameter(Mandatory=$false)]
+    [string[]]$PreAuthorizedClientAppIds = @(
+        "aebc6443-996d-45c2-90f0-388ff96faa56"  # Visual Studio Code
+        "04b07795-8ddb-461a-bbee-02f9e1bf7b46"  # Azure CLI
+    )
 )
 
 $ErrorActionPreference = "Stop"
@@ -340,20 +349,17 @@ For more information: https://aka.ms/service-management-reference-error
             $scopeId = $hasAccessScope.id
         }
 
-        # Pre-authorize Azure CLI (04b07795-8ddb-461a-bbee-02f9e1bf7b46) for the scope
-        $azureCliAppId = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-
+        # Pre-authorize MCP clients for the scope, keeping any clients already pre-authorized
         $refreshedApp = az rest --method GET --url $ENTRA_APP_URL | ConvertFrom-Json
-        $existingPreAuth = $refreshedApp.api.preAuthorizedApplications | Where-Object { $_.appId -eq $azureCliAppId }
+        $preAuthorized = @($refreshedApp.api.preAuthorizedApplications | Where-Object { $_ })
+        $missingClients = @($PreAuthorizedClientAppIds | Where-Object { $_ -notin $preAuthorized.appId })
 
-        if (-not $existingPreAuth) {
+        if ($missingClients.Count -gt 0) {
             $preAuthPayload = @{
                 api = @{
                     preAuthorizedApplications = @(
-                        @{
-                            appId = $azureCliAppId
-                            delegatedPermissionIds = @($scopeId)
-                        }
+                        $preAuthorized | ForEach-Object { @{ appId = $_.appId; delegatedPermissionIds = @($_.delegatedPermissionIds) } }
+                        $missingClients | ForEach-Object { @{ appId = $_; delegatedPermissionIds = @($scopeId) } }
                     )
                 }
             } | ConvertTo-Json -Depth 10
@@ -362,8 +368,7 @@ For more information: https://aka.ms/service-management-reference-error
             $preAuthPayload | Out-File -FilePath $tempPreAuthFile -Encoding utf8 -NoNewline
             az rest --method PATCH --url $ENTRA_APP_URL --headers "Content-Type=application/json" --body "@$tempPreAuthFile" | Out-Null
             Remove-Item $tempPreAuthFile -Force
-        } else {
-            # Already pre-authorized
+            Write-Info "Pre-authorized MCP clients: $($missingClients -join ', ')"
         }
     }
     catch {
@@ -763,7 +768,8 @@ function Update-Container-App {
     }
     
     # Get existing environment variables to extract Azure AI Services endpoint and embedding settings
-    $existingEnvVars = $containerApp.properties.template.containers[0].env
+    $toolkitContainer = $containerApp.properties.template.containers | Where-Object { $_.name -eq $ContainerAppName }
+    $existingEnvVars = $toolkitContainer.env
     $azureAiServiceEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value
     $embeddingDeployment = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_EMBEDDING_DEPLOYMENT" }).value
     
@@ -785,6 +791,7 @@ function Update-Container-App {
         "COSMOS_ENDPOINT=$cosmosEndpoint"
         "ASPNETCORE_ENVIRONMENT=Production"
         "ASPNETCORE_URLS=http://+:8080"
+        "AzureAd__McpResourceUrl=$($script:CONTAINER_APP_URL)/mcp"
     )
 
     # If a user-assigned identity exists, set AZURE_CLIENT_ID so DefaultAzureCredential resolves correctly
@@ -845,9 +852,10 @@ function Update-Container-App {
     }
     
     # Update container app with image and/or env vars
+    # Name the toolkit's container (named after the app) so other containers in the app are left alone
     if ($script:IMAGE_TAG) {
         try {
-            az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --image $script:IMAGE_TAG --set-env-vars $envVars --output none
+            az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --container-name $ContainerAppName --image $script:IMAGE_TAG --set-env-vars $envVars --output none
             if ($LASTEXITCODE -ne 0) { throw "Container app update failed" }
             Write-Info "Container app updated with image: $($script:IMAGE_TAG)"
         }
@@ -859,7 +867,7 @@ function Update-Container-App {
     else {
         Write-Warn "No new image built, updating environment variables only"
         try {
-            az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars $envVars --output none
+            az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --container-name $ContainerAppName --set-env-vars $envVars --output none
             if ($LASTEXITCODE -ne 0) { throw "Container app update failed" }
         }
         catch {
@@ -868,6 +876,21 @@ function Update-Container-App {
     }
 
     $script:CURRENT_TENANT_ID = $CURRENT_TENANT_ID
+}
+
+function Configure-Entra-App-McpResourceUri {
+    # MCP clients ask Entra for a token for the server's /mcp URL, so it must be one of the app's Application ID URIs
+    $mcpResourceUrl = "$($script:CONTAINER_APP_URL)/mcp"
+    $identifierUris = @(az ad app show --id $script:ENTRA_APP_CLIENT_ID --query identifierUris --output json | ConvertFrom-Json)
+    if ($mcpResourceUrl -in $identifierUris) { return }
+
+    az ad app update --id $script:ENTRA_APP_CLIENT_ID --identifier-uris @($identifierUris + $mcpResourceUrl) --output none
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "Failed to add $mcpResourceUrl as an Application ID URI. MCP clients such as VS Code won't be able to sign in on their own."
+    }
+    else {
+        Write-Info "Application ID URI added for MCP sign-in: $mcpResourceUrl"
+    }
 }
 
 function Configure-Entra-App-RedirectURIs {
@@ -1229,6 +1252,7 @@ function Main {
     Build-And-Push-Image
     Update-Container-App
     Configure-Entra-App-RedirectURIs
+    Configure-Entra-App-McpResourceUri
     Assign-Cosmos-RBAC
     Assign-AI-Foundry-RBAC
     Show-Container-Logs
