@@ -305,6 +305,16 @@ netstat -ano | findstr :8080
 taskkill /PID <process-id> /F
 ```
 
+Or bind a different address/port via `ASPNETCORE_URLS` (honored by the host; overrides the default `0.0.0.0:8080`):
+
+```powershell
+# Loopback + custom port (useful when an orchestrator spawns multiple Toolkit instances)
+$env:ASPNETCORE_URLS = "http://127.0.0.1:18080"
+dotnet run --project src/AzureCosmosDB.MCP.Toolkit/AzureCosmosDB.MCP.Toolkit.csproj
+```
+
+Container / Docker deployments already set `ASPNETCORE_URLS=http://+:8080`.
+
 ### Cosmos DB Emulator Connection Issues
 
 1. Ensure Cosmos DB Emulator is running
