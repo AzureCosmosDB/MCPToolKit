@@ -4,7 +4,16 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.Server;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using Xunit;
 
 namespace AzureCosmosDB.MCP.Toolkit.Tests;
@@ -154,5 +163,100 @@ public sealed class McpTestApplicationFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("COSMOS_ENDPOINT", "https://localhost:8081");
 
         builder.UseEnvironment("Development");
+    }
+}
+
+[CollectionDefinition("Diagnostic endpoint authentication", DisableParallelization = true)]
+public sealed class DiagnosticEndpointAuthenticationCollection
+{
+}
+
+[Collection("Diagnostic endpoint authentication")]
+public class McpDiagnosticEndpointTests
+{
+    [Theory]
+    [InlineData("Production", "anonymous")]
+    [InlineData("Production", "invalid")]
+    [InlineData("Production", "authenticated")]
+    [InlineData("Development", "anonymous")]
+    [InlineData("Development", "invalid")]
+    [InlineData("Development", "authenticated")]
+    public async Task DebugRoute_Should_NotExist_OrReflectRequestData(string environment, string authentication)
+    {
+        // Existing application factories change this process-wide setting.
+        var previousBypass = Environment.GetEnvironmentVariable("DEV_BYPASS_AUTH");
+        var bypass = environment == "Development";
+        Environment.SetEnvironmentVariable("DEV_BYPASS_AUTH", bypass ? "true" : "false");
+        try
+        {
+            const string issuer = "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0";
+            const string audience = "diagnostic-test-client";
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("synthetic-test-signing-key-not-a-production-secret"));
+            var tokenValidated = false;
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment(environment);
+                builder.UseSetting("DevelopmentMode:BypassAuthentication", bypass.ToString());
+                builder.UseSetting("AzureAd:TenantId", "11111111-1111-1111-1111-111111111111");
+                builder.UseSetting("AzureAd:ClientId", audience);
+                builder.ConfigureTestServices(services =>
+                {
+                    services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+                    {
+                        options.Configuration = new OpenIdConnectConfiguration { Issuer = issuer };
+                        options.Configuration.SigningKeys.Add(key);
+                        options.ConfigurationManager = new StaticConfigurationManager<OpenIdConnectConfiguration>(options.Configuration);
+                        options.TokenValidationParameters.ValidAudiences = [audience];
+                        options.Events.OnTokenValidated = _ =>
+                        {
+                            tokenValidated = true;
+                            return Task.CompletedTask;
+                        };
+                    });
+                });
+            });
+            using var client = factory.CreateClient();
+            var token = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
+                issuer: issuer,
+                audience: audience,
+                claims: [new Claim(ClaimTypes.Name, "synthetic-user"), new Claim("roles", "Mcp.Tool.Executor")],
+                expires: DateTime.UtcNow.AddMinutes(5),
+                signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)));
+            var path = authentication == "invalid"
+                ? "/mcp/http/debug?access_token=synthetic-query-token"
+                : "/mcp/http/debug?probe=synthetic-query-value";
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.Add("Cookie", "session=synthetic-cookie-secret");
+            request.Headers.Add("X-Forwarded-Host", "synthetic-internal-routing");
+            request.Headers.Add("X-Container-App-Revision-Name", "synthetic-revision");
+            if (authentication == "authenticated")
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            else if (authentication == "invalid")
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "synthetic-invalid-token");
+                request.Headers.Add("X-MS-TOKEN-AAD-ACCESS-TOKEN", "synthetic-platform-token");
+            }
+
+            using var response = await client.SendAsync(request);
+
+            response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            var body = await response.Content.ReadAsStringAsync();
+            foreach (var value in new[] { "synthetic-", token, "\"headers\"", "\"query\"", "\"authenticated\"", "\"roles\"" })
+                body.Should().NotContain(value);
+            if (!bypass && authentication == "authenticated")
+                tokenValidated.Should().BeTrue();
+
+            using var health = await client.GetAsync("/health");
+            health.StatusCode.Should().Be(HttpStatusCode.OK);
+            if (!bypass && authentication == "anonymous")
+            {
+                using var mcpResponse = await client.PostAsJsonAsync("/mcp", new { jsonrpc = "2.0", id = 1, method = "tools/list" });
+                mcpResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DEV_BYPASS_AUTH", previousBypass);
+        }
     }
 }
