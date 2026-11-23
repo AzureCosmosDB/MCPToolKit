@@ -7,10 +7,12 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Azure.Cosmos;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.Server;
+using Moq;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -201,6 +203,7 @@ public class McpDiagnosticEndpointTests
                 builder.UseSetting("AzureAd:ClientId", audience);
                 builder.ConfigureTestServices(services =>
                 {
+                    services.AddSingleton(new Mock<CosmosClient>().Object);
                     services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
                     {
                         options.Configuration = new OpenIdConnectConfiguration { Issuer = issuer };
