@@ -111,16 +111,17 @@ public static class EmbeddingClientFactory
         if (string.IsNullOrWhiteSpace(endpoint))
             throw new ArgumentException("Endpoint cannot be null or empty.", nameof(endpoint));
 
-        endpoint = endpoint.Trim().ToLowerInvariant();
+        if (!Uri.TryCreate(endpoint.Trim(), UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            throw new ArgumentException("Embedding endpoint must be an absolute HTTPS URL.", nameof(endpoint));
 
-        if (endpoint.Contains("api.openai.com", StringComparison.OrdinalIgnoreCase))
+        if (uri.Host.Equals("api.openai.com", StringComparison.OrdinalIgnoreCase))
         {
             return EndpointType.OpenAINative;
         }
 
-        if (endpoint.Contains(".services.ai.azure.com", StringComparison.OrdinalIgnoreCase))
+        if (uri.Host.EndsWith(".services.ai.azure.com", StringComparison.OrdinalIgnoreCase))
         {
-            if (endpoint.Contains("/api/projects/", StringComparison.OrdinalIgnoreCase))
+            if (uri.AbsolutePath.Contains("/api/projects/", StringComparison.OrdinalIgnoreCase))
             {
                 return EndpointType.AzureAIFoundry;
             }
@@ -130,13 +131,13 @@ public static class EmbeddingClientFactory
                 $"Got: {endpoint}");
         }
 
-        if (endpoint.Contains(".cognitiveservices.azure.com", StringComparison.OrdinalIgnoreCase))
+        if (uri.Host.EndsWith(".cognitiveservices.azure.com", StringComparison.OrdinalIgnoreCase))
         {
             return EndpointType.AzureAIServices;
         }
 
         // Default to Azure AI Services if pattern matches standard Azure structure
-        if (endpoint.Contains(".azure.com", StringComparison.OrdinalIgnoreCase))
+        if (uri.Host.EndsWith(".azure.com", StringComparison.OrdinalIgnoreCase))
         {
             return EndpointType.AzureAIServices;
         }
@@ -152,9 +153,8 @@ public static class EmbeddingClientFactory
     /// <summary>
     /// Create an embedding client for the specified endpoint.
     /// 
-    /// Priority order for authentication:
-    /// 1. OPENAI_API_KEY - for local development or scenarios where API key is available
-    /// 2. Azure credentials (DefaultAzureCredential) - for cloud production with Azure authentication
+    /// Azure endpoints use Microsoft Entra ID through DefaultAzureCredential.
+    /// OPENAI_API_KEY is used only for the native OpenAI API.
     /// </summary>
     public static IEmbeddingClient CreateEmbeddingClient(IConfiguration configuration, ILogger? logger = null)
     {
@@ -175,39 +175,43 @@ public static class EmbeddingClientFactory
         var apiKey = (configuration["OPENAI_API_KEY"]
             ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? string.Empty).Trim();
 
+        if (endpointType != EndpointType.OpenAINative && !string.IsNullOrWhiteSpace(apiKey))
+        {
+            logger?.LogWarning("OPENAI_API_KEY is ignored for Azure endpoints. Microsoft Entra ID authentication is required; remove the stale key from configuration.");
+        }
+
         switch (endpointType)
         {
             case EndpointType.OpenAINative:
                 return CreateOpenAINativeClient(endpoint, apiKey, logger);
             
             case EndpointType.AzureAIFoundry:
-                return CreateAzureAIFoundryClient(endpoint, apiKey, logger);
+                return CreateAzureAIFoundryClient(endpoint, logger);
             
             case EndpointType.AzureAIServices:
             default:
-                return CreateAzureAIServicesClient(endpoint, apiKey, logger);
+                return CreateAzureAIServicesClient(endpoint, logger);
         }
+    }
+
+    internal static string GetAuthorizationHint(IConfiguration configuration)
+    {
+        var endpoint = configuration["OPENAI_ENDPOINT"]
+            ?? Environment.GetEnvironmentVariable("OPENAI_ENDPOINT") ?? string.Empty;
+        return DetectEndpointType(endpoint) == EndpointType.OpenAINative
+            ? "Verify OPENAI_API_KEY has permission to use the configured native OpenAI model."
+            : "Azure endpoints use Microsoft Entra ID through DefaultAzureCredential, never OPENAI_API_KEY. Run az login locally, or configure the runtime managed identity (AZURE_CLIENT_ID for a user-assigned identity), and assign Cognitive Services OpenAI User on the target account.";
     }
 
     /// <summary>
     /// Create Azure AI Services (Cognitive Services) embedding client.
     /// </summary>
-    private static IEmbeddingClient CreateAzureAIServicesClient(string endpoint, string apiKey, ILogger? logger)
+    private static IEmbeddingClient CreateAzureAIServicesClient(string endpoint, ILogger? logger)
     {
         logger?.LogInformation("Creating embedding client for Azure AI Services (Cognitive Services)");
 
-        AzureOpenAIClient client;
-        if (!string.IsNullOrWhiteSpace(apiKey))
-        {
-            logger?.LogInformation("  Using API key authentication");
-            client = new AzureOpenAIClient(new Uri(endpoint), new Azure.AzureKeyCredential(apiKey));
-        }
-        else
-        {
-            logger?.LogInformation("  Using Azure credentials (DefaultAzureCredential)");
-            var credential = new DefaultAzureCredential();
-            client = new AzureOpenAIClient(new Uri(endpoint), credential);
-        }
+        logger?.LogInformation("  Using Microsoft Entra ID (DefaultAzureCredential)");
+        var client = new AzureOpenAIClient(new Uri(endpoint), new DefaultAzureCredential());
 
         return new AzureOpenAIEmbeddingClient(client);
     }
@@ -235,22 +239,15 @@ public static class EmbeddingClientFactory
     /// <summary>
     /// Create Azure AI Foundry embedding client.
     /// </summary>
-    private static IEmbeddingClient CreateAzureAIFoundryClient(string endpoint, string apiKey, ILogger? logger)
+    private static IEmbeddingClient CreateAzureAIFoundryClient(string endpoint, ILogger? logger)
     {
         logger?.LogInformation("Creating embedding client for Azure AI Foundry");
 
-        AzureOpenAIClient client;
-        if (!string.IsNullOrWhiteSpace(apiKey))
-        {
-            logger?.LogInformation("  Using API key authentication");
-            client = new AzureOpenAIClient(new Uri(endpoint), new Azure.AzureKeyCredential(apiKey));
-        }
-        else
-        {
-            logger?.LogInformation("  Using Azure credentials (DefaultAzureCredential)");
-            var credential = new DefaultAzureCredential();
-            client = new AzureOpenAIClient(new Uri(endpoint), credential);
-        }
+        // AzureOpenAIClient uses the account data plane, not the Foundry project API.
+        var projectUri = new Uri(endpoint);
+        var accountEndpoint = new Uri($"https://{projectUri.Host.Replace(".services.ai.azure.com", ".openai.azure.com", StringComparison.OrdinalIgnoreCase)}/");
+        logger?.LogInformation("  Using Microsoft Entra ID (DefaultAzureCredential) at {Endpoint}", accountEndpoint);
+        var client = new AzureOpenAIClient(accountEndpoint, new DefaultAzureCredential());
 
         return new AzureAIFoundryEmbeddingClient(client);
     }

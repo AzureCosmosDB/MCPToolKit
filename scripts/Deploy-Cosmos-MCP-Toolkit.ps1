@@ -982,88 +982,51 @@ function Assign-AI-Foundry-RBAC {
         return
     }
     
-    # Search for Cognitive Services accounts
-    $cognitiveAccounts = az cognitiveservices account list --resource-group $ResourceGroup 2>$null | ConvertFrom-Json
-    
-    if (-not $cognitiveAccounts -or $cognitiveAccounts.Count -eq 0) {
-        # The Cognitive Services account may be in a different resource group
-        $endpointHost = ([System.Uri]$azureAiServiceEndpoint).Host
-        $accountName = $endpointHost.Split('.')[0]
-        $cognitiveAccounts = az cognitiveservices account list --query "[?name=='$accountName']" 2>$null | ConvertFrom-Json
-        
-        if (-not $cognitiveAccounts -or $cognitiveAccounts.Count -eq 0) {
-            Write-Warn "No Cognitive Services accounts found matching endpoint. Assign 'Cognitive Services OpenAI User' manually."
-            return
-        }
+    $endpointUri = [System.Uri]$azureAiServiceEndpoint
+    if (-not $endpointUri.IsAbsoluteUri -or $endpointUri.Scheme -ne 'https') {
+        throw "OPENAI_ENDPOINT must be an absolute HTTPS URL."
     }
-    
-    # Match endpoint to Cognitive Services account
-    $matchingAccount = $null
-    
-    if ($azureAiServiceEndpoint -match "\.services\.ai\.azure\.com") {
-        Write-Warn "ERROR: The endpoint appears to be a Microsoft Foundry project URL."
-        Write-Warn "Please use the Azure AI Services account endpoint instead."
-        Write-Warn "How to get the correct endpoint:"
-        Write-Warn "  1. Go to Azure Portal > Cognitive Services / AI Services resource"
-        Write-Warn "  2. Copy the endpoint URL from the resource's Overview page"
-        Write-Warn "  3. It should look like: https://<resource-name>.cognitiveservices.azure.com/"
+
+    if ($endpointUri.Host -eq 'api.openai.com') {
+        Write-Info "Native OpenAI endpoint: Azure RBAC does not apply."
         return
     }
-    
-    if ($azureAiServiceEndpoint -match "\.cognitiveservices\.azure\.com") {
-        foreach ($account in $cognitiveAccounts) {
-            if ($account.kind -eq "OpenAI" -or $account.properties.endpoint -match "openai\.cognitiveservices\.azure\.com") {
-                $matchingAccount = $account
-                break
-            }
-        }
-        if (-not $matchingAccount -and $cognitiveAccounts.Count -gt 0) {
-            $matchingAccount = $cognitiveAccounts[0]
-        }
+
+    if ($endpointUri.Host -notmatch '\.(openai\.azure\.com|cognitiveservices\.azure\.com|services\.ai\.azure\.com)$') {
+        throw "Cannot resolve Azure AI account for OPENAI_ENDPOINT '$azureAiServiceEndpoint'."
     }
-    else {
-        # Direct endpoint match for Azure AI Services
-        $endpointHost = ([System.Uri]$azureAiServiceEndpoint).Host
-        foreach ($account in $cognitiveAccounts) {
-            $accountEndpoint = $account.properties.endpoint
-            if ($accountEndpoint -and ($accountEndpoint.Contains($endpointHost) -or $endpointHost.Contains($account.name))) {
-                $matchingAccount = $account
-                break
-            }
-        }
+
+    # Search the subscription so callers and accounts can be in different resource groups.
+    $cognitiveAccountsJson = az cognitiveservices account list -o json
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to list Azure AI accounts for RBAC assignment."
     }
-    
-    if (-not $matchingAccount) {
-        Write-Warn "Could not determine Cognitive Services account. Assigning to all OpenAI accounts..."
-        
-        $assigned = $false
-        $principalIds = if ($script:ACA_MI_PRINCIPAL_IDS) { $script:ACA_MI_PRINCIPAL_IDS } else { @($script:ACA_MI_PRINCIPAL_ID) }
-        foreach ($account in $cognitiveAccounts) {
-            if ($account.kind -eq "OpenAI") {
-                foreach ($principalId in $principalIds) {
-                    $existingRoleAssignment = az role assignment list --assignee $principalId --scope $account.id --query "[?roleDefinitionName=='Cognitive Services OpenAI User'].id" -o tsv
-                    if (-not $existingRoleAssignment) {
-                        az role assignment create --role "Cognitive Services OpenAI User" --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --scope $account.id
-                        $assigned = $true
-                    } else {
-                        $assigned = $true
-                    }
-                }
-            }
-        }
-        if (-not $assigned) { Write-Warn "No OpenAI accounts found. Assign role manually." }
-        return
+    $accountSubdomain = $endpointUri.Host.Split('.')[0]
+    $matchingAccounts = @($cognitiveAccountsJson | ConvertFrom-Json | Where-Object {
+        $_.name -eq $accountSubdomain -or $_.properties.customSubDomainName -eq $accountSubdomain
+    })
+    if ($matchingAccounts.Count -ne 1) {
+        throw "Expected one Azure AI account matching '$accountSubdomain'; found $($matchingAccounts.Count). Assign Cognitive Services OpenAI User on the exact target account."
     }
-    
+    $matchingAccount = $matchingAccounts[0]
     $resourceId = $matchingAccount.id
     Write-Info "Target: $($matchingAccount.name)"
     
     # Assign to all identity principals
     $principalIds = if ($script:ACA_MI_PRINCIPAL_IDS) { $script:ACA_MI_PRINCIPAL_IDS } else { @($script:ACA_MI_PRINCIPAL_ID) }
+    if (-not $principalIds -or @($principalIds | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+        throw "No valid runtime managed identity principal is available for Azure AI RBAC."
+    }
     foreach ($principalId in $principalIds) {
         $existingRoleAssignment = az role assignment list --assignee $principalId --scope $resourceId --query "[?roleDefinitionName=='Cognitive Services OpenAI User'].id" -o tsv
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to inspect Azure AI role assignments for '$principalId'."
+        }
         if (-not $existingRoleAssignment) {
-            az role assignment create --role "Cognitive Services OpenAI User" --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --scope $resourceId
+            az role assignment create --role "Cognitive Services OpenAI User" --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --scope $resourceId -o none
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to assign Azure AI data-plane access to '$principalId'."
+            }
             Write-Info "Assigned 'Cognitive Services OpenAI User' to '$principalId'"
         }
     }
