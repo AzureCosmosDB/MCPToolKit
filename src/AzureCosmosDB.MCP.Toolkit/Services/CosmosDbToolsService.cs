@@ -328,11 +328,6 @@ public class CosmosDbToolsService
             {
                 _logger.LogInformation("Creating embedding client for embedding generation");
 
-                var configuredApiKey = _configuration["OPENAI_API_KEY"]
-                    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-                var authMode = string.IsNullOrWhiteSpace(configuredApiKey) ? "azure-credential" : "api-key";
-                _logger.LogInformation("Embedding authentication mode: {AuthMode}", authMode);
-                
                 var embeddingClient = EmbeddingClientFactory.CreateEmbeddingClient(_configuration, _logger);
                 
                 var embeddingDeployment = _configuration["OPENAI_EMBEDDING_DEPLOYMENT"] 
@@ -361,13 +356,7 @@ public class CosmosDbToolsService
             }
             catch (RequestFailedException ex) when (ex.Status == 401 || ex.Status == 403)
             {
-                var configuredApiKey = _configuration["OPENAI_API_KEY"]
-                    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-                var usingApiKey = !string.IsNullOrWhiteSpace(configuredApiKey);
-
-                var hint = usingApiKey
-                    ? "OPENAI_API_KEY is configured. Verify the key matches OPENAI_ENDPOINT and has permission to use OPENAI_EMBEDDING_DEPLOYMENT."
-                    : "OPENAI_API_KEY is not configured. The service is using DefaultAzureCredential. Ensure the runtime identity has OpenAI data-plane access (for example, Cognitive Services OpenAI User) on the target resource.";
+                var hint = EmbeddingClientFactory.GetAuthorizationHint(_configuration);
 
                 _logger.LogError(ex, "Embedding authorization failed with status {StatusCode}. Hint: {Hint}", ex.Status, hint);
                 return new
@@ -491,11 +480,6 @@ public class CosmosDbToolsService
             {
                 _logger.LogInformation("Creating embedding client for hybrid search embedding generation");
 
-                var configuredApiKey = _configuration["OPENAI_API_KEY"]
-                    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-                var authMode = string.IsNullOrWhiteSpace(configuredApiKey) ? "azure-credential" : "api-key";
-                _logger.LogInformation("Embedding authentication mode: {AuthMode}", authMode);
-                
                 var embeddingClient = EmbeddingClientFactory.CreateEmbeddingClient(_configuration, _logger);
                 
                 var embeddingDeployment = _configuration["OPENAI_EMBEDDING_DEPLOYMENT"] 
@@ -524,13 +508,7 @@ public class CosmosDbToolsService
             }
             catch (RequestFailedException ex) when (ex.Status == 401 || ex.Status == 403)
             {
-                var configuredApiKey = _configuration["OPENAI_API_KEY"]
-                    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-                var usingApiKey = !string.IsNullOrWhiteSpace(configuredApiKey);
-
-                var hint = usingApiKey
-                    ? "OPENAI_API_KEY is configured. Verify the key matches OPENAI_ENDPOINT and has permission to use OPENAI_EMBEDDING_DEPLOYMENT."
-                    : "OPENAI_API_KEY is not configured. The service is using DefaultAzureCredential. Ensure the runtime identity has OpenAI data-plane access (for example, Cognitive Services OpenAI User) on the target resource.";
+                var hint = EmbeddingClientFactory.GetAuthorizationHint(_configuration);
 
                 _logger.LogError(ex, "Embedding authorization failed with status {StatusCode}. Hint: {Hint}", ex.Status, hint);
                 return new

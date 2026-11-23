@@ -111,12 +111,13 @@ The toolkit supports three types of embedding endpoints with automatic detection
 
 **Azure AI Services (Cognitive Services):**
 - `OPENAI_ENDPOINT` - https://<resource>.cognitiveservices.azure.com/
-- Uses DefaultAzureCredential or `OPENAI_API_KEY` if set
+- Uses Microsoft Entra ID through DefaultAzureCredential; API keys are never used
 - Example: `https://my-ai-service.cognitiveservices.azure.com/`
 
 **Azure AI Foundry:**
 - `OPENAI_ENDPOINT` - https://<resource>.services.ai.azure.com/api/projects/<project-name>
-- Uses DefaultAzureCredential or `OPENAI_API_KEY` if set
+- Uses Microsoft Entra ID through DefaultAzureCredential; API keys are never used
+- The embedding client resolves the project URL to the account's OpenAI endpoint
 - Example: `https://my-project.services.ai.azure.com/api/projects/my-project-123`
 
 **OpenAI Native API:**
@@ -125,8 +126,8 @@ The toolkit supports three types of embedding endpoints with automatic detection
 - Example: `https://api.openai.com/v1`
 
 **Common Configuration:**
-- `OPENAI_API_KEY` - API key for authentication (optional for Azure endpoints, required for OpenAI)
-  - Example: `sk-...` (OpenAI) or Azure API key
+- `OPENAI_API_KEY` - Required only for native OpenAI; ignored with a warning for Azure endpoints
+  - Example: `sk-...` (OpenAI)
 - `OPENAI_EMBEDDING_DEPLOYMENT` - Model/deployment name
   - Examples: `text-embedding-3-small`, `text-embedding-3-large`, `gpt-4o-mini`
 
@@ -153,14 +154,14 @@ $env:OPENAI_ENDPOINT = "https://api.openai.com/v1"
 $env:OPENAI_API_KEY = "sk-your-openai-key"
 $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
 
-# Option 2: Azure AI Services (with API key)
+# Option 2: Azure AI Services (Microsoft Entra ID; run az login first)
 # $env:OPENAI_ENDPOINT = "https://my-ai-service.cognitiveservices.azure.com/"
-# $env:OPENAI_API_KEY = "your-azure-key"
+# Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
 # $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
 
-# Option 3: Local/Azure AI Foundry with API key
-# $env:OPENAI_ENDPOINT = "http://localhost:8000"  # or Azure Foundry URL
-# $env:OPENAI_API_KEY = "your-api-key"
+# Option 3: Azure AI Foundry (Microsoft Entra ID; run az login first)
+# $env:OPENAI_ENDPOINT = "https://my-project.services.ai.azure.com/api/projects/my-project-123"
+# Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
 # $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
 
 # Development
@@ -193,6 +194,13 @@ $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
 ```
 
 ## Using Cosmos DB Emulator
+
+Azure embeddings require the caller to have **Cognitive Services OpenAI User** on
+the target account. Locally, run `az login`; in Azure, use the workload's managed
+identity and set `AZURE_CLIENT_ID` when selecting a user-assigned identity. A host
+Azure CLI login is not automatically available inside a Docker container.
+Disable account local authentication and rotate both keys after verifying Entra
+calls from every workload. See [resource remediation](scripts/README.md#disabling-azure-ai-key-authentication).
 
 The MCP Toolkit now supports local development with the Cosmos DB emulator via connection strings, so you don't need Azure credentials for local testing.
 

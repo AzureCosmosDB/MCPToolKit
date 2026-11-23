@@ -38,6 +38,70 @@ Configures Microsoft Foundry (Azure ML) connections for the deployed MCP Toolkit
 .\scripts\Setup-AIFoundry-Connection.ps1
 ```
 
+## Disabling Azure AI key authentication
+
+Azure OpenAI and Foundry embedding calls use Microsoft Entra ID only.
+`OPENAI_API_KEY` remains supported only for native OpenAI (`api.openai.com`).
+The deployment script resolves the exact Azure AI account across resource groups
+in the current subscription and assigns **Cognitive Services OpenAI User** to the
+Container App identities. It fails rather than granting access to unrelated accounts.
+
+Before disabling keys, verify a real model call from each caller's identity,
+not just `/health`. Locally use `az login`; deployed callers use managed identity
+(`AZURE_CLIENT_ID` selects a user-assigned identity). Remove stale Azure API keys
+from workload configuration and secret stores. Unknown external callers must also
+be migrated; inspecting this repository does not establish their readiness.
+
+Run the following for each account **only after verifying its callers**:
+
+```powershell
+$subscription = '<subscription-id>'
+$resourceGroup = '<account-resource-group>'
+$account = '<account-name>'
+$ownerEmail = '<owner-email>'
+$accountId = "/subscriptions/$subscription/resourceGroups/$resourceGroup/providers/Microsoft.CognitiveServices/accounts/$account"
+
+$disabled = az resource show --ids $accountId --query properties.disableLocalAuth -o tsv
+if ($LASTEXITCODE -ne 0) { throw 'Failed to read local authentication setting' }
+if ($disabled -eq 'true') {
+    throw 'Account is already key-disabled. Rotation may require a separately approved temporary re-enable; do not enable it automatically.'
+}
+try {
+    foreach ($key in @('Key1', 'Key2')) {
+        # Foundry can reject regeneration after local auth is disabled.
+        # Suppress output: regeneration otherwise prints both keys.
+        az cognitiveservices account keys regenerate --subscription $subscription -g $resourceGroup -n $account --key-name $key -o none
+        if ($LASTEXITCODE -ne 0) { throw "Failed to rotate $key" }
+    }
+} finally {
+    az resource update --ids $accountId --set properties.disableLocalAuth=true -o none
+    if ($LASTEXITCODE -ne 0) { throw 'URGENT: Failed to disable local authentication' }
+}
+az tag update --operation Merge --tags "Owner=$ownerEmail" --resource-id "/subscriptions/$subscription/resourceGroups/$resourceGroup" -o none
+if ($LASTEXITCODE -ne 0) { throw 'Failed to update Owner tag' }
+
+az resource show --ids $accountId --query properties.disableLocalAuth -o tsv
+if ($LASTEXITCODE -ne 0) { throw 'Failed to verify local authentication setting' }
+az group show --subscription $subscription -n $resourceGroup --query tags -o json
+if ($LASTEXITCODE -ne 0) { throw 'Failed to verify tags' }
+```
+
+Confirm `disableLocalAuth` is `true`, verify the owner email and repeat the Entra
+model call after the cutoff.
+
+If `CloudGov_OpenAI_MIOnly` denies the update because the OpenAI **account**
+itself has no identity, satisfy the policy without a skip tag or exemption:
+
+```powershell
+az resource update --ids $accountId --set identity.type=SystemAssigned properties.disableLocalAuth=true -o none
+if ($LASTEXITCODE -ne 0) { throw 'Failed to enable account identity and disable local authentication' }
+```
+
+The account identity is distinct from the **caller** identity, which still needs
+OpenAI data-plane RBAC. Keep `disableLocalAuth: true` in any separate
+infrastructure template that creates these AI accounts; the toolkit's Bicep
+templates consume existing AI endpoints and do not create AI accounts.
+
 ## Role Assignment Scripts
 
 These scripts help manage user access to the MCP Toolkit by assigning the `Mcp.Tool.Executor` role.
