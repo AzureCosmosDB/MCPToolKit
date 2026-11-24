@@ -249,11 +249,16 @@ builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.CosmosDbToolsServi
 builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.AuthenticationService>();
 builder.Services.AddSingleton<AzureCosmosDB.MCP.Toolkit.Services.McpToolRequestValidator>();
 
-// Register MCP server with SDK transport (SSE + Streamable HTTP) for AI Foundry and other MCP clients.
+// Register MCP server with SDK transport (Streamable HTTP) for AI Foundry and other MCP clients.
 // Tools are defined below using [McpServerTool] attributes on CosmosDbMcpTools class.
-builder.Services.AddMcpServer()
-    .WithHttpTransport()
+var mcpServer = builder.Services.AddMcpServer()
+    // Stateless so any replica can serve any request; the tools need no per-session state.
+    .WithHttpTransport(options => options.Stateless = true)
     .WithToolsFromAssembly();
+if (AgenticSearchTools.IsEnabled(builder.Configuration))
+{
+    mcpServer.WithTools([typeof(AgenticSearchTools)]);
+}
 
 // Configure forwarded headers for proxy scenarios
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -267,6 +272,7 @@ var app = builder.Build();
 
 // Store configuration in static state for access by static tool methods
 AppState.Configuration = builder.Configuration;
+AppState.LoggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 
 // Add security headers middleware to allow MSAL authentication
 app.Use(async (context, next) =>
@@ -348,7 +354,7 @@ if (isDevelopment || devBypassAuth)
 // Map controllers last
 app.MapControllers();
 
-// Map MCP SDK endpoint at /mcp — provides SSE transport (GET /mcp) and Streamable HTTP (POST /mcp).
+// Map MCP SDK endpoint at /mcp — provides Streamable HTTP (POST /mcp).
 // This is what AI Foundry, Claude Desktop, and other standard MCP clients connect to.
 // The custom /mcp/http controller endpoint is retained for the built-in web UI tester.
 if (!devBypassAuth)
@@ -369,6 +375,7 @@ app.Run();
 internal static class AppState
 {
     public static IConfiguration? Configuration { get; set; }
+    public static ILoggerFactory? LoggerFactory { get; set; }
 }
 
 public partial class Program
@@ -1289,5 +1296,42 @@ public static class CosmosDbTools
         {
             return JsonSerializer.Serialize(new { error = ex.Message });
         }
+    }
+}
+
+// Not marked [McpServerToolType], so WithToolsFromAssembly skips it; registered only when enabled.
+public static class AgenticSearchTools
+{
+    public const string EnabledEnvVar = "ENABLE_AGENTIC_SEARCH";
+
+    public static bool IsEnabled(IConfiguration configuration) =>
+        Environment.GetEnvironmentVariable(EnabledEnvVar) == "true" ||
+        configuration.GetValue<bool>("AgenticSearch:Enabled");
+
+    [McpServerTool, Description(
+        "Answers a natural-language question with a search agent that runs several searches over Cosmos DB, " +
+        "and returns the answer with its supporting documents. Prefer it over text_search or vector_search for " +
+        "complex or multi-hop questions where one search may not be enough. Optionally set `database`, and " +
+        "`container` with it, to limit the search.")]
+    public static async Task<string> AgenticSearch(
+        [Description("Natural-language question to answer.")] string query,
+        [Description("Maximum number of supporting documents to return (1-50, default 20).")] int maxDocuments = 20,
+        [Description("Database to search. If omitted, the agent finds databases itself.")] string? database = null,
+        [Description("Container to search. Requires `database`.")] string? container = null,
+        CancellationToken cancellationToken = default)
+    {
+        var logger = (AppState.LoggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
+            .CreateLogger("AzureCosmosDB.MCP.Toolkit.AgenticSearchTools.AgenticSearch");
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'query' is required and must be non-empty." });
+        }
+        if (maxDocuments < 1 || maxDocuments > 50)
+        {
+            return JsonSerializer.Serialize(new { error = "Parameter 'maxDocuments' must be between 1 and 50." });
+        }
+        return await AgenticSearchExecutor.RunAsync(
+            query, maxDocuments, logger, database, container, cancellationToken);
     }
 }
