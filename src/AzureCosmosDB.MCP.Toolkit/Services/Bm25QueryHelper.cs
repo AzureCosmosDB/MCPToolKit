@@ -5,6 +5,11 @@ namespace AzureCosmosDB.MCP.Toolkit.Services;
 
 public static class Bm25QueryHelper
 {
+    // Default "split" uses one BM25 call per group of at most 30 words.
+    // For multiple groups, weighted RRF combines vector and group rank positions:
+    // vector weight = total word count; group weight = that group's word count.
+    // This heuristic discards BM25 score magnitudes and is not equivalent to
+    // scoring every word together in one BM25 call.
     public const string DefaultPolicy = "split";
     private const int MaxTermsPerScore = 30;
 
