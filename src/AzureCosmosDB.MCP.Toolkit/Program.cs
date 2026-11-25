@@ -1118,7 +1118,7 @@ public static class CosmosDbTools
         }
     }
 
-    [McpServerTool, Description("Performs hybrid search combining vector similarity and full-text keyword search using Reciprocal Rank Fusion (RRF). Requires both a vector index and a full-text index on the container.")]
+    [McpServerTool, Description("Searches documents by meaning and by matching words, then returns one ranked list. Requires vector and full-text indexes on the container.")]
     public static async Task<string> HybridSearch(
         [Description("Database id containing the container")] string databaseId,
         [Description("Container id to query")] string containerId,
@@ -1126,7 +1126,11 @@ public static class CosmosDbTools
         [Description("Property name that has a full-text index for keyword search, e.g. 'text' or 'content'")] string textProperty,
         [Description("Property name where vector embeddings are stored, e.g. 'vector' or 'embeddings'")] string vectorProperty,
         [Description("Comma-separated list of specific properties to project in results, e.g. 'id,title,content'. Cannot use '*' wildcard.")] string selectProperties,
-        [Description("Number of documents to return (1-50, default 10)")] int topN = 10)
+        [Description("Number of documents to return (1-50, default 10)")] int topN = 10,
+        [Description("Controls how query is split during keyword search" +
+            "'split' (default) searches individual words, splitting queries longer than 30 words into groups and combining their rankings. " +
+            "'whole' searches the entire query as one phrase. " +
+            "The meaning-based search always uses the full query.")] string bm25QueryPolicy = Bm25QueryHelper.DefaultPolicy)
     {
         try
         {
@@ -1205,6 +1209,7 @@ public static class CosmosDbTools
                 }
             }
 
+            var bm25Terms = Bm25QueryHelper.PrepareTerms(searchText, bm25QueryPolicy);
             var credential = new DefaultAzureCredential();
 
             // Generate embedding using the configured embedding service
@@ -1238,12 +1243,11 @@ public static class CosmosDbTools
             var queryText = $@"
                 SELECT TOP @topN {selectClause}
                 FROM c
-                ORDER BY RANK RRF(VectorDistance(c.{vectorProperty}, @embedding), FullTextScore(c.{textProperty}, @searchText))";
+                ORDER BY RANK {Bm25QueryHelper.BuildHybridRanking(textProperty, vectorProperty, bm25Terms)}";
 
-            var queryDefinition = new QueryDefinition(queryText)
+            var queryDefinition = Bm25QueryHelper.BindParameters(new QueryDefinition(queryText)
                 .WithParameter("@topN", topN)
-                .WithParameter("@embedding", embedding)
-                .WithParameter("@searchText", searchText);
+                .WithParameter("@embedding", embedding), bm25Terms);
 
             var iterator = container.GetItemQueryIterator<dynamic>(
                 queryDefinition,
