@@ -436,7 +436,7 @@ public class CosmosDbToolsService
         }
     }
 
-    public async Task<object> HybridSearch(string databaseId, string containerId, string searchText, string textProperty, string vectorProperty, string selectProperties, int topN = 10, CancellationToken cancellationToken = default)
+    public async Task<object> HybridSearch(string databaseId, string containerId, string searchText, string textProperty, string vectorProperty, string selectProperties, int topN = 10, CancellationToken cancellationToken = default, string bm25QueryPolicy = Bm25QueryHelper.DefaultPolicy)
     {
         try
         {
@@ -481,6 +481,8 @@ public class CosmosDbToolsService
                     return new { error = $"Invalid property name '{prop}' in selectProperties. Use dot notation with letters, digits, and underscores only (e.g., 'id', 'title', 'metadata.author')." };
                 }
             }
+
+            var bm25Terms = Bm25QueryHelper.PrepareTerms(searchText, bm25QueryPolicy);
 
             _logger.LogInformation("Hybrid search for '{SearchText}' in {DatabaseId}/{ContainerId}", searchText, databaseId, containerId);
 
@@ -553,12 +555,11 @@ public class CosmosDbToolsService
             var queryText = $@"
                 SELECT TOP @topN {selectClause}
                 FROM c
-                ORDER BY RANK RRF(VectorDistance(c.{vectorProperty}, @embedding), FullTextScore(c.{textProperty}, @searchText))";
+                ORDER BY RANK {Bm25QueryHelper.BuildHybridRanking(textProperty, vectorProperty, bm25Terms)}";
 
-            var queryDefinition = new QueryDefinition(queryText)
+            var queryDefinition = Bm25QueryHelper.BindParameters(new QueryDefinition(queryText)
                 .WithParameter("@topN", topN)
-                .WithParameter("@embedding", embedding)
-                .WithParameter("@searchText", searchText);
+                .WithParameter("@embedding", embedding), bm25Terms);
 
             using var streamIterator = container.GetItemQueryStreamIterator(
                 queryDefinition,

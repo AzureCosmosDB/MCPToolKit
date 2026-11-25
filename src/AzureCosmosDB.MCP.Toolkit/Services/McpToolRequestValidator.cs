@@ -57,6 +57,7 @@ public sealed class McpToolRequestValidator
                 ["textProperty"] = ToolArgumentSchema.String(required: true, maxLength: 256),
                 ["vectorProperty"] = ToolArgumentSchema.String(required: true, maxLength: 256),
                 ["selectProperties"] = ToolArgumentSchema.String(required: true, maxLength: 512),
+                ["bm25QueryPolicy"] = ToolArgumentSchema.String(required: false, maxLength: 32),
                 ["topN"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 50)
             }),
             ["agentic_search"] = new(new Dictionary<string, ToolArgumentSchema>(StringComparer.Ordinal)

@@ -274,6 +274,7 @@ public class MCPProtocolController : ControllerBase
                                             textProperty = new { type = "string", description = "Property name that has a full-text index for keyword search", maxLength = 256 },
                                             vectorProperty = new { type = "string", description = "Property name where vector embeddings are stored", maxLength = 256 },
                                             selectProperties = new { type = "string", description = "Comma-separated list of specific properties to project in results", maxLength = 512 },
+                                            bm25QueryPolicy = new { type = "string", description = "BM25 query splitting policy: split to individual words in groups of at most 30, or the whole query as one phrase", @enum = new[] { "split", "whole" }, @default = Bm25QueryHelper.DefaultPolicy, maxLength = 32 },
                                             topN = new { type = "integer", description = "Number of documents to return (1-50, default 10)", minimum = 1, maximum = 50, @default = 10 }
                                         },
                                         required = new string[] { "databaseId", "containerId", "searchText", "textProperty", "vectorProperty", "selectProperties" },
@@ -471,7 +472,8 @@ public class MCPProtocolController : ControllerBase
                 GetStringArg(args, "vectorProperty"),
                 GetStringArg(args, "selectProperties"),
                 GetOptionalIntArg(args, "topN", 10),
-                cancellationToken),
+                cancellationToken,
+                GetOptionalStringArg(args, "bm25QueryPolicy") ?? Bm25QueryHelper.DefaultPolicy),
             "agentic_search" when _agenticSearchEnabled => await _cosmosDbTools.AgenticSearch(
                 GetStringArg(args, "query"),
                 GetOptionalIntArg(args, "maxDocuments", 20),
