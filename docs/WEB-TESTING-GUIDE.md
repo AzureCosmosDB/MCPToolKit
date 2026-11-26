@@ -98,7 +98,8 @@ Your Client ID is created automatically during deployment. Find it in:
 5. **`text_search`** - Full-text search within documents
 6. **`vector_search`** - Semantic search using AI embeddings
 7. **`hybrid_search`** - Hybrid search combining vector similarity and full-text keyword search using RRF ranking
-8. **`get_approximate_schema`** - Analyze document structure
+8. **`bm25_search`** - Keyword search ranked by BM25 relevance, without embeddings
+9. **`get_approximate_schema`** - Analyze document structure
 
 ### Interactive Testing
 

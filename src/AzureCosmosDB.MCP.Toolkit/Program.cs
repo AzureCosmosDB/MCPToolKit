@@ -1118,7 +1118,7 @@ public static class CosmosDbTools
         }
     }
 
-    [McpServerTool, Description("Performs hybrid search combining vector similarity and full-text keyword search using Reciprocal Rank Fusion (RRF). Requires both a vector index and a full-text index on the container.")]
+    [McpServerTool, Description("Searches documents by meaning and by matching words, then returns one ranked list. Requires vector and full-text indexes on the container.")]
     public static async Task<string> HybridSearch(
         [Description("Database id containing the container")] string databaseId,
         [Description("Container id to query")] string containerId,
@@ -1126,7 +1126,11 @@ public static class CosmosDbTools
         [Description("Property name that has a full-text index for keyword search, e.g. 'text' or 'content'")] string textProperty,
         [Description("Property name where vector embeddings are stored, e.g. 'vector' or 'embeddings'")] string vectorProperty,
         [Description("Comma-separated list of specific properties to project in results, e.g. 'id,title,content'. Cannot use '*' wildcard.")] string selectProperties,
-        [Description("Number of documents to return (1-50, default 10)")] int topN = 10)
+        [Description("Number of documents to return (1-50, default 10)")] int topN = 10,
+        [Description("Controls how query is split during keyword search" +
+            "'split' (default) searches individual words, splitting queries longer than 30 words into groups and combining their rankings. " +
+            "'whole' searches the entire query as one phrase. " +
+            "The meaning-based search always uses the full query.")] string bm25QueryPolicy = Bm25QueryHelper.DefaultPolicy)
     {
         try
         {
@@ -1205,6 +1209,7 @@ public static class CosmosDbTools
                 }
             }
 
+            var bm25Terms = Bm25QueryHelper.PrepareTerms(searchText, bm25QueryPolicy);
             var credential = new DefaultAzureCredential();
 
             // Generate embedding using the configured embedding service
@@ -1238,12 +1243,133 @@ public static class CosmosDbTools
             var queryText = $@"
                 SELECT TOP @topN {selectClause}
                 FROM c
-                ORDER BY RANK RRF(VectorDistance(c.{vectorProperty}, @embedding), FullTextScore(c.{textProperty}, @searchText))";
+                ORDER BY RANK {Bm25QueryHelper.BuildHybridRanking(textProperty, vectorProperty, bm25Terms)}";
 
-            var queryDefinition = new QueryDefinition(queryText)
+            var queryDefinition = Bm25QueryHelper.BindParameters(new QueryDefinition(queryText)
                 .WithParameter("@topN", topN)
-                .WithParameter("@embedding", embedding)
-                .WithParameter("@searchText", searchText);
+                .WithParameter("@embedding", embedding), bm25Terms);
+
+            var iterator = container.GetItemQueryIterator<dynamic>(
+                queryDefinition,
+                requestOptions: new QueryRequestOptions { MaxItemCount = topN }
+            );
+
+            var results = new List<string>();
+            while (iterator.HasMoreResults && results.Count < topN)
+            {
+                var page = await iterator.ReadNextAsync();
+                foreach (var doc in page)
+                {
+                    results.Add(doc?.ToString() ?? "{}");
+                    if (results.Count >= topN) break;
+                }
+            }
+
+            var jsonArray = "[" + string.Join(",", results) + "]";
+            return jsonArray;
+        }
+        catch (CosmosException cex)
+        {
+            return JsonSerializer.Serialize(new { error = cex.Message, statusCode = (int)cex.StatusCode });
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { error = ex.Message });
+        }
+    }
+
+    [McpServerTool(Name = "bm25_search", ReadOnly = true), Description("Searches documents by matching words and returns them ranked by BM25 relevance. Only documents containing at least one search word are returned. Requires a full-text index on the container.")]
+    public static async Task<string> Bm25Search(
+        [Description("Database id containing the container")] string databaseId,
+        [Description("Container id to query")] string containerId,
+        [Description("Text to search for using keyword matching")] string searchText,
+        [Description("Property name that has a full-text index for keyword search, e.g. 'text' or 'content'")] string textProperty,
+        [Description("Comma-separated list of specific properties to project in results, e.g. 'id,title,content'. Cannot use '*' wildcard.")] string selectProperties,
+        [Description("Number of documents to return (1-50, default 10)")] int topN = 10,
+        [Description("Controls how query is split during keyword search. " +
+            "'split' (default) searches individual words, splitting queries longer than 30 words into groups and combining their rankings. " +
+            "'whole' searches the entire query as one phrase.")] string bm25QueryPolicy = Bm25QueryHelper.DefaultPolicy)
+    {
+        try
+        {
+            // Validate environment variables
+            var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
+
+            if (string.IsNullOrWhiteSpace(cosmosEndpoint))
+            {
+                return JsonSerializer.Serialize(new { error = "Missing required environment variable COSMOS_ENDPOINT." });
+            }
+
+            // Validate parameters
+            if (string.IsNullOrWhiteSpace(databaseId) || string.IsNullOrWhiteSpace(containerId))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameters 'databaseId' and 'containerId' are required." });
+            }
+            if (string.IsNullOrWhiteSpace(searchText))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'searchText' is required." });
+            }
+            if (string.IsNullOrWhiteSpace(textProperty))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'textProperty' is required." });
+            }
+            if (string.IsNullOrWhiteSpace(selectProperties))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'selectProperties' is required." });
+            }
+            if (topN < 1 || topN > 50)
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'topN' must be a whole number between 1 and 50." });
+            }
+
+            // Validate that selectProperties doesn't contain wildcard
+            if (selectProperties.Trim() == "*" || selectProperties.Contains("*"))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'selectProperties' cannot contain '*' wildcard. Please specify explicit property names separated by commas." });
+            }
+
+            // Validate property names
+            var propPattern = new Regex(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$");
+
+            if (!propPattern.IsMatch(textProperty))
+            {
+                return JsonSerializer.Serialize(new { error = "Invalid textProperty name. Use dot notation with letters, digits, and underscores only (e.g., 'text' or 'content')." });
+            }
+
+            var properties = selectProperties.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Trim())
+                .ToArray();
+
+            foreach (var prop in properties)
+            {
+                if (!propPattern.IsMatch(prop))
+                {
+                    return JsonSerializer.Serialize(new { error = $"Invalid property name '{prop}' in selectProperties. Use dot notation with letters, digits, and underscores only (e.g., 'id', 'title', 'metadata.author')." });
+                }
+            }
+
+            var bm25Terms = Bm25QueryHelper.PrepareTerms(searchText, bm25QueryPolicy);
+            var credential = new DefaultAzureCredential();
+
+            // Perform BM25 search in Cosmos DB
+            using var cosmosClient = new CosmosClient(cosmosEndpoint, credential, new CosmosClientOptions
+            {
+                ApplicationName = "AzureCosmosDBMCP-bm25-search"
+            });
+
+            var container = cosmosClient.GetContainer(databaseId, containerId);
+
+            var selectClause = string.Join(", ", properties.Select(p => $"c.{p}"));
+
+            // BM25 query: keep documents containing any term, then rank them by full-text score
+            var queryText = $@"
+                SELECT TOP @topN {selectClause}
+                FROM c
+                WHERE {Bm25QueryHelper.BuildKeywordFilter(textProperty, bm25Terms)}
+                ORDER BY RANK {Bm25QueryHelper.BuildKeywordRanking(textProperty, bm25Terms)}";
+
+            var queryDefinition = Bm25QueryHelper.BindParameters(new QueryDefinition(queryText)
+                .WithParameter("@topN", topN), bm25Terms);
 
             var iterator = container.GetItemQueryIterator<dynamic>(
                 queryDefinition,

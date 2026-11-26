@@ -326,6 +326,7 @@
                             <option value="get_approximate_schema">Get Schema</option>
                             <option value="vector_search">Vector Search</option>
                             <option value="hybrid_search">Hybrid Search</option>
+                            <option value="bm25_search">BM25 Search</option>
                         </select>
                     </div>
 
@@ -735,6 +736,7 @@
                     case 'text_search': toolParams = { databaseId: database, containerId: container, property: document.getElementById('searchProperty')?.value || 'name', searchPhrase: document.getElementById('searchPhrase')?.value || 'search', n: 5 }; break;
                     case 'vector_search': toolParams = { databaseId: database, containerId: container, searchText: document.getElementById('vectorSearch')?.value || 'query', vectorProperty: document.getElementById('vectorProperty')?.value || 'vector', selectProperties: document.getElementById('selectProperties')?.value || 'id,title', topN: 10 }; break;
                     case 'hybrid_search': toolParams = { databaseId: database, containerId: container, searchText: document.getElementById('vectorSearch')?.value || 'query', textProperty: document.getElementById('textProperty')?.value || 'content', vectorProperty: document.getElementById('vectorProperty')?.value || 'vector', selectProperties: document.getElementById('selectProperties')?.value || 'id,title', topN: 10 }; break;
+                    case 'bm25_search': toolParams = { databaseId: database, containerId: container, searchText: document.getElementById('vectorSearch')?.value || 'query', textProperty: document.getElementById('textProperty')?.value || 'content', selectProperties: document.getElementById('selectProperties')?.value || 'id,title', topN: 10 }; break;
                     default: toolParams = { databaseId: database, containerId: container }; break;
                 }
 
@@ -877,6 +879,13 @@
                     if (!database || !container || !hs || !tp || !hvp || !hsp) { showError('All hybrid search fields are required'); return; }
                     toolParams = { databaseId: database, containerId: container, searchText: hs, textProperty: tp, vectorProperty: hvp, selectProperties: hsp, topN: parseInt(document.getElementById('resultCount').value) || 10 };
                     break;
+                case 'bm25_search':
+                    const bs = document.getElementById('vectorSearch').value.trim();
+                    const btp = document.getElementById('textProperty').value.trim();
+                    const bsp = document.getElementById('selectProperties').value.trim();
+                    if (!database || !container || !bs || !btp || !bsp) { showError('All BM25 search fields are required'); return; }
+                    toolParams = { databaseId: database, containerId: container, searchText: bs, textProperty: btp, selectProperties: bsp, topN: parseInt(document.getElementById('resultCount').value) || 10 };
+                    break;
                 case 'get_approximate_schema':
                     if (!database || !container) { showError('Database ID and Container ID are required'); return; }
                     toolParams = { databaseId: database, containerId: container };
@@ -928,6 +937,11 @@
                     document.getElementById('vectorSearchField').style.display = 'block';
                     document.getElementById('textPropertyField').style.display = 'block';
                     document.getElementById('vectorPropertyField').style.display = 'block';
+                    document.getElementById('selectPropertiesField').style.display = 'block';
+                    break;
+                case 'bm25_search':
+                    document.getElementById('vectorSearchField').style.display = 'block';
+                    document.getElementById('textPropertyField').style.display = 'block';
                     document.getElementById('selectPropertiesField').style.display = 'block';
                     break;
             }

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **BM25 search tool** (`bm25_search`): ranks documents by full-text keyword relevance (BM25) without embeddings. Returns only documents containing at least one search word. Requires a full-text index on the target container.
+- Added `bm25_search` to the web testing UI dropdown.
+
+### Fixed
+- `hybrid_search` now scores individual query words with BM25 instead of treating the whole query as one phrase. The new optional `bm25QueryPolicy` argument keeps the old behavior with `whole`. Queries longer than 30 words are split into groups whose rankings are combined.
+
 ## [1.2.0] - 2026-11-13
 
 ### Added

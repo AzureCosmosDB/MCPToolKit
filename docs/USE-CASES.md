@@ -217,6 +217,7 @@ Tenant B → [MCP Server + Cosmos DB]
 | "Search for keyword" | `text_search` |
 | "Find semantically similar items" | `vector_search` |
 | "Combine keyword + semantic search" | `hybrid_search` |
+| "Rank documents by keyword relevance" | `bm25_search` |
 | "Understand my data structure" | `get_approximate_schema` |
 | "Get latest documents" | `get_recent_documents` |
 

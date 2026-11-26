@@ -122,6 +122,7 @@ The web UI lets you test all MCP tools:
 | **Text Search** | Type search term → click "Text Search" |
 | **Vector Search** | Enter query → click "Vector Search" |
 | **Hybrid Search** | Combines both search types |
+| **BM25 Search** | Ranks documents by keyword relevance, without embeddings |
 | **Recent Documents** | Gets N most recent documents |
 
 ### 🔧 Troubleshooting
