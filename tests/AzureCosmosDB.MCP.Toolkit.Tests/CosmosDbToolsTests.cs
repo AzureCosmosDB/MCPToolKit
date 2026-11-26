@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Moq;
 using AzureCosmosDB.MCP.Toolkit.Services;
 using Microsoft.Azure.Cosmos;
+using ModelContextProtocol.Server;
 
 namespace AzureCosmosDB.MCP.Toolkit.Tests;
 
@@ -206,6 +207,21 @@ public class CosmosDbToolsTests
         policy.DefaultValue.Should().Be(Bm25QueryHelper.DefaultPolicy);
         tools.GetMethod("VectorSearch")!.GetParameters()
             .Should().NotContain(parameter => parameter.Name == "bm25QueryPolicy");
+    }
+
+    [Fact]
+    public void Bm25Search_Should_Be_ReadOnly_Keyword_Tool_Without_Vector_Arguments()
+    {
+        var method = typeof(global::CosmosDbTools).GetMethod("Bm25Search")!;
+        var toolAttribute = method.GetCustomAttributes(typeof(McpServerToolAttribute), inherit: false)
+            .Cast<McpServerToolAttribute>().Single();
+        var policy = method.GetParameters().Single(parameter => parameter.Name == "bm25QueryPolicy");
+
+        toolAttribute.Name.Should().Be("bm25_search");
+        toolAttribute.ReadOnly.Should().BeTrue();
+        method.GetParameters().Select(parameter => parameter.Name).Should().Equal(
+            "databaseId", "containerId", "searchText", "textProperty", "selectProperties", "topN", "bm25QueryPolicy");
+        policy.DefaultValue.Should().Be(Bm25QueryHelper.DefaultPolicy);
     }
 
     [Fact]
