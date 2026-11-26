@@ -68,6 +68,7 @@ tool. Enable a dashboard tile like "requests per tool per day".
 | `GetApproximateSchema`  | `AzureCosmosDBMCP-get-approximate-schema` |
 | `VectorSearch`          | `AzureCosmosDBMCP-vector-search` |
 | `HybridSearch`          | `AzureCosmosDBMCP-hybrid-search` |
+| `Bm25Search`            | `AzureCosmosDBMCP-bm25-search` |
 
 ## Implementation
 

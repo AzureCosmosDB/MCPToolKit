@@ -63,7 +63,8 @@ This toolkit provides:
 | `find_document_by_id` | Find a document by its ID; the SDK endpoint supports an optional string partition key |
 | `text_search` | Search for documents where a property contains a search phrase |
 | `vector_search` | Perform vector search using Azure OpenAI embeddings |
-| `hybrid_search` | Perform hybrid search combining vector similarity and full-text keyword search using Reciprocal Rank Fusion (RRF) |
+| `hybrid_search` | Perform hybrid search combining vector similarity and full-text keyword search using Reciprocal Rank Fusion (RRF). Optional `bm25QueryPolicy`: `split` (default) scores individual words, `whole` scores the query as one phrase |
+| `bm25_search` | Rank documents by full-text keyword relevance (BM25) without embeddings. Returns only documents containing at least one search word. Requires a full-text index. Supports the same optional `bm25QueryPolicy` |
 | `agentic_search` | Answer a question asked in natural language with a search agent that runs several searches using Cosmos DB-specific tools, and return the answer with its supporting documents. Currently in private preview, and off by default. See [docs/AGENTIC-SEARCH.md](docs/AGENTIC-SEARCH.md). |
 
 ## Project Structure
