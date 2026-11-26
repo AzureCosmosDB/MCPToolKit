@@ -78,16 +78,16 @@ public static class Bm25QueryHelper
     }
 
     /// <summary>Builds one BM25 score per group of at most 30 terms, with that group's term count.</summary>
-    public static IReadOnlyList<(string Expression, int TermCount)> BuildKeywordScores(string textProperty, string[] terms)
+    public static IReadOnlyList<KeywordScore> BuildKeywordScores(string textProperty, string[] terms)
     {
-        var scores = new List<(string Expression, int TermCount)>();
+        var scores = new List<KeywordScore>();
         var termOffset = 0;
 
         foreach (var group in terms.Chunk(MaxTermsPerScore))
         {
             var parameters = Enumerable.Range(termOffset, group.Length)
                 .Select(index => $"@bm25Term{index}");
-            scores.Add(($"FullTextScore(c.{textProperty}, {string.Join(", ", parameters)})", group.Length));
+            scores.Add(new KeywordScore($"FullTextScore(c.{textProperty}, {string.Join(", ", parameters)})", group.Length));
             termOffset += group.Length;
         }
 
@@ -105,3 +105,5 @@ public static class Bm25QueryHelper
         return query;
     }
 }
+
+public sealed record KeywordScore(string Expression, int TermCount);
