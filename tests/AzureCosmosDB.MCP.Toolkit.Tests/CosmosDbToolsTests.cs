@@ -78,6 +78,20 @@ public class CosmosDbToolsTests
     }
 
     [Fact]
+    public void Bm25QueryHelper_Should_Build_One_Keyword_Score_Per_Group_Of_At_Most_Thirty_Terms()
+    {
+        var text = string.Join(" ", Enumerable.Range(0, 31).Select(index => $"term{index}"));
+        var terms = Bm25QueryHelper.PrepareTerms(text);
+
+        var scores = Bm25QueryHelper.BuildKeywordScores("text", terms);
+
+        scores.Select(score => score.TermCount).Should().Equal(30, 1);
+        scores[0].Expression.Should().StartWith("FullTextScore(c.text, @bm25Term0, ")
+            .And.EndWith(", @bm25Term29)");
+        scores[1].Expression.Should().Be("FullTextScore(c.text, @bm25Term30)");
+    }
+
+    [Fact]
     public void Bm25QueryHelper_Should_Preserve_Original_Phrase_As_One_Parameter()
     {
         const string text = "O'Reilly's distributed systems";

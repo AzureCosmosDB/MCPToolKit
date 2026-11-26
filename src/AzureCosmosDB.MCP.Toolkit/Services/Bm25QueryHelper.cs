@@ -43,25 +43,34 @@ public static class Bm25QueryHelper
     /// <summary>Builds a flat vector/BM25 ranking expression for validated property paths.</summary>
     public static string BuildHybridRanking(string textProperty, string vectorProperty, string[] terms)
     {
+        var keywordScores = BuildKeywordScores(textProperty, terms);
         var scores = new List<string> { $"VectorDistance(c.{vectorProperty}, @embedding)" };
-        var groups = terms.Chunk(MaxTermsPerScore).ToArray();
-        var termOffset = 0;
+        scores.AddRange(keywordScores.Select(score => score.Expression));
 
-        foreach (var group in groups)
+        if (keywordScores.Count > 1)
         {
-            var parameters = Enumerable.Range(termOffset, group.Length)
-                .Select(index => $"@bm25Term{index}");
-            scores.Add($"FullTextScore(c.{textProperty}, {string.Join(", ", parameters)})");
-            termOffset += group.Length;
-        }
-
-        if (groups.Length > 1)
-        {
-            var weights = new[] { terms.Length }.Concat(groups.Select(group => group.Length));
+            var weights = new[] { terms.Length }.Concat(keywordScores.Select(score => score.TermCount));
             scores.Add($"[{string.Join(", ", weights)}]");
         }
 
         return $"RRF({string.Join(", ", scores)})";
+    }
+
+    /// <summary>Builds one BM25 score per group of at most 30 terms, with that group's term count.</summary>
+    public static IReadOnlyList<(string Expression, int TermCount)> BuildKeywordScores(string textProperty, string[] terms)
+    {
+        var scores = new List<(string Expression, int TermCount)>();
+        var termOffset = 0;
+
+        foreach (var group in terms.Chunk(MaxTermsPerScore))
+        {
+            var parameters = Enumerable.Range(termOffset, group.Length)
+                .Select(index => $"@bm25Term{index}");
+            scores.Add(($"FullTextScore(c.{textProperty}, {string.Join(", ", parameters)})", group.Length));
+            termOffset += group.Length;
+        }
+
+        return scores;
     }
 
     /// <summary>Binds every prepared term without interpolating search text into SQL.</summary>
