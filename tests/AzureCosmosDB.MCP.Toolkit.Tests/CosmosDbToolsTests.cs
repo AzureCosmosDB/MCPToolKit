@@ -444,6 +444,76 @@ public class CosmosDbToolsTests
             .WithMessage("*Missing required argument 'textProperty'*");
     }
 
+    [Theory]
+    [InlineData("", "text", "id", 10, "split", "required")]
+    [InlineData("search text", "invalid-text!", "id", 10, "split", "Invalid textProperty name")]
+    [InlineData("search text", "text", "*", 10, "split", "wildcard")]
+    [InlineData("search text", "text", "id", 51, "split", "between 1 and 50")]
+    [InlineData("search text", "text", "id", 10, "unknown", "BM25 query policy")]
+    public async Task Bm25Search_Should_Reject_Invalid_Input_Before_Querying_Cosmos(
+        string searchText, string textProperty, string selectProperties, int topN, string policy, string expectedError)
+    {
+        var client = new Mock<CosmosClient>();
+        var service = new CosmosDbToolsService(client.Object, _loggerMock.Object, _configurationMock.Object);
+
+        var result = await service.Bm25Search("db", "container", searchText, textProperty, selectProperties, topN, policy);
+
+        JsonSerializer.Serialize(result).Should().Contain(expectedError);
+        client.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public void McpToolRequestValidator_Should_Accept_Bm25Search_Without_VectorProperty()
+    {
+        var validator = new McpToolRequestValidator();
+        using var document = JsonDocument.Parse(
+            """
+            {
+                "name": "bm25_search",
+                "arguments": {
+                    "databaseId": "db",
+                    "containerId": "container",
+                    "searchText": "machine learning",
+                    "textProperty": "text",
+                    "selectProperties": "id",
+                    "bm25QueryPolicy": "whole",
+                    "topN": 5
+                }
+            }
+            """);
+
+        var result = validator.ValidateToolCall(document.RootElement);
+
+        result.ToolName.Should().Be("bm25_search");
+        result.Arguments["bm25QueryPolicy"].Should().Be("whole");
+        result.Arguments["topN"].Should().Be(5);
+    }
+
+    [Fact]
+    public void McpToolRequestValidator_Should_Reject_Bm25Search_VectorProperty()
+    {
+        var validator = new McpToolRequestValidator();
+        using var document = JsonDocument.Parse(
+            """
+            {
+                "name": "bm25_search",
+                "arguments": {
+                    "databaseId": "db",
+                    "containerId": "container",
+                    "searchText": "machine learning",
+                    "textProperty": "text",
+                    "vectorProperty": "vector",
+                    "selectProperties": "id"
+                }
+            }
+            """);
+
+        Action act = () => validator.ValidateToolCall(document.RootElement);
+
+        act.Should().Throw<ToolInputValidationException>()
+            .WithMessage("*Unknown property 'vectorProperty' in arguments for 'bm25_search'.*");
+    }
+
         [Fact]
         public void McpToolRequestValidator_Should_Reject_Unknown_Argument_Properties()
         {

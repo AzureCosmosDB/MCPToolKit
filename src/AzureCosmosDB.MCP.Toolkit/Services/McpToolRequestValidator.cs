@@ -60,6 +60,16 @@ public sealed class McpToolRequestValidator
                 ["bm25QueryPolicy"] = ToolArgumentSchema.String(required: false, maxLength: 32),
                 ["topN"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 50)
             }),
+            ["bm25_search"] = new(new Dictionary<string, ToolArgumentSchema>(StringComparer.Ordinal)
+            {
+                ["databaseId"] = ToolArgumentSchema.String(required: true, maxLength: 256),
+                ["containerId"] = ToolArgumentSchema.String(required: true, maxLength: 256),
+                ["searchText"] = ToolArgumentSchema.String(required: true, maxLength: 2048),
+                ["textProperty"] = ToolArgumentSchema.String(required: true, maxLength: 256),
+                ["selectProperties"] = ToolArgumentSchema.String(required: true, maxLength: 512),
+                ["bm25QueryPolicy"] = ToolArgumentSchema.String(required: false, maxLength: 32),
+                ["topN"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 50)
+            }),
             ["agentic_search"] = new(new Dictionary<string, ToolArgumentSchema>(StringComparer.Ordinal)
             {
                 ["query"] = ToolArgumentSchema.String(required: true, maxLength: 4096),

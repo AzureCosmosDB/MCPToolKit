@@ -601,6 +601,103 @@ public class CosmosDbToolsService
         }
     }
 
+    public async Task<object> Bm25Search(string databaseId, string containerId, string searchText, string textProperty, string selectProperties, int topN = 10, string bm25QueryPolicy = Bm25QueryHelper.DefaultPolicy, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Validate parameters
+            ValidateRequiredParameter(databaseId, nameof(databaseId));
+            ValidateRequiredParameter(containerId, nameof(containerId));
+            ValidateRequiredParameter(searchText, nameof(searchText));
+            ValidateRequiredParameter(textProperty, nameof(textProperty));
+            ValidateRequiredParameter(selectProperties, nameof(selectProperties));
+
+            if (topN < 1 || topN > 50)
+            {
+                return new { error = "Parameter 'topN' must be a whole number between 1 and 50." };
+            }
+
+            if (selectProperties.Trim() == "*" || selectProperties.Contains("*"))
+            {
+                return new { error = "Parameter 'selectProperties' cannot contain '*' wildcard. Please specify explicit property names separated by commas." };
+            }
+
+            var propPattern = new Regex(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$");
+
+            if (!propPattern.IsMatch(textProperty))
+            {
+                return new { error = "Invalid textProperty name. Use dot notation with letters, digits, and underscores only (e.g., 'text' or 'content')." };
+            }
+
+            var properties = selectProperties.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Trim())
+                .ToArray();
+
+            foreach (var prop in properties)
+            {
+                if (!propPattern.IsMatch(prop))
+                {
+                    return new { error = $"Invalid property name '{prop}' in selectProperties. Use dot notation with letters, digits, and underscores only (e.g., 'id', 'title', 'metadata.author')." };
+                }
+            }
+
+            var bm25Terms = Bm25QueryHelper.PrepareTerms(searchText, bm25QueryPolicy);
+
+            _logger.LogInformation("BM25 search for '{SearchText}' in {DatabaseId}/{ContainerId}", searchText, databaseId, containerId);
+
+            var container = _cosmosClient.GetContainer(databaseId, containerId);
+
+            var selectClause = string.Join(", ", properties.Select(p => $"c.{p}"));
+
+            var queryText = $@"
+                SELECT TOP @topN {selectClause}
+                FROM c
+                WHERE {Bm25QueryHelper.BuildKeywordFilter(textProperty, bm25Terms)}
+                ORDER BY RANK {Bm25QueryHelper.BuildKeywordRanking(textProperty, bm25Terms)}";
+
+            var queryDefinition = Bm25QueryHelper.BindParameters(new QueryDefinition(queryText)
+                .WithParameter("@topN", topN), bm25Terms);
+
+            using var streamIterator = container.GetItemQueryStreamIterator(
+                queryDefinition,
+                requestOptions: new QueryRequestOptions { MaxItemCount = topN }
+            );
+
+            var results = new List<System.Text.Json.JsonElement>();
+            while (streamIterator.HasMoreResults && results.Count < topN)
+            {
+                using var response = await streamIterator.ReadNextAsync(cancellationToken);
+                using var stream = response.Content;
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+                var documents = document.RootElement.GetProperty("Documents");
+                foreach (var doc in documents.EnumerateArray())
+                {
+                    results.Add(doc.Clone());
+                    if (results.Count >= topN) break;
+                }
+            }
+
+            _logger.LogInformation("BM25 search returned {Count} results", results.Count);
+            return results;
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid parameter: {Message}", ex.Message);
+            return new { error = ex.Message };
+        }
+        catch (CosmosException cex)
+        {
+            _logger.LogError(cex, "Cosmos DB error in BM25 search: {StatusCode}", cex.StatusCode);
+            return new { error = cex.Message, statusCode = (int)cex.StatusCode };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in BM25 search");
+            return new { error = ex.Message };
+        }
+    }
+
     public async Task<object> GetApproximateSchema(string databaseId, string containerId, CancellationToken cancellationToken = default)
     {
         try

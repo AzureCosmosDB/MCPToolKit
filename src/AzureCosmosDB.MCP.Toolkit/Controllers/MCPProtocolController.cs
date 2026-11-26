@@ -280,6 +280,24 @@ public class MCPProtocolController : ControllerBase
                                         required = new string[] { "databaseId", "containerId", "searchText", "textProperty", "vectorProperty", "selectProperties" },
                                         additionalProperties = false
                                     }
+                                },
+                                new {
+                                    name = "bm25_search",
+                                    description = "Searches documents by matching words and returns them ranked by BM25 relevance. Only documents containing at least one search word are returned. Requires a full-text index on the container.",
+                                    inputSchema = new {
+                                        type = "object",
+                                        properties = new {
+                                            databaseId = new { type = "string", description = "Database id containing the container", maxLength = 256 },
+                                            containerId = new { type = "string", description = "Container id to query", maxLength = 256 },
+                                            searchText = new { type = "string", description = "Text to search for using keyword matching", maxLength = 2048 },
+                                            textProperty = new { type = "string", description = "Property name that has a full-text index for keyword search", maxLength = 256 },
+                                            selectProperties = new { type = "string", description = "Comma-separated list of specific properties to project in results", maxLength = 512 },
+                                            bm25QueryPolicy = new { type = "string", description = "BM25 query splitting policy: split to individual words in groups of at most 30, or the whole query as one phrase", @enum = new[] { "split", "whole" }, @default = Bm25QueryHelper.DefaultPolicy, maxLength = 32 },
+                                            topN = new { type = "integer", description = "Number of documents to return (1-50, default 10)", minimum = 1, maximum = 50, @default = 10 }
+                                        },
+                                        required = new string[] { "databaseId", "containerId", "searchText", "textProperty", "selectProperties" },
+                                        additionalProperties = false
+                                    }
                                 }
                             })
                         }
@@ -474,6 +492,15 @@ public class MCPProtocolController : ControllerBase
                 GetOptionalIntArg(args, "topN", 10),
                 cancellationToken,
                 GetOptionalStringArg(args, "bm25QueryPolicy") ?? Bm25QueryHelper.DefaultPolicy),
+            "bm25_search" => await _cosmosDbTools.Bm25Search(
+                GetStringArg(args, "databaseId"),
+                GetStringArg(args, "containerId"),
+                GetStringArg(args, "searchText"),
+                GetStringArg(args, "textProperty"),
+                GetStringArg(args, "selectProperties"),
+                GetOptionalIntArg(args, "topN", 10),
+                GetOptionalStringArg(args, "bm25QueryPolicy") ?? Bm25QueryHelper.DefaultPolicy,
+                cancellationToken),
             "agentic_search" when _agenticSearchEnabled => await _cosmosDbTools.AgenticSearch(
                 GetStringArg(args, "query"),
                 GetOptionalIntArg(args, "maxDocuments", 20),
