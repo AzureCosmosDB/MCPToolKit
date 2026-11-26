@@ -56,6 +56,27 @@ public static class Bm25QueryHelper
         return $"RRF({string.Join(", ", scores)})";
     }
 
+    /// <summary>Builds a BM25 ranking expression; long queries are broken into groups weighted by word count.</summary>
+    public static string BuildKeywordRanking(string textProperty, string[] terms)
+    {
+        var keywordScores = BuildKeywordScores(textProperty, terms);
+
+        if (keywordScores.Count == 1)
+        {
+            return keywordScores[0].Expression;
+        }
+
+        var weights = keywordScores.Select(score => score.TermCount);
+        return $"RRF({string.Join(", ", keywordScores.Select(score => score.Expression))}, [{string.Join(", ", weights)}])";
+    }
+
+    /// <summary>Keeps only documents containing at least one term; BM25 ranking alone also returns non-matches.</summary>
+    public static string BuildKeywordFilter(string textProperty, string[] terms)
+    {
+        var parameters = Enumerable.Range(0, terms.Length).Select(index => $"@bm25Term{index}");
+        return $"FullTextContainsAny(c.{textProperty}, {string.Join(", ", parameters)})";
+    }
+
     /// <summary>Builds one BM25 score per group of at most 30 terms, with that group's term count.</summary>
     public static IReadOnlyList<(string Expression, int TermCount)> BuildKeywordScores(string textProperty, string[] terms)
     {

@@ -92,6 +92,43 @@ public class CosmosDbToolsTests
     }
 
     [Fact]
+    public void Bm25QueryHelper_Should_Build_Keyword_Ranking_Without_Rrf_For_One_Group()
+    {
+        var terms = Bm25QueryHelper.PrepareTerms("capital city");
+
+        Bm25QueryHelper.BuildKeywordRanking("text", terms)
+            .Should().Be("FullTextScore(c.text, @bm25Term0, @bm25Term1)");
+        Bm25QueryHelper.BuildKeywordFilter("text", terms)
+            .Should().Be("FullTextContainsAny(c.text, @bm25Term0, @bm25Term1)");
+    }
+
+    [Fact]
+    public void Bm25QueryHelper_Should_Weight_Keyword_Groups_By_Word_Count_Without_Vector()
+    {
+        var text = string.Join(" ", Enumerable.Range(0, 31).Select(index => $"term{index}"));
+        var terms = Bm25QueryHelper.PrepareTerms(text);
+
+        var ranking = Bm25QueryHelper.BuildKeywordRanking("text", terms);
+        var filter = Bm25QueryHelper.BuildKeywordFilter("text", terms);
+
+        ranking.Should().StartWith("RRF(FullTextScore(c.text, @bm25Term0, ")
+            .And.EndWith("FullTextScore(c.text, @bm25Term30), [30, 1])")
+            .And.NotContain("VectorDistance");
+        filter.Should().StartWith("FullTextContainsAny(c.text, @bm25Term0, ")
+            .And.EndWith(", @bm25Term30)");
+        System.Text.RegularExpressions.Regex.Matches(filter, "@bm25Term").Should().HaveCount(31);
+    }
+
+    [Fact]
+    public void Bm25QueryHelper_Should_Keep_Whole_Phrase_As_One_Keyword_Argument()
+    {
+        var terms = Bm25QueryHelper.PrepareTerms("capital city", "whole");
+
+        Bm25QueryHelper.BuildKeywordRanking("text", terms).Should().Be("FullTextScore(c.text, @bm25Term0)");
+        Bm25QueryHelper.BuildKeywordFilter("text", terms).Should().Be("FullTextContainsAny(c.text, @bm25Term0)");
+    }
+
+    [Fact]
     public void Bm25QueryHelper_Should_Preserve_Original_Phrase_As_One_Parameter()
     {
         const string text = "O'Reilly's distributed systems";
